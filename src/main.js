@@ -185,7 +185,7 @@ function startTape() {
   overlay('', 'hidden');
   const S = G.S;
   G.tau = S.T_START; G.body = S.startId; G.lives = [S.startId];
-  G.playT = 0; if (G.audio) { G.audio.wilhelmId = -1; G.audio.wilhelmArmed = false; }
+  G.playT = 0; if (G.audio && G.audio.wilhelm) { G.audio.wilhelm.clear(); G.audio.wilhelmArmed = false; G.audio.wilhelmNext = 0; }
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
   G.player.setSide(0); G.player.health = 100;
   G.state = 'intro'; G.stateT = 0; G.tauRate = 1; G.caught = false;
@@ -490,7 +490,7 @@ function tick(dt, draw = true) {
       break;
     }
     case 'play': {
-      G.playT = (G.playT || 0) + dt; if (G.playT > 20 && G.audio) G.audio.wilhelmArmed = true;
+      G.playT = (G.playT || 0) + dt; if (G.audio) { G.audio.playT = G.playT; if (G.playT > 20) G.audio.wilhelmArmed = true; }
       showHud = true; spreadShow = true;
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
       const out = p.update(dt, inp, S.obstacles, G.tau);

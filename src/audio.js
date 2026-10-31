@@ -450,7 +450,7 @@ export class Audio {
     // world sounds: synthesize raw forward recipes now (usable immediately), bake reflections in the background
     this.W = {};
     this.bakeP = this.bakeAll();
-    this.wilhelmId = -1; this.wilhelmArmed = false;
+    this.wilhelm = new Map(); this.wilhelmArmed = false; this.wilhelmNext = 0; this.playT = 0;
     this.loadWilhelm();
 
     this.eng = {};
@@ -498,6 +498,7 @@ export class Audio {
       let pk = 1e-6; for (const v of x) pk = Math.max(pk, Math.abs(v)); for (let i = 0; i < n; i++) x[i] *= 0.95 / pk;
       const mid = x.slice(); filt(mid, 'lp', 5000, 0.6, this.sr);
       this.W.vwilhelm = { near: [this.entry(x, 0)], mid: [this.entry(mid, 0)], fwd: false };
+      this.W.vwilhelmF = { near: this.W.vwilhelm.near, mid: this.W.vwilhelm.mid, fwd: true }; // the odd one plays forward
     } catch (e) { console.warn('wilhelm', e); }
   }
 

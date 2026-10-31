@@ -57,12 +57,13 @@ export function worldSounds(S, tau, L, body, A, pb) {
     const v = DEATH_VOX[(de.id * 7 + k) % DEATH_VOX.length];
     const h = pb.hit[de.id]; if (!h || !h.head) continue;
     const late = de.cause === 'shot' ? 0.08 : 0.35; // blast victims cry out a beat after
-    // the Wilhelm: once per tape, the first death close enough to hear properly (blast victims preferred)
-    if (A.wilhelmId < 0 && A.wilhelmArmed && A.W && A.W.vwilhelm) {
+    // the Wilhelm: a few times per tape (at least 40 s apart), on a death close enough to hear properly
+    // (blast victims preferred); they alternate forward and reversed, starting forward
+    if (!A.wilhelm.has(de.id) && A.wilhelmArmed && A.wilhelm.size < 3 && A.playT >= A.wilhelmNext && A.W && A.W.vwilhelm) {
       const dd = Math.hypot(h.head.x - L.x, h.head.z - L.z);
-      if ((de.cause !== 'shot' && dd < 60) || dd < 28) A.wilhelmId = de.id;
+      if ((de.cause !== 'shot' && dd < 60) || dd < 28) { A.wilhelm.set(de.id, A.wilhelm.size % 2 === 0); A.wilhelmNext = A.playT + 40; }
     }
-    if (de.id === A.wilhelmId) { A.world(DE_ID + de.id, 'vwilhelm', de.t + late, h.head.x, h.head.y, h.head.z, 1.3, tau, L); continue; }
+    if (A.wilhelm.has(de.id)) { A.world(DE_ID + de.id, A.wilhelm.get(de.id) ? 'vwilhelmF' : 'vwilhelm', de.t + late, h.head.x, h.head.y, h.head.z, 1.3, tau, L); continue; }
     if (!v) continue;
     A.world(DE_ID + de.id, de.cause === 'shot' || v !== 'vscream' ? v : 'vyelp', de.t + late, h.head.x, h.head.y, h.head.z, 1, tau, L);
   }
