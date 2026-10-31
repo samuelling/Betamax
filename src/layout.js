@@ -17,15 +17,19 @@ export function buildLayout() {
     L.rocks.push({ x, z, s, rot: r() * 6.28, sq: 0.5 + r() * 0.4 });
   }
 
-  // defender fighting positions along the crest
+  // defender fighting positions: a dense crest line plus a second line on the back of the dunes
   L.positions = [];
-  for (let i = 0; i < 26 && L.positions.length < 24; i++) {
-    const x = -96 + i * 7.6 + (r() - 0.5) * 2.5;
-    if (Math.abs(x - 2) < 4) continue;
+  for (let i = 0; i < 40 && L.positions.length < 34; i++) {
+    const x = -104 + i * 5.6 + (r() - 0.5) * 2;
+    if (Math.abs(x - 2) < 3.5) continue;
     const c = crestD(x);
-    L.positions.push({ x, z: -(c + 2.0), bagZ: -(c + 0.1) });
+    L.positions.push({ x, z: -(c + 2.0), bagZ: -(c + 0.1), line: 0 });
   }
-
+  for (let i = 0; i < 16; i++) {
+    const x = -96 + i * 12.5 + (r() - 0.5) * 4;
+    const c = crestD(x);
+    L.positions.push({ x, z: -(c + 13 + r() * 5), bagZ: null, line: 1 });
+  }
   // boardwalk: from the lot over the dune to the beach, along x = 2
   L.boardwalk = [];
   const bx = 2;
@@ -62,29 +66,46 @@ export function buildLayout() {
     L.trees.push({ x, z, s: 0.7 + r() * 0.8, rot: r() * 6.28 });
   }
 
-  // ---------- invasion vehicles ----------
+  // ---------- invasion vehicles: six waves ----------
   L.vehicles = [];
-  const add = (type, x, tArrive, zStop, wave, cap) => L.vehicles.push({
-    type, x, tArrive, zStop, wave, cap,
+  const add = (type, x, tArrive, zStop, wave) => L.vehicles.push({
+    type, x, tArrive, zStop, wave, cap: type === 'aav' ? 10 : 14,
     zStart: type === 'aav' ? 330 : 680, approach: type === 'aav' ? 30 : 22, destroyT: -1, jitter: r(),
   });
-  [-72, -38, -8, 33, 68].forEach((x, i) => add('aav', x + (r() - 0.5) * 6, 14 + i * 0.7 + r(), 10 + r() * 7, 1, 8));
-  [-54, 50].forEach((x, i) => add('lcac', x + (r() - 0.5) * 6, 60 + i * 2.2, 22 + r() * 4, 2, 12));
-  [-90, 16, 88].forEach((x, i) => add('aav', x + (r() - 0.5) * 6, 110 + i * 1.1 + r(), 14 + r() * 6, 3, 8));
-  add('lcac', -22, 116.5, 26, 3, 12);
-  L.vehicles[1].destroyT = L.vehicles[1].tArrive + 16;
-  L.vehicles[3].destroyT = L.vehicles[3].tArrive + 27;
-  L.vehicles[6].destroyT = L.vehicles[6].tArrive + 24;
-  L.vehicles[8].destroyT = L.vehicles[8].tArrive + 12;
-
-  // ---------- defender helicopters ----------
-  L.helos = [
-    { x: -24, z: -98, tTouch: 24 },
-    { x: 3, z: -112, tTouch: 27.5 },
-    { x: 28, z: -94, tTouch: 31 },
+  const waves = [
+    { t: 14, aav: [-82, -50, -18, 14, 46, 78] },
+    { t: 40, lcac: [-62, -2, 58] },
+    { t: 64, aav: [-98, -66, -34, -4, 28, 60, 94] },
+    { t: 90, lcac: [-84, -28, 30, 86] },
+    { t: 116, aav: [-90, -58, -24, 10, 42, 74] },
+    { t: 140, lcac: [-52, 8, 66] },
   ];
-  L.helos.forEach((h) => { h.y = LOT.y; h.tLift = h.tTouch + 10.5; });
+  waves.forEach((w, wi) => {
+    (w.aav || []).forEach((x, i) => add('aav', x + (r() - 0.5) * 7, w.t + i * 0.6 + r(), 6 + r() * 14, wi + 1));
+    (w.lcac || []).forEach((x, i) => add('lcac', x + (r() - 0.5) * 8, w.t + i * 1.4 + r(), 20 + r() * 8, wi + 1));
+  });
+  // defender anti-armour (Javelin) kills: about half the AAVs and a third of the hovercraft
+  L.vehicles.forEach((v) => {
+    const p = v.type === 'aav' ? 0.5 : 0.33;
+    if (r() < p) v.destroyT = v.tArrive + (v.type === 'aav' ? 8 : 14) + r() * 30;
+  });
+  // smoke screens laid at each landing
+  L.smokes = [];
+  waves.forEach((w) => { for (let k = 0; k < 5; k++) L.smokes.push({ t: w.t + 1 + r() * 4, x: -110 + r() * 220, z: 4 + r() * 22, r: 1 }); });
 
+  // ---------- defender helicopters: insertion + reinforcement ----------
+  L.helos = [
+    { x: -26, z: -98, tTouch: 24 }, { x: 2, z: -112, tTouch: 27.5 }, { x: 28, z: -94, tTouch: 31 },
+    { x: -34, z: -116, tTouch: 76 }, { x: 0, z: -96, tTouch: 79 }, { x: 34, z: -116, tTouch: 82 },
+  ];
+  L.helos.forEach((h) => { h.y = LOT.y; h.tLift = h.tTouch + 11; h.cap = 10; });
+
+  // ---------- invader gunships over the bay ----------
+  L.gunships = [
+    { tIn: 30, cx: -30, cz: 150, ax: 85, az: 30, alt: 46, w: 0.11, ph: 0, downT: 128 },
+    { tIn: 58, cx: 40, cz: 175, ax: 75, az: 25, alt: 54, w: 0.09, ph: 2.1, downT: -1 },
+  ];
+  // houses (big ones on the dunes) that can burn
   // ---------- minefield border ----------
   const lanes = L.vehicles.map((v) => v.x);
   const inLane = (x) => lanes.some((lx) => Math.abs(lx - x) < 7);
@@ -123,6 +144,23 @@ export function buildLayout() {
   L.rocks.forEach((k) => { if (k.s > 0.8) L.colliders.push({ x: k.x, z: k.z, r: k.s * 0.9 }); });
   cached = L;
   return L;
+}
+
+// gunship pose: arrives from the bay, flies a racetrack facing the beach; one is shot down
+export function gunshipPose(g, t, out) {
+  const tt = Math.max(t, g.tIn);
+  const a = (tt - g.tIn) * g.w + g.ph;
+  out.x = g.cx + Math.sin(a) * g.ax; out.z = g.cz + Math.cos(a * 2) * g.az; out.y = g.alt + Math.sin(a * 1.7) * 4;
+  out.yaw = Math.PI + Math.cos(a) * 0.35; out.pitch = 0.08; out.roll = -Math.cos(a) * 0.25; out.alive = true; out.burn = 0;
+  if (t < g.tIn) { const k = g.tIn - t; out.z += k * 45; out.y += k * 0.5; out.pitch = 0.15; }
+  if (g.downT > 0 && t > g.downT) {
+    const d = t - g.downT, fall = Math.min(d, 6.5);
+    const p0 = gunshipPose({ ...g, downT: -1 }, g.downT, {});
+    out.x = p0.x + fall * 9; out.z = p0.z + fall * 6; out.y = Math.max(-1.5, p0.y - 0.5 * 4.5 * fall * fall);
+    out.yaw = p0.yaw + fall * fall * 0.9; out.roll = Math.min(1.2, fall * 0.4); out.pitch = 0.3 * Math.min(1, fall);
+    out.burn = 1; out.alive = d < 6.5;
+  }
+  return out;
 }
 
 export function vehZ(v, t) {

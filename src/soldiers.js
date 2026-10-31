@@ -64,7 +64,7 @@ export class Soldiers {
     this.pb = pb;
     // deaths nearest the opening of the tape first; the rest are computed a few per frame
     this.pending = this.S.actors.filter((a) => a.deathTime > 0).sort((a, b) => b.deathTime - a.deathTime).map((a) => a.id);
-    this.warm(12);
+    this.warm(1e9);
   }
   warm(n) { while (n-- > 0 && this.pending.length) { const i = this.pending.shift(); if (!this.ragdolls[i]) this.computeRagdoll(i); } }
   computeRagdoll(i) {

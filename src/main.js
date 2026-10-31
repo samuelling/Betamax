@@ -40,9 +40,9 @@ function boot() {
   const world = new World(renderer, scene, Q);
   const S = simulate(7);
   const sol = new Soldiers(scene, S);
-  const smoke = new Billboards(scene, 5000, TX.makeSoftTex(), false, world.fogColor);
-  const glow = new Billboards(scene, 2500, TX.makeFlashTex(), true, world.fogColor);
-  const tracers = new Tracers(scene, 900);
+  const smoke = new Billboards(scene, 11000, TX.makeSoftTex(), false, world.fogColor);
+  const glow = new Billboards(scene, 5000, TX.makeFlashTex(), true, world.fogColor);
+  const tracers = new Tracers(scene, 2500);
   const pb = new Playback(S, world, sol, smoke, glow, tracers, scene);
   sol.prepare(pb);
   const flashTex = TX.makeFlashTex();
@@ -538,7 +538,7 @@ function tick(dt, draw = true) {
   G.tau = Math.max(0, G.tau - dt * tauRate);
 
   // battle playback
-  ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body;
+  ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body; ctx.camPos = camera.position;
   ctx.playerPos.copy(p.pos); ctx.playerHeight = p.eyeH + 0.1; ctx.playerAlive = G.state === 'play';
   ctx.sound = G.state !== 'title' && G.state !== 'end';
   ctx.hideBody = G.state !== 'title';
@@ -562,9 +562,11 @@ function tick(dt, draw = true) {
     if (p.health <= 0) beginDeath('shot');
   }
   if (G.state !== 'title' && G.state !== 'end') for (const d of ev.feed) {
+    const hp = G.pb.hit[d.id].pos;
+    if (d.killer !== G.body && hp.distanceTo(camera.position) > 45) continue;
     const v = short(d.id);
     if (d.killer >= 0) feed(`${v} ◂◂ un-shot by ${d.killer === G.body ? 'YOU' : short(d.killer)}`);
-    else feed(`${v} ◂◂ ${d.cause === 'drone' ? 'un-hit by a drone' : d.cause === 'vehicle' ? 'un-burned' : 'un-shelled'}`);
+    else feed(`${v} ◂◂ ${({ drone: 'un-hit by a drone', vehicle: 'un-burned', rocket: 'un-rocketed', mlrs: 'un-shelled', crash: 'un-crushed' })[d.cause] || 'un-shelled'}`);
   }
 
   // audio loops

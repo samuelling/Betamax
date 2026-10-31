@@ -1,16 +1,18 @@
 // Deterministic forward simulation of the battle. The game only ever plays it backwards.
 import { mulberry32, clamp, lerp } from './rng.js';
 import { heightAt, crestD } from './terrain.js';
-import { buildLayout, vehZ } from './layout.js';
+import { buildLayout, vehZ, gunshipPose } from './layout.js';
 import { makeIdentity } from './names.js';
 
 export const DT = 0.05;
-export const HZ = 20;
+export const HZ = 10; // recording rate (sim runs at 20 Hz)
 export const T_SIM = 200;
 export const F = 9; // x y z yaw pitch crouch speed phase mode
 export const MODE = { HIDDEN: 0, BOAT: 1, CHUTE: 2, GROUND: 3, DEAD: 4 };
 export const SHOT_F = 11; // fireT impT fx fy fz ix iy iz shooter target kind
 export const BULLET_SPEED = 300;
+export let DEF_ACC = 0.1, INV_ACC = 0.011;
+export function tune(d, i) { DEF_ACC = d; INV_ACC = i; }
 
 export function simulate(seed = 7) {
   const r = mulberry32(seed);
@@ -23,8 +25,8 @@ export function simulate(seed = 7) {
       const a = baseActor(actors.length, 1);
       a.veh = vi; a.slot = k;
       if (v.type === 'aav') {
-        a.lx = (k % 2 ? 0.55 : -0.55); a.lz = -2 + Math.floor(k / 2) * 1.0;
-        a.disembark = v.tArrive + 2.0 + k * 0.38 + r() * 0.12;
+        a.lx = (k % 2 ? 0.55 : -0.55); a.lz = -2.2 + Math.floor(k / 2) * 0.9;
+        a.disembark = v.tArrive + 2.0 + k * 0.34 + r() * 0.12;
       } else {
         a.lx = -2.4 + (k % 4) * 1.6; a.lz = -4 + Math.floor(k / 4) * 2.2;
         a.disembark = v.tArrive + 1.8 + (Math.floor(k / 4) * 4 + (k % 4)) * 0.3 + r() * 0.1;
@@ -41,52 +43,99 @@ export function simulate(seed = 7) {
     }
   });
 
-  // ---------- defenders by helicopter ----------
-  const fps = L.positions.slice();
+  // ---------- defenders by helicopter (insertion + reinforcement) ----------
   L.helos.forEach((h, hi) => {
-    for (let k = 0; k < 8; k++) {
+    for (let k = 0; k < h.cap; k++) {
       const a = baseActor(actors.length, 0);
       a.helo = hi; a.slot = k;
-      a.te = h.tTouch + 1.3 + k * 0.45;
+      a.te = h.tTouch + 1.3 + k * 0.4;
       a.spawn = a.te;
-      a.exitX = h.x + (k % 2 ? 1.9 : -1.9); a.exitZ = h.z + (Math.floor(k / 2) - 1.5) * 0.7;
+      a.exitX = h.x + (k % 2 ? 1.9 : -1.9); a.exitZ = h.z + (Math.floor(k / 2) - 2) * 0.65;
       a.speedRun = 4.4 + r() * 0.6;
       actors.push(a);
     }
   });
-  const defs = actors.filter((a) => a.side === 0).sort((p, q) => p.exitX - q.exitX);
-  const sortedFps = fps.slice().sort((p, q) => p.x - q.x);
-  defs.forEach((a, i) => { a.fp = { ...sortedFps[i] }; });
+  {
+    const crest = L.positions.filter((p) => p.line === 0).sort((p, q) => p.x - q.x);
+    const rear = L.positions.filter((p) => p.line === 1);
+    const waveA = actors.filter((a) => a.side === 0 && a.helo < 3).sort((p, q) => p.exitX - q.exitX);
+    const waveB = actors.filter((a) => a.side === 0 && a.helo >= 3).sort((p, q) => p.exitX - q.exitX);
+    const stepA = crest.length / waveA.length;
+    waveA.forEach((a, i) => { a.fp = { ...crest[Math.min(crest.length - 1, Math.floor(i * stepA))] }; });
+    const poolB = rear.concat(crest.filter((_, i) => i % 3 === 1).map((p) => ({ ...p, x: p.x + 2.6, z: -(crestD(p.x + 2.6) + 2) })));
+    waveB.forEach((a, i) => { a.fp = { ...poolB[i % poolB.length] }; });
+  }
+  actors.forEach((a) => { a.mg = (a.side === 0 && a.id % 4 === 0) || (a.side === 1 && a.id % 6 === 0); });
 
   actors.forEach((a) => { a.id_ = makeIdentity(a.side, a.id); });
 
-  // ---------- strikes: naval shells and FPV drones on the dunes, defender artillery on the flats ----------
+  // ---------- strikes ----------
   const explosions = [];
-  for (let t = 20; t < T_SIM - 4; t += 3.0 + r() * 3.6) {
-    let ix, iz, side, kind;
-    if (r() < 0.55) {
-      const p = L.positions[Math.floor(r() * L.positions.length)];
-      ix = p.x + (r() - 0.5) * 14; iz = p.z + (r() - 0.6) * 14; side = 1; kind = r() < 0.5 ? 'drone' : 'shell';
-    } else {
-      ix = (r() - 0.5) * 220; iz = 4 + r() * 90; side = 0; kind = 'shell';
-    }
-    const iy = Math.max(heightAt(ix, iz), 0);
-    const fl = kind === 'drone' ? 9 : 3.2;
-    const sx = ix + (r() - 0.5) * 200, sz = side === 1 ? 900 : -900, sy = 30;
-    explosions.push({ launchT: t - fl, t, sx, sy, sz, ix, iy, iz, side, kind, done: false, big: 1 });
-  }
-  // anti-armor missiles on vehicles
   const missiles = [];
+  const bigHouses = L.houses.filter((h) => h.floors === 2);
+  const ex = (o) => explosions.push(Object.assign({ done: false, big: 1, side: 1, sy: 30 }, o));
+  // naval guns, FPV drones (often in pairs) and house hits on the defenders; defender artillery on the flats
+  for (let t = 18; t < T_SIM - 3; t += 1.5 + r() * 1.7) {
+    const roll = r();
+    if (roll < 0.58) {
+      const p = L.positions[Math.floor(r() * L.positions.length)];
+      const drone = r() < 0.45;
+      const n = drone && r() < 0.5 ? 2 : 1;
+      for (let k = 0; k < n; k++) {
+        const ix = p.x + (r() - 0.5) * 14, iz = p.z + (r() - 0.6) * 14;
+        ex({ launchT: t + k * 0.8 - (drone ? 9 : 3.2), t: t + k * 0.8, sx: ix + (r() - 0.5) * 200, sz: 900, ix, iy: Math.max(heightAt(ix, iz), 0), iz, kind: drone ? 'drone' : 'shell' });
+      }
+    } else if (roll < 0.68 && bigHouses.length) {
+      const h = bigHouses[Math.floor(r() * bigHouses.length)];
+      const ix = h.x + (r() - 0.5) * 8, iz = h.z + (r() - 0.5) * 6;
+      ex({ launchT: t - 3.2, t, sx: ix, sz: 900, ix, iy: heightAt(ix, iz) + 3, iz, kind: 'shell', house: true, big: 1.2 });
+    } else {
+      const ix = (r() - 0.5) * 220, iz = 4 + r() * 100;
+      ex({ launchT: t - 3.2, t, sx: ix + (r() - 0.5) * 200, sz: -900, ix, iy: Math.max(heightAt(ix, iz), 0), iz, side: 0, kind: 'shell' });
+    }
+  }
+  // defender rocket artillery ripples across the flats
+  [47, 98, 151, 179].forEach((t0) => {
+    const cx = (r() - 0.5) * 120;
+    for (let k = 0; k < 16; k++) {
+      const t = t0 + k * 0.19 + r() * 0.1, ix = cx + (r() - 0.5) * 120, iz = 6 + r() * 70;
+      ex({ launchT: t - 4, t, sx: ix * 0.3, sz: -1400, sy: 200, ix, iy: Math.max(heightAt(ix, iz), 0), iz, side: 0, kind: 'mlrs', big: 1.25 });
+    }
+  });
+  // gunship rocket salvos at the crest
+  const gp = {};
+  L.gunships.forEach((g, gi) => {
+    const end = g.downT > 0 ? g.downT - 1 : T_SIM - 2;
+    for (let t = g.tIn + 6; t < end; t += 13 + r() * 8) {
+      const p = L.positions[Math.floor(r() * L.positions.length)];
+      for (let k = 0; k < 6; k++) {
+        const lt = t + k * 0.16; gunshipPose(g, lt, gp);
+        const ix = p.x + (r() - 0.5) * 26, iz = p.z + (r() - 0.45) * 22;
+        ex({ launchT: lt, t: lt + 1.5, sx: gp.x, sy: gp.y - 1, sz: gp.z, ix, iy: Math.max(heightAt(ix, iz), 0), iz, kind: 'rocket', big: 1.15, gi });
+      }
+    }
+    if (g.downT > 0) {
+      // MANPADS from the dunes; air burst; burning crash into the bay
+      const p = L.positions[5];
+      gunshipPose({ ...g, downT: -1 }, g.downT, gp);
+      missiles.push({ kind: 'manpad', launchT: g.downT - 3.4, t: g.downT, sx: p.x, sy: heightAt(p.x, p.z) + 1.4, sz: p.z, ix: gp.x, iy: gp.y, iz: gp.z, arc: 10 });
+      ex({ launchT: g.downT - 3.4, t: g.downT, sx: p.x, sy: 0, sz: p.z, ix: gp.x, iy: gp.y, iz: gp.z, kind: 'airburst', big: 1.4, side: 0, mi: missiles.length - 1, air: true });
+      const c = gunshipPose(g, g.downT + 6.49, {});
+      ex({ launchT: g.downT, t: g.downT + 6.5, sx: c.x, sy: 0, sz: c.z, ix: c.x, iy: 0, iz: c.z, kind: 'crash', big: 3, side: 0 });
+    }
+  });
+  // anti-armour missiles on vehicles
   L.vehicles.forEach((v, vi) => {
     if (v.destroyT < 0) return;
     const p = L.positions[Math.floor(r() * L.positions.length)];
     const vy = v.type === 'aav' ? 2.2 : 2.5;
-    missiles.push({ vi, launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: heightAt(p.x, p.z) + 1.3, sz: p.z, ix: v.x, iy: vy, iz: v.zStop });
-    explosions.push({ launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: 0, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, side: 0, kind: 'vehicle', vi, done: false, big: 2 });
+    missiles.push({ kind: 'javelin', vi, launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: heightAt(p.x, p.z) + 1.3, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, arc: 48 });
+    ex({ launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: 0, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, side: 0, kind: 'vehicle', vi, big: 2, mi: missiles.length - 1 });
   });
   explosions.sort((p, q) => p.t - q.t);
 
-  const steps = Math.round(T_SIM / DT) + 1;
+  const simSteps = Math.round(T_SIM / DT) + 1;
+  const steps = Math.round(T_SIM * HZ) + 1;
   const N = actors.length;
   const rec = new Float32Array(N * steps * F);
   const shots = [];
@@ -94,7 +143,7 @@ export function simulate(seed = 7) {
   const deaths = [];
 
   const tgtList = [];
-  for (let s = 0; s < steps; s++) {
+  for (let s = 0; s < simSteps; s++) {
     const t = s * DT;
 
     // resolve pending hits
@@ -113,12 +162,15 @@ export function simulate(seed = 7) {
     for (const e of explosions) {
       if (e.done || e.t > t) continue;
       e.done = true;
+      if (e.air) continue;
       for (const a of actors) {
         if (!a.alive || a.mode !== MODE.GROUND) continue;
         const d = Math.hypot(a.x - e.ix, a.z - e.iz);
-        const kr = e.big > 1 ? 4.5 : 3.2, wr = e.big > 1 ? 10 : 8;
+        // dug-in defenders crouched behind sandbags are much harder to kill
+        const cover = a.side === 0 && a.state === 'defend' && a.crouch > 0.6 ? 0.55 : 1;
+        const kr = (e.big > 2 ? 9 : e.big > 1.5 ? 4.5 : 2.3 * e.big) * cover, wr = (e.big > 2 ? 20 : e.big > 1.5 ? 10 : 6 * e.big) * cover;
         if (d < kr) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind);
-        else if (d < wr) { a.hp -= 75 * (1 - d / wr); if (a.hp <= 0) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind); }
+        else if (d < wr) { a.hp -= 60 * (1 - d / wr); if (a.hp <= 0) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind); }
       }
     }
 
@@ -154,10 +206,31 @@ export function simulate(seed = 7) {
       v.nextBurst = v.burst > 0 ? t + 0.16 : t + 2.5 + r() * 4;
     });
 
-    // record
-    for (let i = 0; i < N; i++) {
+    // gunship chin guns
+    L.gunships.forEach((g, gi) => {
+      if (t < g.tIn + 3 || (g.downT > 0 && t >= g.downT)) return;
+      if (g.nextBurst === undefined) { g.nextBurst = t + 2; g.burst = 0; }
+      if (t < g.nextBurst) return;
+      if (g.burst <= 0) {
+        const live = actors.filter((b) => b.side === 0 && b.alive && b.mode === MODE.GROUND);
+        if (!live.length) { g.nextBurst = t + 2; return; }
+        g.tgt = live[Math.floor(r() * live.length)].id; g.burst = 14 + Math.floor(r() * 10);
+      }
+      const b = actors[g.tgt]; gunshipPose(g, t, gp);
+      const mx = gp.x, my = gp.y - 1.6, mz = gp.z - 4;
+      const hit = b.alive && r() < 0.035;
+      let ix = b.x + (r() - 0.5) * 5, iz = b.z + (r() - 0.5) * 5, iy = heightAt(ix, iz) + 0.05;
+      if (hit) { ix = b.x; iy = b.y + 1; iz = b.z; }
+      const len = Math.hypot(ix - mx, iy - my, iz - mz), impT = t + len / BULLET_SPEED;
+      shots.push({ fireT: t, impT, fx: mx, fy: my, fz: mz, ix, iy, iz, shooter: -100 - gi, target: hit ? b.id : -1, kind: hit ? 3 : 1 });
+      if (hit) pending.push({ t: impT, target: b.id, dmg: 120, shooter: -1, dx: b.x - mx, dz: b.z - mz });
+      g.burst--; g.nextBurst = g.burst > 0 ? t + 0.07 : t + 3 + r() * 4;
+    });
+
+    // record (10 Hz)
+    if (s % 2 === 0) for (let i = 0; i < N; i++) {
       const a = actors[i];
-      const o = (i * steps + s) * F;
+      const o = (i * steps + s / 2) * F;
       rec[o] = a.x; rec[o + 1] = a.y; rec[o + 2] = a.z; rec[o + 3] = a.yaw; rec[o + 4] = a.pitch;
       rec[o + 5] = a.crouch; rec[o + 6] = a.speed; rec[o + 7] = a.phase; rec[o + 8] = a.alive ? a.mode : MODE.DEAD;
     }
@@ -297,7 +370,7 @@ export function simulate(seed = 7) {
     a.pitch = Math.atan2(aimY - my, dh);
     if (t < a.pauseUntil || t < a.reloadUntil) return;
     if (a.burst <= 0) {
-      a.burst = 3 + Math.floor(r() * 5);
+      a.burst = a.mg ? 10 + Math.floor(r() * 14) : 3 + Math.floor(r() * 5);
       a.nextShot = t + (a.side === 0 ? 0.35 : 0.25);
       return;
     }
@@ -307,7 +380,7 @@ export function simulate(seed = 7) {
     const mx = a.x + fx * 0.75 - fz * 0.1, mz = a.z + fz * 0.75 + fx * 0.1;
     let hitP = 0;
     if (b.mode === MODE.GROUND) {
-      const base = a.side === 0 ? 0.07 : 0.018;
+      const base = (a.side === 0 ? DEF_ACC : INV_ACC) * (a.mg ? 0.55 : 1);
       const rangeF = clamp(35 / dh, 0.12, 1.3);
       let cover = 1;
       if (b.side === 0) cover = b.state === 'defend' ? (b.crouch > 0.6 ? 0.05 : 0.35) : 0.8;
@@ -351,7 +424,7 @@ export function simulate(seed = 7) {
     }
     shots.push(shot);
     a.burst--; a.mag--;
-    a.nextShot = t + 0.085 + r() * 0.04;
+    a.nextShot = t + (a.mg ? 0.07 : 0.085 + r() * 0.04);
     if (a.burst <= 0) a.pauseUntil = t + 0.7 + r() * 1.9;
     if (a.mag <= 0) { a.reloadUntil = t + 2.6; a.mag = a.side ? 30 : 20; a.burst = 0; a.reloads.push(t); }
   }
@@ -369,7 +442,7 @@ export function simulate(seed = 7) {
 
   // choose the opening body: a defender who dies late in the battle, near the middle
   let start = null;
-  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 150 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
+  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 168 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
   lateDef.sort((p, q) => Math.abs(p.fp.x) - Math.abs(q.fp.x));
   if (lateDef.length) start = lateDef[0];
   else {
@@ -380,7 +453,7 @@ export function simulate(seed = 7) {
 
   const statics = actors.map((a) => ({
     id: a.id, side: a.side, spawn: a.spawn, deathTime: a.deathTime, fallSign: a.fallSign, killer: a.killer, cause: a.cause,
-    veh: a.veh ?? -1, helo: a.helo ?? -1, te: a.te ?? 0, ident: a.id_, reloads: Float32Array.from(a.reloads),
+    veh: a.veh ?? -1, helo: a.helo ?? -1, mg: a.mg, te: a.te ?? 0, ident: a.id_, reloads: Float32Array.from(a.reloads),
     skin: r(),
   }));
 

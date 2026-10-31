@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { HZ, F, MODE, SHOT_F } from './sim.js';
 import { heightAt } from './terrain.js';
-import { vehZ, heloPose } from './layout.js';
+import { vehZ, heloPose, gunshipPose } from './layout.js';
 import { hash1, hash2 } from './rng.js';
 
 const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * t; };
@@ -103,12 +103,22 @@ export class Playback {
     const body = ctx.bodyId;
     const pp = ctx.playerPos;
     // ---------------- soldiers ----------------
+    this.frame = (this.frame || 0) + 1;
+    const cp = ctx.camPos;
     for (let i = 0; i < S.N; i++) {
       const s = this.sample(i, tau, this.samp);
       const h = this.hit[i];
+      // level of detail: distant soldiers re-pose less often; very distant ones are skipped
+      const dc = cp ? Math.hypot(s.x - cp.x, s.z - cp.z) : 0;
+      if (i !== body && s.mode !== MODE.HIDDEN && !ctx.overrides.get(i) && dc > 90 && this.posed && this.posed[i] && (this.frame + i) % (dc > 200 ? 6 : 3) !== 0) {
+        h.ok = s.mode === MODE.GROUND && this.alive(i, tau); if (h.ok) { h.pos.set(s.x, s.y, s.z); }
+        continue;
+      }
+      if (!this.posed) this.posed = new Uint8Array(S.N);
+      this.posed[i] = 1;
       h.ok = false;
-      if (i === body && ctx.hideBody) { this.sol.hide(i); this.capture(i, s, tau); continue; }
-      if (s.mode === MODE.HIDDEN) { this.sol.hide(i); continue; }
+      if (i === body && ctx.hideBody) { this.sol.hide(i); this.capture(i, s, tau); this.posed[i] = 0; continue; }
+      if (s.mode === MODE.HIDDEN) { this.sol.hide(i); this.posed[i] = 0; continue; }
       const ov = ctx.overrides.get(i);
       if (ov) {
         const k = Math.min(1, (ctx.real - ov.t0) / 1.6);
@@ -140,6 +150,7 @@ export class Playback {
       const fireT = A[o], impT = A[o + 1], shooter = A[o + 8], target = A[o + 9];
       if (shooter === body) continue;
       const veh = shooter < 0;
+      const ship = shooter <= -100;
       const side = veh ? 1 : S.actors[shooter].side;
       // reversed sound lead
       if (ctx.sound && fireT + 0.42 <= tauPrev && fireT + 0.42 > tau) ev.sounds.push(['shot', A[o + 2], A[o + 3], A[o + 4], veh ? 2 : side]);
@@ -212,16 +223,22 @@ export class Playback {
     }
 
     // ---------------- strikes ----------------
-    let li = 0;
     const lightCand = [];
+    const houses = S.L.houses;
     S.explosions.forEach((e, ei) => {
       const age = tau - e.t;
-      // incoming
+      if (age > 40 && e.kind !== 'vehicle' && !e.house) return;
+      // ---- incoming ordnance ----
       if (tau >= e.launchT && tau < e.t) {
         const u = (tau - e.launchT) / (e.t - e.launchT);
-        if (e.kind === 'shell' && e.t - tau < 1.6) {
-          const p = this.arc(e, u, 90), q = this.arc(e, Math.max(0, u - 0.012), 90);
-          tr.push(q.x, q.y, q.z, 0.08, p.x, p.y, p.z, 0.15, 3, 1.6, 0.6, 1);
+        if ((e.kind === 'shell' && e.t - tau < 1.6) || e.kind === 'mlrs') {
+          const ap = e.kind === 'mlrs' ? 260 : 90;
+          const p = this.arc(e, u, ap), q = this.arc(e, Math.max(0, u - 0.012), ap);
+          if (e.kind === 'shell' || e.t - tau < 2.5) tr.push(q.x, q.y, q.z, 0.08, p.x, p.y, p.z, 0.15, 3, 1.6, 0.6, 1);
+        } else if (e.kind === 'rocket') {
+          const p = this.lerpE(e, u), q = this.lerpE(e, Math.max(0, u - 0.05));
+          tr.push(q.x, q.y, q.z, 0.1, p.x, p.y, p.z, 0.2, 4, 2.6, 1.4, 1);
+          gl.push(p.x, p.y, p.z, 0.8, 3.5, 2.2, 1.2, 1, 0);
         } else if (e.kind === 'drone') {
           const p = this.dronePos(e, u);
           const dg = this.drones[ei % this.drones.length];
@@ -229,78 +246,92 @@ export class Playback {
           const q = this.dronePos(e, Math.min(1, u + 0.01));
           dg.lookAt(q.x, q.y, q.z);
           dg.userData.used = true;
-          if (Math.sin(tau * 18) > 0.3) gl.push(p.x, p.y + 0.05, p.z, 0.25, 3, 0.2, 0.15, 1, 0);
+          if (Math.sin(tau * 18 + ei) > 0.3) gl.push(p.x, p.y + 0.05, p.z, 0.25, 3, 0.2, 0.15, 1, 0);
           const d = Math.hypot(p.x - pp.x, p.y - pp.y, p.z - pp.z);
           if (d < ev.nearestDrone) ev.nearestDrone = d;
-        } else if (e.kind === 'vehicle') {
-          const m = S.missiles.find((mm) => mm.vi === e.vi);
-          if (m) {
-            const p = this.missilePos(m, u), q = this.missilePos(m, Math.max(0, u - 0.01));
-            tr.push(q.x, q.y, q.z, 0.1, p.x, p.y, p.z, 0.16, 4, 3, 2, 1);
-            gl.push(p.x, p.y, p.z, 0.9, 3, 2, 1.2, 1, 0);
-          }
+        } else if (e.mi !== undefined) {
+          const m = S.missiles[e.mi];
+          const p = this.missilePos(m, u), q = this.missilePos(m, Math.max(0, u - 0.01));
+          tr.push(q.x, q.y, q.z, 0.1, p.x, p.y, p.z, 0.16, 4, 3, 2, 1);
+          gl.push(p.x, p.y, p.z, 0.9, 3, 2, 1.2, 1, 0);
         }
       }
-      // missile smoke trail persists after flight
-      if (e.kind === 'vehicle' && tau >= e.launchT && tau < e.t + 6) {
-        const m = S.missiles.find((mm) => mm.vi === e.vi);
-        if (m) for (let k = 0; k < 28; k++) {
-          const uk = k / 27; const birth = e.launchT + uk * (e.t - e.launchT);
-          const a = tau - birth; if (a < 0 || a > 6) continue;
-          const p = this.missilePos(m, uk);
-          sm.push(p.x + a * 0.6, p.y + a * 0.3, p.z, 0.5 + a * 0.9, 0.85, 0.84, 0.82, 0.35 * (1 - a / 6), k);
+      // smoke trails that outlive the rocket/missile (anchored to the path, so they rewind exactly)
+      if (tau >= e.launchT && tau < e.t + 7 && (e.mi !== undefined || e.kind === 'rocket' || e.kind === 'mlrs')) {
+        const n = e.kind === 'mlrs' ? 18 : 24;
+        for (let k = 0; k < n; k++) {
+          const uk = e.kind === 'mlrs' ? 0.7 + 0.3 * k / (n - 1) : k / (n - 1);
+          const birth = e.launchT + uk * (e.t - e.launchT);
+          const a = tau - birth; if (a < 0 || a > 7) continue;
+          const p = e.mi !== undefined ? this.missilePos(S.missiles[e.mi], uk) : e.kind === 'mlrs' ? this.arc(e, uk, 260) : this.lerpE(e, uk);
+          sm.push(p.x + a * 0.7, p.y + a * 0.25, p.z, 0.45 + a * 0.8, 0.85, 0.84, 0.82, 0.32 * (1 - a / 7), k);
         }
       }
-      if (ctx.sound && e.t + 2.6 <= tauPrev && e.t + 2.6 > tau) ev.sounds.push(['boom', e.ix, e.iy, e.iz, e.big]);
-      if (e.t <= tauPrev && e.t > tau && ctx.playerAlive) {
+      if (ctx.sound && e.t + 2.6 <= tauPrev && e.t + 2.6 > tau) ev.sounds.push(['boom', e.ix, e.iy, e.iz, Math.min(2.5, e.big)]);
+      if (e.t <= tauPrev && e.t > tau && ctx.playerAlive && !e.air) {
         const d = Math.hypot(e.ix - pp.x, e.iz - pp.z);
-        const rad = e.big > 1 ? 9 : 7;
+        const rad = e.big > 1.5 ? 9 : 6.5 * e.big;
         if (d < rad) ev.playerHits.push({ dmg: 130 * (1 - d / rad) + 10, fromX: e.ix, fromZ: e.iz });
-        ev.shake = Math.max(ev.shake, Math.max(0, 1 - d / 60));
+        ev.shake = Math.max(ev.shake, Math.max(0, 1 - d / (60 * Math.min(2, e.big))));
       }
       if (age < 0) return;
       const big = e.big;
-      const wet = e.iy <= 0.15 && e.iz > 5;
+      const wet = !e.air && e.iy <= 0.15 && heightAt(e.ix, e.iz) < 0.05 && e.iz > 5;
       if (age < 0.4) lightCand.push([age, e]);
       if (age < 0.2) gl.push(e.ix, e.iy + 1.5, e.iz, 16 * big * (1 - age / 0.2) + 4, 4.5, 2.8, 1.5, 1, ei);
       if (age < 1.0) for (let k = 0; k < 9; k++) {
         const hx = hash2(ei, k) - 0.5, hy = hash2(k, ei), hz = hash2(ei * 3, k) - 0.5;
-        const r = (1 + age * 7) * (big > 1 ? 1.4 : 1);
+        const r = (1 + age * 7) * (big > 1 ? 1.4 : 1) * Math.min(2.5, big);
         gl.push(e.ix + hx * r, e.iy + 0.8 + hy * r * 0.8, e.iz + hz * r, (2.5 + age * 5) * big, 3.2, 1.3, 0.35, Math.pow(1 - age, 2), k);
       }
-      if (age < 3) for (let k = 0; k < 26; k++) {
-        const vx = (hash2(ei, k + 50) - 0.5) * 12, vy = 7 + hash2(k + 9, ei) * 13, vz = (hash2(ei * 5, k) - 0.5) * 12;
+      if (!e.air && age < 3.2) for (let k = 0; k < 26; k++) {
+        const sc = Math.min(1.8, big);
+        const vx = (hash2(ei, k + 50) - 0.5) * 12 * sc, vy = (7 + hash2(k + 9, ei) * 13) * (wet ? 1.4 : 1) * sc, vz = (hash2(ei * 5, k) - 0.5) * 12 * sc;
         const y = e.iy + vy * age - 0.5 * G * age * age;
         if (y < e.iy - 0.3) continue;
-        const c = wet ? [0.92, 0.93, 0.95] : big > 1 ? [0.12, 0.11, 0.1] : [0.55, 0.48, 0.38];
-        sm.push(e.ix + vx * age, y, e.iz + vz * age, (wet ? 0.8 : 0.45) + age * 0.6, c[0], c[1], c[2], 0.85 * (1 - age / 3), k);
+        const c = wet ? [0.92, 0.93, 0.95] : big > 1.5 ? [0.12, 0.11, 0.1] : [0.55, 0.48, 0.38];
+        sm.push(e.ix + vx * age, y, e.iz + vz * age, (wet ? 0.9 : 0.45) + age * 0.6 * sc, c[0], c[1], c[2], 0.85 * (1 - age / 3.2), k);
       }
       if (age < 32) for (let k = 0; k < 16; k++) {
         const b = k * 0.18; const a = age - b; if (a < 0) continue;
         const hx = hash2(ei, k + 100) - 0.5, hz = hash2(k + 100, ei) - 0.5;
         const life = 32 - b;
         const fade = Math.min(1, a * 1.5) * Math.max(0, 1 - a / life);
-        const c = big > 1 ? 0.1 : wet ? 0.75 : 0.32;
-        sm.push(e.ix + hx * 3 + a * 0.9, e.iy + 1 + a * (0.9 + hash1(k) * 0.6), e.iz + hz * 3 + a * 0.2, 2.2 + a * 0.55, c * 1.05, c, c * 0.95, 0.42 * fade, k + a * 0.05);
+        const c = big > 1.5 ? 0.1 : wet ? 0.75 : 0.32;
+        sm.push(e.ix + hx * 3 + a * 0.9, e.iy + 1 + a * (0.9 + hash1(k) * 0.6), e.iz + hz * 3 + a * 0.2, 2.2 + a * 0.55 * Math.min(2, big), c * 1.05, c, c * 0.95, 0.42 * fade, k + a * 0.05);
       }
-      // burning wrecks
-      if (e.kind === 'vehicle') {
-        const v = S.L.vehicles[e.vi];
-        const top = heightAt(v.x, v.zStop) + (v.type === 'aav' ? 3 : 4.5);
-        for (let k = 0; k < 7; k++) {
+      // persistent fires: burning wrecks, burning houses, burning wreckage of the gunship on the water
+      let fire = null;
+      if (e.kind === 'vehicle') { const v = S.L.vehicles[e.vi]; fire = [v.x, heightAt(v.x, v.zStop) + (v.type === 'aav' ? 3 : 4.5), v.zStop, 1]; ev.wrecks.push(v); }
+      else if (e.house) { let best = null, bd = 99; for (const h of houses) { const d = Math.hypot(h.x - e.ix, h.z - e.iz); if (d < bd) { bd = d; best = h; } } if (best && bd < 14) fire = [best.x, heightAt(best.x, best.z) + 7, best.z, 1.6]; }
+      else if (e.kind === 'crash') fire = [e.ix, 0.6, e.iz, 1.3];
+      if (fire) {
+        const [fx, fy, fz, fs] = fire;
+        for (let k = 0; k < 7 * fs; k++) {
           const fl = 0.6 + 0.4 * Math.sin(tau * 13 + k * 2.1) * Math.sin(tau * 7.3 + k);
-          gl.push(v.x + (hash1(k) - 0.5) * 2.5, top + 0.4 + hash1(k + 3) * 0.6 + fl * 0.3, v.zStop + (hash1(k + 7) - 0.5) * 4, 1.4 + fl, 3.2, 1.25, 0.3, 0.8 * Math.min(1, age * 0.5 + 0.3), k + tau);
+          gl.push(fx + (hash1(k + ei) - 0.5) * 2.5 * fs, fy + 0.4 + hash1(k + 3) * 0.6 * fs + fl * 0.3, fz + (hash1(k + 7) - 0.5) * 4 * fs, (1.4 + fl) * fs, 3.2, 1.25, 0.3, 0.8 * Math.min(1, age * 0.5 + 0.3), k + tau);
         }
         const t0 = e.t + 0.5;
         const jStart = Math.max(0, Math.ceil((tau - 13.5 - t0) / 0.45));
         for (let j = jStart; j < jStart + 31; j++) {
           const birth = t0 + j * 0.45;
           const a = tau - birth; if (a < 0) break; if (a > 13.5) continue;
-          sm.push(v.x + a * 1.1, top + a * 1.6, v.zStop + a * 0.3, 1.5 + a * 0.75, 0.06, 0.055, 0.05, 0.5 * Math.min(1, a) * (1 - a / 13.5), j);
+          sm.push(fx + a * 1.1, fy + a * 1.6, fz + a * 0.3, (1.5 + a * 0.75) * fs, 0.06, 0.055, 0.05, 0.5 * Math.min(1, a) * (1 - a / 13.5), j);
         }
-        ev.wrecks.push(v);
       }
     });
+    // smoke screens laid at each landing: thick white walls that drift down the beach
+    for (let si = 0; si < S.L.smokes.length; si++) {
+      const sc = S.L.smokes[si]; const age = tau - sc.t;
+      if (age < 0 || age > 70) continue;
+      const fade = Math.min(1, age / 3) * Math.max(0, 1 - (age - 45) / 25);
+      for (let k = 0; k < 12; k++) {
+        const off = hash2(si, k) - 0.5, off2 = hash2(k, si + 9) - 0.5;
+        const grow = Math.min(1, age / 8);
+        sm.push(sc.x + off * 18 * grow + age * 0.9, heightAt(sc.x, sc.z) + 1.5 + hash1(k + si) * 3 * grow, sc.z + off2 * 12 * grow, 5 + grow * 9, 0.86, 0.86, 0.84, 0.3 * fade, k + si);
+      }
+      if (age < 6) gl.push(sc.x, heightAt(sc.x, sc.z) + 0.3, sc.z, 0.6, 3, 2.4, 1.6, 1 - age / 6, 0);
+    }
     for (const d of this.drones) { if (!d.userData.used) d.visible = false; d.userData.used = false; }
     lightCand.sort((p, q) => p[0] - q[0]);
     this.lights.forEach((l, k) => {
@@ -308,7 +339,7 @@ export class Playback {
       if (!c) { l.intensity = 0; return; }
       const [age, e] = c;
       l.position.set(e.ix, e.iy + 3, e.iz);
-      l.intensity = 1600 * e.big * Math.pow(1 - age / 0.4, 2);
+      l.intensity = 1600 * Math.min(3, e.big) * Math.pow(1 - age / 0.4, 2);
     });
 
     // ---------------- vehicles: wakes, spray ----------------
@@ -340,6 +371,21 @@ export class Playback {
           const r = 4 + ((tau * 4 + k * 1.7) % 9);
           const gy = heightAt(hp.x + Math.cos(a) * r, hp.z + Math.sin(a) * r);
           sm.push(hp.x + Math.cos(a) * r, gy + 0.6 + (r - 4) * 0.12, hp.z + Math.sin(a) * r, 1.5 + r * 0.25, 0.7, 0.64, 0.54, 0.22 * s * (1 - (r - 4) / 9), k);
+        }
+      }
+    }
+    // gunships: rotor noise distance, and the burning fall of the one that's shot down
+    for (const g of S.L.gunships) {
+      gunshipPose(g, tau, hp);
+      if (!hp.alive) continue;
+      const d = Math.hypot(hp.x - pp.x, hp.y - pp.y, hp.z - pp.z);
+      if (d < ev.heloDist) ev.heloDist = d;
+      if (hp.burn) {
+        for (let k = 0; k < 6; k++) gl.push(hp.x + (hash1(k) - 0.5) * 2, hp.y + 1 + hash1(k + 2), hp.z + (hash1(k + 4) - 0.5) * 3, 2 + Math.sin(tau * 11 + k), 3.4, 1.4, 0.35, 0.9, k + tau);
+        for (let k = 0; k < 24; k++) {
+          const tk = tau - k * 0.12; if (tk < g.downT) break;
+          const q = gunshipPose(g, tk, {});
+          sm.push(q.x, q.y + 1, q.z, 1.5 + k * 0.35, 0.08, 0.075, 0.07, 0.5 * (1 - k / 24), k);
         }
       }
     }
@@ -379,9 +425,13 @@ export class Playback {
     else { const k = Math.pow((u - 0.8) / 0.2, 1.6); o.set(ax + (e.ix - ax) * k, ay + (e.iy + 0.5 - ay) * k, az + (e.iz - az) * k); }
     return o;
   }
+  lerpE(e, u) {
+    const o = this._le || (this._le = new THREE.Vector3());
+    return o.set(e.sx + (e.ix - e.sx) * u, e.sy + (e.iy - e.sy) * u, e.sz + (e.iz - e.sz) * u);
+  }
   missilePos(m, u) {
     const o = this._mp || (this._mp = new THREE.Vector3());
-    o.set(m.sx + (m.ix - m.sx) * u, m.sy + (m.iy - m.sy) * u + Math.pow(Math.sin(u * Math.PI), 0.7) * 48 * (u < 0.5 ? 1 : 1), m.sz + (m.iz - m.sz) * u);
+    o.set(m.sx + (m.ix - m.sx) * u, m.sy + (m.iy - m.sy) * u + Math.pow(Math.sin(u * Math.PI), 0.7) * (m.arc ?? 48), m.sz + (m.iz - m.sz) * u);
     return o;
   }
 }

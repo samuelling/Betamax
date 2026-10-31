@@ -171,6 +171,7 @@ export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75) {
   for (const [a, b] of STIFF) cons.push([a, b, len(a, b), 0.6]);
   const gripC = [10, 19, len(10, 19), 1];
   const out = new Float32Array(frames * n * 3);
+  const G = new Float32Array(n);
   const steps = frames * 2;
   for (let st = 0; st < steps; st++) {
     // integrate
@@ -182,7 +183,8 @@ export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75) {
         Q[k] = cur;
       }
     }
-    for (let it = 0; it < 7; it++) {
+    for (let i = 0; i < n; i++) G[i] = Math.max(heightAt(P[i * 3], P[i * 3 + 2]), -0.8) + RAD[i];
+    for (let it = 0; it < 6; it++) {
       const list = st < 10 ? cons.concat([gripC]) : cons;
       for (const [a, b, L, k] of list) {
         const ax = a * 3, bx = b * 3;
@@ -193,7 +195,7 @@ export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75) {
         P[bx] -= dx * diff; P[bx + 1] -= dy * diff; P[bx + 2] -= dz * diff;
       }
       for (let i = 0; i < n; i++) {
-        const k = i * 3; const g = Math.max(heightAt(P[k], P[k + 2]), -0.8) + RAD[i];
+        const k = i * 3; const g = G[i];
         if (P[k + 1] < g) {
           P[k + 1] = g;
           Q[k] += (P[k] - Q[k]) * 0.35; Q[k + 2] += (P[k + 2] - Q[k + 2]) * 0.35; // friction

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } from './terrain.js';
-import { buildLayout, vehZ, vehRamp, heloPose } from './layout.js';
+import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose } from './layout.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 
@@ -94,6 +94,7 @@ export class World {
     this.buildFleet();
     this.buildVehicles();
     this.buildHelos();
+    this.buildGunships();
     this.buildDecals();
     this.buildTracks();
   }
@@ -588,6 +589,7 @@ export class World {
     const im = new THREE.InstancedMesh(bag, std([0.56, 0.5, 0.38], 0.95), n);
     const r = mulberry32(6); let k = 0; const col = new THREE.Color();
     for (const p of this.L.positions) {
+      if (p.bagZ == null) continue;
       for (let layer = 0; layer < 2; layer++) {
         const cnt = layer ? 5 : 6;
         for (let i = 0; i < cnt; i++) {
@@ -700,6 +702,39 @@ export class World {
     }
   }
 
+  // fictional invader attack helicopter: tandem canopy, stub wings with rocket pods, chin gun
+  buildGunships() {
+    this.gunships = [];
+    const body = std([0.2, 0.22, 0.21], 0.55, 0.35), dark = std([0.04, 0.04, 0.04], 0.6), glass = std([0.06, 0.08, 0.09], 0.05, 0.6);
+    for (const g of this.L.gunships) {
+      const grp = new THREE.Group();
+      const B = new Builder();
+      B.add(body, rbox(1.3, 1.7, 7.5, 0.5, 0, 1.6, 0.4));
+      B.add(glass, rbox(1.0, 0.9, 1.6, 0.35, 0, 2.5, 2.4, -0.15, 0, 0));
+      B.add(glass, rbox(1.0, 0.9, 1.5, 0.35, 0, 2.3, 3.7, -0.3, 0, 0));
+      B.add(body, place(new THREE.CylinderGeometry(0.28, 0.6, 7.5, 10), 0, 1.9, -5.4, Math.PI / 2 + 0.04, 0, 0));
+      B.add(body, box(0.22, 2.2, 1.3, 0, 2.6, -9.0, -0.35, 0, 0));
+      B.add(body, box(2.6, 0.1, 0.7, 0, 1.9, -8.2));
+      B.add(body, box(4.6, 0.14, 1.0, 0, 1.4, 0.0));
+      [-1, 1].forEach((sd) => {
+        B.add(dark, place(new THREE.CylinderGeometry(0.28, 0.28, 1.5, 12), sd * 2.0, 1.15, 0.1, Math.PI / 2, 0, 0));
+        B.add(dark, place(new THREE.CylinderGeometry(0.22, 0.22, 1.3, 12), sd * 1.3, 1.15, 0.1, Math.PI / 2, 0, 0));
+        B.add(body, rbox(0.6, 0.7, 2.0, 0.25, sd * 0.75, 2.4, -0.4));
+      });
+      B.add(dark, place(new THREE.SphereGeometry(0.32, 10, 8), 0, 0.85, 3.3));
+      B.add(dark, place(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 6), 0, 0.8, 4.0, Math.PI / 2, 0, 0));
+      [-1, 1].forEach((sd) => B.add(dark, box(0.1, 0.1, 2.2, sd * 0.6, 0.2, 0.6)));
+      B.build(grp);
+      const rotor = new THREE.Group();
+      const blades = []; for (let k = 0; k < 4; k++) blades.push(box(0.45, 0.05, 7.4, 0, 0, 3.7, 0, (k * Math.PI) / 2, 0));
+      const rm = new THREE.Mesh(merge(blades), dark); rm.castShadow = true; rotor.add(rm); rotor.position.set(0, 3.15, 0.2); grp.add(rotor);
+      const tail = new THREE.Group(); tail.add(new THREE.Mesh(merge([box(0.05, 1.4, 0.16, 0, 0, 0), box(0.05, 0.16, 1.4, 0, 0, 0)]), dark));
+      tail.position.set(0.2, 2.8, -9.2); grp.add(tail);
+      this.root.add(grp);
+      this.gunships.push({ g, grp, rotor, tail, pose: {} });
+    }
+  }
+
   buildDecals() {
     const tex = TX.makeScorchTex();
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, color: 0xffffff });
@@ -734,6 +769,14 @@ export class World {
         for (const m of o.ramp.children) { if (!m.userData.mat) m.userData.mat = m.material; m.material = dead ? o.char : m.userData.mat; }
         if (dead) { o.grp.rotation.z = 0.04; }
       }
+    }
+    for (const o of this.gunships) {
+      const p = gunshipPose(o.g, tau, o.pose);
+      o.grp.visible = p.alive;
+      o.grp.position.set(p.x, p.y, p.z);
+      o.grp.rotation.set(p.pitch, p.yaw, p.roll, 'YXZ');
+      o.rotor.rotation.y = tau * (p.burn ? 14 : 30);
+      o.tail.rotation.x = tau * 60;
     }
     for (const o of this.helos) {
       const p = heloPose(o.h, tau, o.pose);

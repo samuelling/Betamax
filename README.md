@@ -17,7 +17,7 @@ Open `index.html` (a single self-contained file), or enable GitHub Pages on `mai
 Reversed bullets still hurt. The edges of the beach are mined.
 
 ## How it works
-- `src/sim.js`: a deterministic forward simulation of the whole battle (100 invaders across 3 waves of AAVs and LCAC hovercraft, 24 defenders from 3 helicopters, drones, naval shells, anti-armor strikes), recorded at 20 Hz.
+- `src/sim.js`: a deterministic forward simulation of the whole battle: about 330 invaders in six waves of AAVs and LCAC hovercraft, about 60 defenders from two helicopter insertions with M250 gunners, two invader gunships (one shot down into the bay), rocket artillery, naval guns, drone swarms, smoke screens, Javelin kills and burning houses. Recorded at 10 Hz.
 - `src/playback.js`: renders the recording at any tape position `tau`. Every effect (tracers, impacts, smoke, explosions, wrecks) is a pure function of `tau`, so rewind, fast-forward and checkpoints all come for free.
 - `src/post.js`: the Betamax signal chain (chroma smear, timebase wobble, search-noise bars, head-switching noise, dropouts) over a high-fidelity render.
 - `src/audio.js`: all sound is synthesized. World sounds play reversed; your gun plays forward.
