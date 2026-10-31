@@ -41,6 +41,12 @@ export function buildLayout() {
   });
   const end = L.boardwalk[L.boardwalk.length - 1];
   L.stairs = { x: bx, z: end.z, top: end.y, bottom: heightAt(bx, end.z + 6) };
+  L.stairs.steps = Math.max(4, Math.round((L.stairs.top - L.stairs.bottom) / 0.19));
+  L.stairs.bottom = heightAt(bx, end.z + 0.85 + L.stairs.steps * 0.3);
+  // gaps in the railings (both sides) every ~10 m, with side steps down to the sand
+  L.boardwalkGaps = new Set();
+  for (let i = 2; i < L.boardwalk.length - 2; i += 5) { L.boardwalkGaps.add(i * 2); L.boardwalkGaps.add(i * 2 + 1); }
+  L.cars = [[-36, -76, 0.1], [-30, -77, -0.05], [-12, -94, 1.5], [14, -112, 0.05], [34, -110, -0.1], [-40, -118, 0.3], [40, -80, 1.2]];
 
   L.snackShack = { x: 18, z: LOT.z1 + 3, w: 15, l: 8, rot: 0 };
   L.lifeguard = { x: -6, z: -4 };

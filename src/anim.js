@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { CLIPS } from './mocap.js';
 import { J, NJ } from './rig.js';
-import { heightAt } from './terrain.js';
+import { heightFast as heightAt } from './terrain.js';
 
 // mocap joint order: hips spine chest neck head shL elbL handL shR elbR handR hipL kneeL ankleL toeL hipR kneeR ankleR toeR
 const MJ = { hips: 0, spine: 1, chest: 2, neck: 3, head: 4, shL: 5, shR: 8, hipL: 11, kneeL: 12, ankleL: 13, toeL: 14, hipR: 15, kneeR: 16, ankleR: 17, toeR: 18 };
@@ -150,7 +150,7 @@ const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [2, 8], [5, 8], [5, 6], [
 const STIFF = [[0, 2], [5, 11], [8, 15], [5, 15], [8, 11], [1, 5], [1, 8], [11, 1], [15, 1], [2, 11], [2, 15], [3, 5], [3, 8], [12, 14], [16, 18], [4, 2], [4, 5], [4, 8]];
 const RAD = [0.12, 0.12, 0.13, 0.07, 0.11, 0.07, 0.05, 0.05, 0.07, 0.05, 0.05, 0.08, 0.06, 0.05, 0.04, 0.08, 0.06, 0.05, 0.04, 0.03, 0.03];
 
-export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75) {
+export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75, groundFn = null, wallFn = null) {
   // start: Float32Array(NJ*3) pose at death; prevStart: pose 1/30s earlier (for momentum)
   const n = NJ, P = Float32Array.from(start), Q = new Float32Array(n * 3);
   const dt = 1 / 60;
@@ -183,7 +183,12 @@ export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75) {
         Q[k] = cur;
       }
     }
-    for (let i = 0; i < n; i++) G[i] = Math.max(heightAt(P[i * 3], P[i * 3 + 2]), -0.8) + RAD[i];
+    if (wallFn && st % 3 === 0) for (let i = 0; i < n; i++) {
+      // bodies fold against walls, hulls and railings instead of passing through them
+      const k = i * 3, r = wallFn(P[k], P[k + 2], P[k + 1] - RAD[i], RAD[i]);
+      if (r[0] !== P[k] || r[1] !== P[k + 2]) { Q[k] += r[0] - P[k]; Q[k + 2] += r[1] - P[k + 2]; P[k] = r[0]; P[k + 2] = r[1]; Q[k] += (P[k] - Q[k]) * 0.5; Q[k + 2] += (P[k + 2] - Q[k + 2]) * 0.5; }
+    }
+    for (let i = 0; i < n; i++) G[i] = (groundFn ? groundFn(P[i * 3], P[i * 3 + 2], P[i * 3 + 1] - RAD[i]) : Math.max(heightAt(P[i * 3], P[i * 3 + 2]), -0.8)) + RAD[i];
     for (let it = 0; it < 6; it++) {
       const list = st < 10 ? cons.concat([gripC]) : cons;
       for (const [a, b, L, k] of list) {

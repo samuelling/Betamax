@@ -44,7 +44,7 @@ function boot() {
   const glow = new Billboards(scene, 5000, TX.makeFlashTex(), true, world.fogColor);
   const tracers = new Tracers(scene, 2500);
   const pb = new Playback(S, world, sol, smoke, glow, tracers, scene);
-  sol.prepare(pb);
+  { const t0 = performance.now(); sol.prepare(pb); console.log("ragdolls ms", Math.round(performance.now() - t0)); }
   const flashTex = TX.makeFlashTex();
   const player = new Player(camera, scene, flashTex);
   const input = new Input(renderer.domElement, $('touch'));
@@ -69,6 +69,13 @@ function boot() {
     G.player.vm.visible = false; tick(0.0001, true);
   };
   G.raw = () => { renderer.render(scene, camera); };
+  // debug: free camera in the full world at tape time tau
+  G.cam = (tau, x, y, z, tx, ty, tz) => {
+    G.state = 'studio'; G.tau = tau; tick(0.0001, false);
+    G.world.root.visible = true; if (G.studioFloor) G.studioFloor.visible = false;
+    camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); G.player.vm.visible = false; tick(0.0001, true);
+  };
+  G.near = (tau, x, z, r) => { G.state = 'studio'; G.tau = tau; tick(0.0001, false); const o = []; G.pb.hit.forEach((k, i) => { if (k && k.pos && Math.hypot(k.pos.x - x, k.pos.z - z) < r) o.push([i, +k.pos.x.toFixed(1), +k.pos.y.toFixed(2), +k.pos.z.toFixed(1)]); }); return o; };
   // debug: look at a vehicle/helo/gunship object at tape time tau
   G.vstudio = (kind, i, tau, d, ang, h, ty = 2) => {
     G.state = 'studio'; G.tau = tau; tick(0.0001, false);
@@ -267,7 +274,9 @@ function playerFire(muzzle, inp) {
   const moving = Math.hypot(p.vel.x, p.vel.z) / 5;
   const spread = (0.022 * (1 - p.ads) + 0.0025 * p.ads + moving * 0.012 + p.recoil * 0.2);
   _d.x += (Math.random() - 0.5) * spread; _d.y += (Math.random() - 0.5) * spread; _d.z += (Math.random() - 0.5) * spread; _d.normalize();
-  const tT = rayTerrain(_o, _d), tV = rayVehicles(_o, _d);
+  const tT = rayTerrain(_o, _d);
+  const hb = G.S.obstacles.segment(_o.x, _o.y, _o.z, _o.x + _d.x * 300, _o.y + _d.y * 300, _o.z + _d.z * 300, G.tau, -1, true);
+  const tV = hb >= 0 ? hb * 300 : Infinity;
   let best = Infinity, who = -1, head = false;
   const pb = G.pb, side = G.S.actors[G.body].side;
   for (let i = 0; i < G.S.N; i++) {
@@ -482,7 +491,7 @@ function tick(dt, draw = true) {
     case 'play': {
       showHud = true; spreadShow = true;
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
-      const out = p.update(dt, inp, dynamicColliders(), S.L.boardwalk);
+      const out = p.update(dt, inp, S.obstacles, G.tau);
       if (p.jumped) G.input.consumeJump();
       const mz = p.tryFire(inp);
       if (mz) { playerFire(mz, inp); ejectBrass(); }

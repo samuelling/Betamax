@@ -53,7 +53,7 @@ export class Player {
     this.reloadDur = reloadDuration(this.gun.userData.bullpup, this.reloadTac);
   }
 
-  update(dt, inp, colliders, boardwalk) {
+  update(dt, inp, obs, tau) {
     const sens = 0.0022 * (1 - this.ads * 0.32);
     this.yaw -= inp.lookX * sens; this.pitch -= inp.lookY * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
@@ -77,25 +77,18 @@ export class Player {
     if (inp.jump && this.coyote > 0 && this.vel.y <= 0.5) { this.vel.y = 4.8; this.onGround = false; this.coyote = 0; this.jumped = true; }
     this.vel.y -= 18 * dt;
     let nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    for (const c of colliders) {
-      const dx = nx - c.x, dz = nz - c.z, d = Math.hypot(dx, dz), m = c.r + 0.35;
-      if (d < m && d > 1e-4) { nx = c.x + dx / d * m; nz = c.z + dz / d * m; }
-    }
+    // solid world: slide along walls, hulls, railings; step up stairs and decks (<= ~0.45 m)
+    [nx, nz] = obs.pushOut(nx, nz, 0.34, this.pos.y, tau, -1, this.eyeH + 0.1);
+    let gy = obs.surfaceY(nx, nz, this.pos.y, tau);
+    if (gy > this.pos.y + 0.5 && this.onGround) { nx = this.pos.x; nz = this.pos.z; gy = obs.surfaceY(nx, nz, this.pos.y, tau); }
     nx = Math.max(ARENA.x0 - 25, Math.min(ARENA.x1 + 25, nx));
     nz = Math.max(ARENA.z0 - 25, Math.min(ARENA.z1 + 25, nz));
-    let gy = Math.max(heightAt(nx, nz), -1.1);
-    if (boardwalk && Math.abs(nx - 2) < 1.25) {
-      const bw = boardwalk; const z0 = bw[0].z, dz = bw[1].z - bw[0].z;
-      const k = (nz - z0) / dz;
-      if (k >= 0 && k < bw.length - 1) {
-        const i = Math.floor(k), f = k - i; const dy = bw[i].y + (bw[i + 1].y - bw[i].y) * f + 0.03;
-        if (this.pos.y > dy - 0.6) gy = Math.max(gy, dy);
-      }
-    }
+    this.vel.x = (nx - this.pos.x) / Math.max(dt, 1e-4) * 0.5 + this.vel.x * 0.5;
+    this.vel.z = (nz - this.pos.z) / Math.max(dt, 1e-4) * 0.5 + this.vel.z * 0.5;
     this.pos.x = nx; this.pos.z = nz;
     this.pos.y += this.vel.y * dt;
     if (this.pos.y <= gy) { this.pos.y = gy; this.vel.y = 0; this.onGround = true; }
-    else if (this.pos.y - gy < 0.25 && this.vel.y <= 0) { this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 15); this.onGround = true; }
+    else if (this.pos.y - gy < 0.3 && this.vel.y <= 0) { this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 18); this.onGround = true; }
     else this.onGround = false;
 
     const hs = Math.hypot(this.vel.x, this.vel.z);

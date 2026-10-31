@@ -402,17 +402,37 @@ export class World {
         const gy = heightAt(a.x + ox, a.z);
         const h = a.y - gy + 0.3;
         B.add(gray, box(0.14, h, 0.14, a.x + ox, gy + h / 2 - 0.3, a.z));
+        const gap = this.L.boardwalkGaps.has(i * 2 + (ox > 0 ? 1 : 0));
+        if (gap) {
+          // side steps down to the sand
+          for (let k = 0; k < 3; k++) {
+            const sx = a.x + ox * (1.2 + 0.15 + k * 0.3), g = heightAt(sx, mz), top = my - (k + 1) * (my - g) / 3;
+            B.add(wood, box(0.3, 0.06, 1.6, sx, top, mz));
+            B.add(gray, box(0.08, Math.max(0.05, top - g), 0.08, sx, (top + g) / 2, mz - 0.7));
+            B.add(gray, box(0.08, Math.max(0.05, top - g), 0.08, sx, (top + g) / 2, mz + 0.7));
+          }
+          return;
+        }
         if (i % 2 === 0) B.add(gray, box(0.09, 0.95, 0.09, a.x + ox * 1.05, a.y + 0.48, a.z));
         B.add(wood, box(0.08, 0.08, len, a.x + ox * 1.05, my + 0.92, mz, -ang, 0, 0));
+        B.add(wood, box(0.06, 0.06, len, a.x + ox * 1.05, my + 0.5, mz, -ang, 0, 0));
       });
     }
     // stairs down to beach
     const st = this.L.stairs;
-    const steps = Math.max(4, Math.round((st.top - st.bottom) / 0.2));
+    const steps = st.steps;
     for (let k = 0; k < steps; k++) {
       const y = st.top - (k + 1) * (st.top - st.bottom) / steps;
-      B.add(wood, box(2.4, 0.06, 0.32, st.x, y, st.z + 1 + k * 0.3));
+      const z = st.z + 0.85 + k * 0.3 + 0.15;
+      B.add(wood, box(2.4, 0.06, 0.3, st.x, y, z));
+      B.add(wood, box(2.4, Math.max(0.02, (st.top - st.bottom) / steps), 0.03, st.x, y - (st.top - st.bottom) / steps / 2, z - 0.15));
     }
+    [-1, 1].forEach((sd) => {
+      const z0 = st.z + 0.85, z1 = z0 + steps * 0.3;
+      B.add(gray, box(0.08, 0.22, Math.hypot(z1 - z0, st.top - st.bottom), st.x + sd * 1.23, (st.top + st.bottom) / 2 - 0.1, (z0 + z1) / 2, Math.atan2(st.top - st.bottom, z1 - z0), 0, 0));
+      B.add(wood, box(0.07, 0.07, Math.hypot(z1 - z0, st.top - st.bottom), st.x + sd * 1.23, (st.top + st.bottom) / 2 + 0.9, (z0 + z1) / 2, Math.atan2(st.top - st.bottom, z1 - z0), 0, 0));
+      for (let k = 0; k <= steps; k += 3) { const z = z0 + k * 0.3, y = st.top - k * (st.top - st.bottom) / steps; B.add(gray, box(0.08, 0.95, 0.08, st.x + sd * 1.23, y + 0.45, z)); }
+    });
     // snack shack: gray shingle, white trim, low hip roof, serving windows
     const S = this.L.snackShack;
     const shingle = new THREE.MeshStandardMaterial({ map: TX.makeShingleTex(), roughness: 0.95 });
@@ -523,8 +543,7 @@ export class World {
     const B = new Builder();
     const cols = [[0.55, 0.57, 0.6], [0.15, 0.17, 0.2], [0.6, 0.12, 0.1], [0.85, 0.85, 0.82], [0.2, 0.3, 0.45], [0.35, 0.37, 0.3]];
     const tire = std([0.05, 0.05, 0.05], 0.9), glass = std([0.08, 0.1, 0.12], 0.1, 0.3);
-    const cars = [[-36, -76, 0.1], [-30, -77, -0.05], [-12, -94, 1.5], [14, -112, 0.05], [34, -110, -0.1], [-40, -118, 0.3], [40, -80, 1.2]];
-    this.L.cars = cars;
+    const cars = this.L.cars;
     cars.forEach(([x, z, rot], i) => {
       const mat = std(cols[i % cols.length], 0.35, 0.4);
       const add = (mt, gg) => { gg.rotateY(rot); gg.translate(x, Lt.y, z); B.add(mt, gg); };
@@ -532,7 +551,7 @@ export class World {
       add(glass, rbox(1.7, 0.65, 2.6, 0.18, 0, 1.4, -0.2));
       add(mat, box(1.72, 0.06, 2.4, 0, 1.73, -0.2));
       [[-0.85, 1.4], [0.85, 1.4], [-0.85, -1.45], [0.85, -1.45]].forEach(([wx, wz]) => add(tire, place(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 14), wx, 0.36, wz, 0, 0, Math.PI / 2)));
-      this.L.colliders.push({ x, z, r: 1.6 }, { x: x + Math.sin(rot) * 1.5, z: z + Math.cos(rot) * 1.5, r: 1.2 }, { x: x - Math.sin(rot) * 1.5, z: z - Math.cos(rot) * 1.5, r: 1.2 });
+
     });
     B.build(this.root);
   }

@@ -69,3 +69,17 @@ export function grassMask(x, z) {
 export function inMinefield(x, z) {
   return x < ARENA.x0 || x > ARENA.x1 || z < ARENA.z0 || z > ARENA.z1;
 }
+
+// Fast bilinear lookup over the playable area (1 m grid), exact function elsewhere.
+const HG = { x0: -170, z0: -210, nx: 341, nz: 441, d: null };
+export function heightFast(x, z) {
+  if (!HG.d) {
+    HG.d = new Float32Array(HG.nx * HG.nz);
+    for (let j = 0; j < HG.nz; j++) for (let i = 0; i < HG.nx; i++) HG.d[j * HG.nx + i] = heightAt(HG.x0 + i, HG.z0 + j);
+  }
+  const fx = x - HG.x0, fz = z - HG.z0;
+  const i = Math.floor(fx), j = Math.floor(fz);
+  if (i < 0 || j < 0 || i >= HG.nx - 1 || j >= HG.nz - 1) return heightAt(x, z);
+  const u = fx - i, v = fz - j, o = j * HG.nx + i, d = HG.d;
+  return (d[o] * (1 - u) + d[o + 1] * u) * (1 - v) + (d[o + HG.nx] * (1 - u) + d[o + HG.nx + 1] * u) * v;
+}

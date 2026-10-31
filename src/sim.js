@@ -1,8 +1,9 @@
 // Deterministic forward simulation of the battle. The game only ever plays it backwards.
 import { mulberry32, clamp, lerp } from './rng.js';
-import { heightAt, crestD } from './terrain.js';
+import { heightFast as heightAt, crestD } from './terrain.js';
 import { buildLayout, vehZ, gunshipPose } from './layout.js';
 import { makeIdentity } from './names.js';
+import { Obstacles } from './obstacles.js';
 
 export const DT = 0.05;
 export const HZ = 10; // recording rate (sim runs at 20 Hz)
@@ -11,12 +12,17 @@ export const F = 9; // x y z yaw pitch crouch speed phase mode
 export const MODE = { HIDDEN: 0, BOAT: 1, CHUTE: 2, GROUND: 3, DEAD: 4 };
 export const SHOT_F = 11; // fireT impT fx fy fz ix iy iz shooter target kind
 export const BULLET_SPEED = 300;
-export let DEF_ACC = 0.1, INV_ACC = 0.011;
+export let DEF_ACC = 0.14, INV_ACC = 0.0085;
 export function tune(d, i) { DEF_ACC = d; INV_ACC = i; }
 
 export function simulate(seed = 7) {
   const r = mulberry32(seed);
   const L = buildLayout();
+  const O = new Obstacles(L);
+  let curT = 0;
+  const sepGrid = new Map();
+  // fighting positions must not sit inside anything solid
+  for (const p of L.positions) { const [x, z] = O.pushOut(p.x, p.z, 0.6, heightAt(p.x, p.z), null); p.x = x; p.z = z; }
   const actors = [];
 
   // ---------- invaders from amphibious vehicles and hovercraft ----------
@@ -174,6 +180,7 @@ export function simulate(seed = 7) {
       }
     }
 
+    curT = t;
     for (const a of actors) {
       if (!a.alive) { a.speed = 0; continue; }
       if (a.side === 1) updateInvader(a, t); else updateDefender(a, t);
@@ -181,6 +188,9 @@ export function simulate(seed = 7) {
       // smooth stance
       a.crouch += clamp(a.crouchT - a.crouch, -4 * DT, 4 * DT);
     }
+
+    // personal space: soldiers don't walk through each other
+    separate(t);
 
     // vehicle turrets
     L.vehicles.forEach((v, vi) => {
@@ -254,16 +264,64 @@ export function simulate(seed = 7) {
     deaths.push({ id: a.id, t, killer, cause });
   }
 
-  function moveTo(a, tx, tz, speed) {
-    const dx = tx - a.x, dz = tz - a.z;
+  // steer toward (tx,tz), sliding along obstacles; when stuck, take a detour around them
+  function moveTo(a, tx, tz, speed, ignoreVeh = -1) {
+    if (a.detour && (curT > a.detour.until || Math.hypot(a.detour.x - a.x, a.detour.z - a.z) < 0.6)) a.detour = null;
+    const gx = a.detour ? a.detour.x : tx, gz = a.detour ? a.detour.z : tz;
+    const dx = gx - a.x, dz = gz - a.z;
     const d = Math.hypot(dx, dz);
     let sp = speed;
-    if (a.z > 0.5) sp *= 0.55; // wading
+    if (heightAt(a.x, a.z) < -0.25) sp *= 0.55; // wading through the pools
     const st = sp * DT;
-    if (d <= st) { a.x = tx; a.z = tz; a.speed = d / DT; return true; }
-    a.x += (dx / d) * st; a.z += (dz / d) * st; a.speed = sp;
-    turn(a, Math.atan2(dx, dz), 6);
+    const fd = Math.hypot(tx - a.x, tz - a.z);
+    if (!a.detour && fd <= st) { a.x = tx; a.z = tz; a.speed = fd / DT; a.stuck = 0; return true; }
+    const ox = a.x, oz = a.z;
+    let nx = a.x + (dx / (d || 1)) * Math.min(st, d), nz = a.z + (dz / (d || 1)) * Math.min(st, d);
+    [nx, nz] = O.pushOut(nx, nz, 0.32, a.y, curT, ignoreVeh);
+    a.x = nx; a.z = nz;
+    const moved = Math.hypot(nx - ox, nz - oz);
+    a.speed = moved / DT;
+    a.stuck = moved < st * 0.35 ? (a.stuck || 0) + DT : Math.max(0, (a.stuck || 0) - DT);
+    if (a.stuck > 0.8 && !a.detour) {
+      // try both sides, perpendicular to the goal direction, and pick one that is clear
+      const ux = (tx - a.x) / (fd || 1), uz = (tz - a.z) / (fd || 1);
+      let best = null;
+      for (const dist of [4, 7, 11]) for (const sd of (a.id % 2 ? [1, -1] : [-1, 1])) {
+        const px = a.x - uz * sd * dist + ux * 1.5, pz = a.z + ux * sd * dist + uz * 1.5;
+        const [qx, qz] = O.pushOut(px, pz, 0.4, O.surfaceY(px, pz), curT, ignoreVeh);
+        if (Math.hypot(qx - px, qz - pz) < 0.05) { best = { x: px, z: pz }; break; }
+        if (best) break;
+      }
+      if (best) a.detour = { ...best, until: curT + 4 };
+      a.stuck = 0;
+    }
+    if (a.speed > 0.2) turn(a, Math.atan2(nx - ox, nz - oz), 6);
     return false;
+  }
+  function separate(t) {
+    const grid = sepGrid;
+    grid.clear();
+    for (const a of actors) {
+      if (!a.alive || a.mode !== MODE.GROUND) continue;
+      const k = Math.floor(a.x / 1.5) * 4096 + Math.floor(a.z / 1.5);
+      let l = grid.get(k); if (!l) grid.set(k, (l = [])); l.push(a);
+    }
+    for (const a of actors) {
+      if (!a.alive || a.mode !== MODE.GROUND) continue;
+      const cx = Math.floor(a.x / 1.5), cz = Math.floor(a.z / 1.5);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const l = grid.get((cx + i) * 4096 + cz + j); if (!l) continue;
+        for (const b of l) {
+          if (b.id <= a.id) continue;
+          const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), m = 0.62;
+          if (d >= m || d < 1e-4) continue;
+          const push = (m - d) / 2 / d;
+          const am = a.speed > 0.2 || a.state !== 'defend', bm = b.speed > 0.2 || b.state !== 'defend';
+          const wa = am && bm ? 1 : am ? 2 : 0, wb = am && bm ? 1 : bm ? 2 : 0;
+          a.x -= dx * push * wa; a.z -= dz * push * wa; b.x += dx * push * wb; b.z += dz * push * wb;
+        }
+      }
+    }
   }
   function turn(a, want, rate) {
     let d = want - a.yaw;
@@ -271,7 +329,7 @@ export function simulate(seed = 7) {
     while (d < -Math.PI) d += 2 * Math.PI;
     a.yaw += clamp(d, -rate * DT, rate * DT);
   }
-  function ground(a) { a.y = heightAt(a.x, a.z); if (a.y < -0.9) a.y = -0.9; }
+  function ground(a) { a.y = O.surfaceY(a.x, a.z, a.y, curT); }
 
   function updateInvader(a, t) {
     const v = L.vehicles[a.veh];
@@ -286,7 +344,7 @@ export function simulate(seed = 7) {
     if (a.state === 'wait') { a.state = 'exit'; a.exitI = 0; a.crouchT = 0.3; }
     if (a.state === 'exit') {
       const p = a.exitPts[a.exitI];
-      const done = moveTo(a, p.x, p.z, a.speedRun * 0.8);
+      const done = moveTo(a, p.x, p.z, a.speedRun * 0.8, a.veh);
       a.y = (v.type === 'lcac' && Math.abs(a.z - v.zStop) < 13) ? Math.max(heightAt(a.x, a.z), 0) + 1.25 * Math.min(1, (a.z - (v.zStop - 13)) / 2) : Math.max(heightAt(a.x, a.z), -0.9);
       advancePhase(a);
       if (done) {
@@ -358,7 +416,12 @@ export function simulate(seed = 7) {
         if (d < 260) tgtList.push([d, b.id]);
       }
       tgtList.sort((p, q) => p[0] - q[0]);
-      a.target = tgtList.length ? tgtList[Math.floor(r() * Math.min(3, tgtList.length))][1] : -1;
+      const vis = [];
+      for (let k = 0; k < tgtList.length && k < 7 && vis.length < 3; k++) {
+        const b = actors[tgtList[k][1]];
+        if (O.segment(a.x, a.y + 1.4, a.z, b.x, b.y + 1.2, b.z, t, a.veh ?? -1) < 0) vis.push(b.id);
+      }
+      a.target = vis.length ? vis[Math.floor(r() * vis.length)] : -1;
     }
     if (a.target < 0) { a.burst = 0; return; }
     const b = actors[a.target];
@@ -419,6 +482,8 @@ export function simulate(seed = 7) {
         }
         px = nx; py = ny; pz = nz;
       }
+      const hb = O.segment(mx, my, mz, px, py, pz, t, a.veh ?? -1);
+      if (hb > 0.02) { px = mx + (px - mx) * hb; py = my + (py - my) * hb; pz = mz + (pz - mz) * hb; hit = 4; }
       shot.ix = px; shot.iy = py; shot.iz = pz; shot.kind = hit;
       shot.impT = t + Math.hypot(px - mx, py - my, pz - mz) / BULLET_SPEED;
     }
@@ -457,7 +522,7 @@ export function simulate(seed = 7) {
     skin: r(),
   }));
 
-  return { L, N, steps, rec, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: start.id, T_START };
+  return { L, N, steps, rec, obstacles: O, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: start.id, T_START };
 }
 
 function buildRoute(L, x0, r, firstHold) {

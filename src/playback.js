@@ -217,6 +217,9 @@ export class Playback {
           const y = iy + vy * age - 0.5 * G * age * age;
           if (y > iy - 0.05) sm.push(ix + vx * age, y, iz + vz * age, 0.12 + age * 0.2, 0.92, 0.94, 0.96, 0.7 * (1 - age / 1.1), 0);
         }
+      } else if (kind === 4) {
+        if (age < 0.12) for (let k = 0; k < 3; k++) gl.push(ix + (hash2(si, k) - 0.5) * age * 8, iy + hash2(k, si) * age * 6, iz + (hash2(si * 3, k) - 0.5) * age * 8, 0.12, 3.5, 2.6, 1.6, 1 - age / 0.12, k);
+        sm.push(ix, iy + age * 0.4, iz, 0.25 + age * 0.9, 0.62, 0.6, 0.57, 0.35 * Math.pow(1 - age / 1.6, 1.5), si);
       } else if (kind === 3 && age < 0.45) {
         sm.push(ix, iy + age * 0.3, iz, 0.25 + age * 1.2, 0.32, 0.05, 0.04, 0.55 * (1 - age / 0.45), si);
       }
