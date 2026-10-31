@@ -69,6 +69,21 @@ function boot() {
     G.player.vm.visible = false; tick(0.0001, true);
   };
   G.raw = () => { renderer.render(scene, camera); };
+  // debug: look at a vehicle/helo/gunship object at tape time tau
+  G.vstudio = (kind, i, tau, d, ang, h, ty = 2) => {
+    G.state = 'studio'; G.tau = tau; tick(0.0001, false);
+    const o = kind === 'veh' ? G.world.vehicles[i].grp : kind === 'helo' ? G.world.helos[i].grp : G.world.gunships[i].grp;
+    const c = o.position;
+    // isolate: hide everything but this object
+    G.world.root.children.forEach((ch) => { ch.visible = ch === o; });
+    if (!G.fogSave) G.fogSave = scene.fog; scene.fog = null; G.sol.mesh.visible = false;
+    G.studioFloor = G.studioFloor || (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(600, 600).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x9a8a70, roughness: 0.95 })); m.receiveShadow = true; scene.add(m); return m; })();
+    G.studioFloor.visible = true; G.studioFloor.position.set(c.x, kind === 'veh' ? c.y - 0.02 : heightAt(c.x, c.z), c.z);
+    camera.position.set(c.x + Math.sin(ang) * d, c.y + h, c.z + Math.cos(ang) * d); camera.lookAt(c.x, c.y + ty, c.z);
+    G.world.update(G.tau, camera, G.S.explosions);
+    for (const pool of [G.pb.smoke, G.pb.glow, G.pb.tr]) pool.mesh.visible = false;
+    G.player.vm.visible = false; G.post.render(G.real);
+  };
   G.vmStudio = (side, reloadT, tactical) => {
     G.state = 'play'; G.world.root.visible = false; scene.fog = null; G.sol.mesh.visible = false;
     const p = G.player; p.setSide(side); p.health = 1e9; p.pos.set(0, 50, 0); p.vel.set(0, 0, 0); p.yaw = 0; p.pitch = 0;

@@ -193,7 +193,7 @@ export function simulate(seed = 7) {
         v.tgt = live[Math.floor(r() * live.length)].id; v.burst = 4 + Math.floor(r() * 4);
       }
       const b = actors[v.tgt];
-      const mx = v.x, my = heightAt(v.x, v.zStop) + 2.9, mz = v.zStop - 1.4;
+      const mx = v.x, my = Math.max(heightAt(v.x, v.zStop), -0.9) + 2.55, mz = v.zStop - 4.6;
       const ty = b.y + 1.0;
       const hit = b.alive && r() < 0.025;
       let ix = b.x + (r() - 0.5) * 3, iy = ty + (r() - 0.5) * 1.5, iz = b.z + (r() - 0.5) * 3;

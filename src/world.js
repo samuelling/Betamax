@@ -5,6 +5,7 @@ import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } 
 import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose } from './layout.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
+import { buildIFV, buildLCAC, buildUH60, buildGunship, VM } from './vehicles.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.9, 0.26, 0.28).normalize();
 
@@ -38,14 +39,14 @@ export function skyColorJS(d) {
 
 // ------- tiny geometry helpers -------
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
-function place(g, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
+export function place(g, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
   _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(sx, sy, sz);
   _m.compose(_p, _q, _s);
   return g.applyMatrix4(_m);
 }
-const box = (w, h, d, ...t) => place(new THREE.BoxGeometry(w, h, d), ...t);
-const rbox = (w, h, d, r, ...t) => place(new RoundedBoxGeometry(w, h, d, 2, r), ...t);
-const cyl = (rt, rb, h, seg, ...t) => place(new THREE.CylinderGeometry(rt, rb, h, seg), ...t);
+export const box = (w, h, d, ...t) => place(new THREE.BoxGeometry(w, h, d), ...t);
+export const rbox = (w, h, d, r, ...t) => place(new RoundedBoxGeometry(w, h, d, 2, r), ...t);
+export const cyl = (rt, rb, h, seg, ...t) => place(new THREE.CylinderGeometry(rt, rb, h, seg), ...t);
 function cleanAttrs(g) {
   // merge requires identical attribute sets
   const keep = ['position', 'normal', 'uv'];
@@ -55,7 +56,7 @@ function cleanAttrs(g) {
 }
 export function merge(list) { return mergeGeometries(list.map(cleanAttrs), false); }
 
-class Builder {
+export class Builder {
   constructor() { this.groups = new Map(); }
   add(mat, g) { if (!this.groups.has(mat)) this.groups.set(mat, []); this.groups.get(mat).push(g); }
   build(parent, { cast = true, receive = true } = {}) {
@@ -625,113 +626,30 @@ export class World {
   // ---------------- invasion vehicles ----------------
   buildVehicles() {
     this.vehicles = [];
-    const hullC = std([0.27, 0.29, 0.26], 0.75, 0.25), dark = std([0.08, 0.08, 0.08], 0.9), char = std([0.05, 0.045, 0.04], 1.0);
-    const lcacC = std([0.45, 0.47, 0.48], 0.7, 0.2), skirt = std([0.07, 0.07, 0.07], 0.95);
+    const tIFV = buildIFV(), tLCAC = buildLCAC();
     for (const v of this.L.vehicles) {
-      const grp = new THREE.Group();
-      const ramp = new THREE.Group();
-      const B = new Builder(), R = new Builder();
-      if (v.type === 'aav') {
-        // side profile, front at -z
-        const s = new THREE.Shape();
-        [[4.1, 0.5], [4.1, 2.7], [3.7, 3.15], [-2.2, 3.15], [-4.0, 2.0], [-4.3, 1.0], [-3.7, 0.5]].forEach(([z, y], i) => i ? s.lineTo(z, y) : s.moveTo(z, y));
-        const hg = new THREE.ExtrudeGeometry(s, { depth: 3.3, bevelEnabled: true, bevelSize: 0.06, bevelThickness: 0.06, bevelSegments: 1 });
-        hg.translate(0, 0, -1.65); hg.rotateY(Math.PI / 2);
-        B.add(hullC, hg);
-        [-1, 1].forEach((sd) => {
-          B.add(dark, box(0.55, 0.9, 7.6, sd * 1.55, 0.55, 0));
-          for (let k = 0; k < 6; k++) B.add(dark, place(new THREE.CylinderGeometry(0.38, 0.38, 0.5, 12), sd * 1.55, 0.45, -3 + k * 1.2, 0, 0, Math.PI / 2));
-        });
-        B.add(hullC, box(1.1, 0.7, 1.4, 0.7, 3.5, -0.8));
-        B.add(dark, place(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 8), 0.7, 3.55, -2.4, Math.PI / 2, 0, 0));
-        B.add(dark, place(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 8), 0.4, 3.55, -2.0, Math.PI / 2, 0, 0));
-        B.add(std([0.1, 0.12, 0.13], 0.2, 0.4), box(2.4, 0.3, 0.05, 0, 2.8, -3.9));
-        R.add(hullC, box(2.4, 2.0, 0.15, 0, 1.0, 0));
-        ramp.position.set(0, 0.6, 4.1);
-        v.height = 3.2;
-      } else {
-        B.add(skirt, rbox(14.5, 1.6, 27, 0.7, 0, 0.8, 0));
-        B.add(lcacC, box(14, 0.6, 26, 0, 1.8, 0));
-        [-1, 1].forEach((sd) => {
-          B.add(lcacC, box(2.6, 2.8, 22, sd * 5.6, 3.5, 1));
-          B.add(std([0.1, 0.12, 0.13], 0.2, 0.4), box(0.05, 0.7, 2.2, sd * 4.28, 4.3, -6));
-          // ducted fans at the stern
-          const fan = new THREE.TorusGeometry(2.0, 0.35, 8, 20); place(fan, sd * 3.6, 5.2, 12.3);
-          B.add(lcacC, fan);
-          B.add(dark, place(new THREE.CylinderGeometry(2.0, 2.0, 0.6, 20, 1, true), sd * 3.6, 5.2, 12.3, Math.PI / 2, 0, 0));
-          B.add(lcacC, box(0.5, 3.4, 0.5, sd * 3.6, 3.4, 12.0));
-        });
-        B.add(lcacC, box(2.4, 2.4, 2.6, -5.6, 6.0, -6.5));
-        R.add(lcacC, box(8.2, 3.0, 0.2, 0, 1.5, 0));
-        ramp.position.set(0, 2.0, -12.8);
-        v.height = 5;
-      }
-      const meshes = B.build(grp);
-      R.build(ramp);
-      grp.add(ramp);
+      const grp = (v.type === 'aav' ? tIFV : tLCAC).clone();
+      const meshes = [], decals = []; grp.traverse((o) => { if (o.isMesh && o.material.map) decals.push(o); else if (o.isMesh && o.material !== VM.glass) meshes.push(o); });
       this.root.add(grp);
-      const fanBlades = [];
-      this.vehicles.push({ v, grp, ramp, meshes, rampMeshes: ramp.children, charred: false, char, fanBlades });
+      this.vehicles.push({ v, grp, meshes, ramp: grp.getObjectByName('ramp'), turret: grp.getObjectByName('turret'), barrel: grp.getObjectByName('barrel'), props: grp.children.filter((c) => c.name === 'prop'), decals, charred: false });
     }
   }
 
   buildHelos() {
     this.helos = [];
-    const body = std([0.16, 0.18, 0.15], 0.6, 0.3), dark = std([0.04, 0.04, 0.04], 0.6), glass = std([0.05, 0.07, 0.08], 0.05, 0.6);
+    const t = buildUH60();
     for (const h of this.L.helos) {
-      const grp = new THREE.Group();
-      const B = new Builder();
-      B.add(body, rbox(2.3, 2.1, 7.2, 0.7, 0, 1.75, 0.6));
-      B.add(glass, rbox(2.0, 1.4, 1.8, 0.5, 0, 2.1, 4.1, -0.25, 0, 0));
-      B.add(body, place(new THREE.CylinderGeometry(0.35, 0.75, 8.5, 10), 0, 2.4, -6.4, Math.PI / 2 + 0.06, 0, 0));
-      B.add(body, box(0.25, 2.4, 1.4, 0, 3.6, -10.5, -0.3, 0, 0));
-      B.add(body, box(3.2, 0.12, 0.8, 0, 2.6, -9.6));
-      B.add(body, rbox(1.6, 0.8, 3.2, 0.3, 0, 3.1, 0.4));
-      B.add(dark, box(2.32, 1.3, 1.8, 0, 1.7, 1.0));
-      [[-1, 2.6], [1, 2.6]].forEach(([sx, z]) => { B.add(dark, place(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), sx * 1.2, 0.3, z, 0, 0, Math.PI / 2)); B.add(body, box(0.1, 0.6, 0.1, sx * 1.1, 0.6, z)); });
-      B.add(dark, place(new THREE.CylinderGeometry(0.22, 0.22, 0.2, 12), 0, 0.5, -9.8, 0, 0, Math.PI / 2));
-      B.build(grp);
-      const rotor = new THREE.Group();
-      const blades = []; for (let k = 0; k < 4; k++) blades.push(box(0.5, 0.05, 8.2, 0, 0, 4.1, 0, (k * Math.PI) / 2, 0));
-      const rm = new THREE.Mesh(merge(blades), dark); rm.castShadow = true; rotor.add(rm);
-      rotor.position.set(0, 3.75, 0.5); grp.add(rotor);
-      const tail = new THREE.Group(); tail.add(new THREE.Mesh(merge([box(0.05, 1.6, 0.18, 0, 0, 0), box(0.05, 0.18, 1.6, 0, 0, 0)]), dark));
-      tail.position.set(0.25, 3.8, -10.8); grp.add(tail);
-      this.root.add(grp);
-      this.helos.push({ h, grp, rotor, tail, pose: {} });
+      const grp = t.clone(); this.root.add(grp);
+      this.helos.push({ h, grp, rotor: grp.getObjectByName('rotor'), tail: grp.getObjectByName('tail'), pose: {} });
     }
   }
 
-  // fictional invader attack helicopter: tandem canopy, stub wings with rocket pods, chin gun
   buildGunships() {
     this.gunships = [];
-    const body = std([0.2, 0.22, 0.21], 0.55, 0.35), dark = std([0.04, 0.04, 0.04], 0.6), glass = std([0.06, 0.08, 0.09], 0.05, 0.6);
+    const t = buildGunship();
     for (const g of this.L.gunships) {
-      const grp = new THREE.Group();
-      const B = new Builder();
-      B.add(body, rbox(1.3, 1.7, 7.5, 0.5, 0, 1.6, 0.4));
-      B.add(glass, rbox(1.0, 0.9, 1.6, 0.35, 0, 2.5, 2.4, -0.15, 0, 0));
-      B.add(glass, rbox(1.0, 0.9, 1.5, 0.35, 0, 2.3, 3.7, -0.3, 0, 0));
-      B.add(body, place(new THREE.CylinderGeometry(0.28, 0.6, 7.5, 10), 0, 1.9, -5.4, Math.PI / 2 + 0.04, 0, 0));
-      B.add(body, box(0.22, 2.2, 1.3, 0, 2.6, -9.0, -0.35, 0, 0));
-      B.add(body, box(2.6, 0.1, 0.7, 0, 1.9, -8.2));
-      B.add(body, box(4.6, 0.14, 1.0, 0, 1.4, 0.0));
-      [-1, 1].forEach((sd) => {
-        B.add(dark, place(new THREE.CylinderGeometry(0.28, 0.28, 1.5, 12), sd * 2.0, 1.15, 0.1, Math.PI / 2, 0, 0));
-        B.add(dark, place(new THREE.CylinderGeometry(0.22, 0.22, 1.3, 12), sd * 1.3, 1.15, 0.1, Math.PI / 2, 0, 0));
-        B.add(body, rbox(0.6, 0.7, 2.0, 0.25, sd * 0.75, 2.4, -0.4));
-      });
-      B.add(dark, place(new THREE.SphereGeometry(0.32, 10, 8), 0, 0.85, 3.3));
-      B.add(dark, place(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 6), 0, 0.8, 4.0, Math.PI / 2, 0, 0));
-      [-1, 1].forEach((sd) => B.add(dark, box(0.1, 0.1, 2.2, sd * 0.6, 0.2, 0.6)));
-      B.build(grp);
-      const rotor = new THREE.Group();
-      const blades = []; for (let k = 0; k < 4; k++) blades.push(box(0.45, 0.05, 7.4, 0, 0, 3.7, 0, (k * Math.PI) / 2, 0));
-      const rm = new THREE.Mesh(merge(blades), dark); rm.castShadow = true; rotor.add(rm); rotor.position.set(0, 3.15, 0.2); grp.add(rotor);
-      const tail = new THREE.Group(); tail.add(new THREE.Mesh(merge([box(0.05, 1.4, 0.16, 0, 0, 0), box(0.05, 0.16, 1.4, 0, 0, 0)]), dark));
-      tail.position.set(0.2, 2.8, -9.2); grp.add(tail);
-      this.root.add(grp);
-      this.gunships.push({ g, grp, rotor, tail, pose: {} });
+      const grp = t.clone(); this.root.add(grp);
+      this.gunships.push({ g, grp, rotor: grp.getObjectByName('rotor'), tail: grp.getObjectByName('tail'), pose: {} });
     }
   }
 
@@ -757,17 +675,20 @@ export class World {
       const z = vehZ(v, tau);
       const moving = tau < v.tArrive;
       const gy = heightAt(v.x, z);
-      const wy = v.type === 'aav' ? Math.max(gy, -1.2) : Math.max(gy, 0) + 0.35 * (moving ? 1 : 0.6);
+      const wy = v.type === 'aav' ? Math.max(gy, -0.9) : Math.max(gy, 0) + 0.3 * (moving ? 1 : 0.4);
       o.grp.position.set(v.x, wy + (moving ? Math.sin(tau * 2.1 + v.jitter * 6) * 0.06 : 0), z);
-      o.grp.rotation.set(moving ? Math.sin(tau * 1.3 + v.jitter * 4) * 0.02 : 0, 0, 0);
+      const planing = v.type === 'aav' && moving && gy < 0 ? 0.06 : 0;
+      o.grp.rotation.set(-planing + (moving ? Math.sin(tau * 1.3 + v.jitter * 4) * 0.015 : 0), 0, 0);
       const rp = vehRamp(v, tau);
-      if (v.type === 'aav') o.ramp.rotation.x = rp * 1.25; else o.ramp.rotation.x = -rp * 1.3;
+      if (o.ramp) o.ramp.rotation.x = v.type === 'aav' ? rp * 1.45 : -rp * 1.3;
+      for (const pr of o.props) pr.rotation.z = tau * (moving ? 22 : 6) * (pr.position.x > 0 ? 1 : -1);
       const dead = v.destroyT > 0 && tau >= v.destroyT;
+      if (o.turret && !dead) { o.turret.rotation.y = Math.sin(tau * 0.25 + v.jitter * 9) * 0.35; o.barrel.rotation.x = 0.05 + Math.sin(tau * 0.4 + v.jitter) * 0.04; }
       if (dead !== o.charred) {
         o.charred = dead;
-        for (const m of o.meshes) { if (!m.userData.mat) m.userData.mat = m.material; m.material = dead ? o.char : m.userData.mat; }
-        for (const m of o.ramp.children) { if (!m.userData.mat) m.userData.mat = m.material; m.material = dead ? o.char : m.userData.mat; }
-        if (dead) { o.grp.rotation.z = 0.04; }
+        for (const m of o.meshes) { if (!m.userData.mat) m.userData.mat = m.material; m.material = dead ? VM.char : m.userData.mat; }
+        if (o.turret) { o.turret.rotation.set(dead ? 0.12 : 0, dead ? 0.6 + v.jitter : 0, dead ? 0.08 : 0); }
+        for (const d of o.decals) d.visible = !dead;
       }
     }
     for (const o of this.gunships) {
@@ -784,6 +705,7 @@ export class World {
       o.grp.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
       o.rotor.rotation.y = tau * 28;
       o.tail.rotation.x = tau * 60;
+      const d = o.rotor.getObjectByName('disc'); if (d) d.visible = true;
     }
     for (const t of this.tracks) t.m.material.uniforms.uZ.value = vehZ(t.v, tau);
     // scorch decals
