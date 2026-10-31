@@ -53,7 +53,7 @@ export class Soldiers {
     this.hitT = hits.map((h) => Float32Array.from(h.map((x) => x[0])));
     this.hitD = hits.map((h) => h.map((x) => { const l = Math.hypot(x[1], x[2]) || 1; return [x[1] / l, x[2] / l]; }));
     this.joints = new Float32Array(NJ * 3);
-    this.ragdolls = new Array(N).fill(null);
+    this.ragdolls = new Array(N).fill(null); this.slump = new Float32Array(N);
     this.pp = { u: 0, speed: 0, crouch: 0, pitch: 0, idleT: 0, recoil: 0, flinch: 0, fdx: 0, fdz: 0, reload: -1, mode: 0 };
     this.keys = { head: new THREE.Vector3(), neck: new THREE.Vector3(), pelvis: new THREE.Vector3(), headM: new THREE.Matrix4() };
     this.tmpM = new THREE.Matrix4();
@@ -79,7 +79,16 @@ export class Soldiers {
       // impulse from the killing hit
       let ix = 0, iz = 0, iy = 0.4, w = {}, wDefault = 0.25, jitter = 0.6, kx = 0, kz = 0;
       const k = lastBefore(this.hitT[i], st.deathTime + 1e-3);
-      if (st.cause === 'shot' && k >= 0) {
+      const TS = this.slumpTime(i);
+      if (TS > 0) {
+        // folded to the knees first: the ragdoll starts from the slump, with a gentle topple
+        this.slump[i] = TS;
+        this.slumpPose(i, 1, start); this.slumpPose(i, 1 - 1 / 30 / TS, prev);
+        const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), sg = (i % 3 === 0) ? -1 : 1;
+        ix = fx * 1.2 * sg; iz = fz * 1.2 * sg; iy = 0.1;
+        w = { [J.chest]: 1, [J.neck]: 1.1, [J.head]: 1.2, [J.shL]: 0.8, [J.shR]: 0.8, [J.spine]: 0.6 };
+        wDefault = 0.1; jitter = 0.3;
+      } else if (st.cause === 'shot' && k >= 0) {
         const [dx, dz] = this.hitD[i][k];
         const sp = 3.2;
         ix = dx * sp; iz = dz * sp;
@@ -90,11 +99,42 @@ export class Soldiers {
       } else {
         const e = S.explosions.find((ex) => Math.abs(ex.t - st.deathTime) < 1e-3);
         const dx = e ? s.x - e.ix : 0, dz = e ? s.z - e.iz : 1, l = Math.hypot(dx, dz) || 1;
-        const pow = e && e.big > 1 ? 9 : 6.5;
+        const pow = e && e.big > 1.5 ? 7.5 : 4.2;
         ix = dx / l * pow; iz = dz / l * pow; iy = pow * 0.9; wDefault = 1; jitter = 2.5;
       }
       const O = S.obstacles; this.ragdolls[i] = simulateRagdoll(start, prev, { x: ix, y: iy, z: iz, w, wDefault, jitter, kx, kz }, i + 1, 75, (x, z, y) => O.restY(x, z, y), O.anyNear(start[0], start[2], 4, st.deathTime) ? (x, z, y, r) => O.pushOut(x, z, r, y, st.deathTime, -1, 0.25) : null);
     }
+  }
+
+  // Dying isn't instant for most of the shot: they stagger, fold to their knees and slump before toppling.
+  // Played in rewind that's the dead getting up — off the sand, onto their knees, back on their feet, walking backwards.
+  slumpTime(i) {
+    const st = this.S.actors[i];
+    if (st.cause !== 'shot') return 0;
+    const h = (((i + 7) * 2654435761) >>> 0) / 4294967296;
+    return h < 0.7 ? 0.75 + h * 1.1 : 0;
+  }
+  slumpPose(i, u, out) {
+    const st = this.S.actors[i], s = this._ss || (this._ss = {}), p = this.pp;
+    this.pb.sample(i, st.deathTime - 0.002, s); s.mode = MODE.GROUND;
+    u = Math.max(0, Math.min(1, u));
+    const e = u * u * (3 - 2 * u), knees = Math.min(1, u * 1.5);
+    p.u = s.phase / (Math.PI * 2); p.speed = s.speed * (1 - Math.min(1, u * 3)); p.crouch = s.crouch + (1 - s.crouch) * (knees * knees * (3 - 2 * knees));
+    p.pitch = s.pitch * (1 - e) - 0.75 * e; p.idleT = st.deathTime / 1.97 + st.skin * 7; p.mode = 0; p.side = st.side;
+    p.recoil = 0; p.reload = -1;
+    const k = lastBefore(this.hitT[i], st.deathTime + 1e-3);
+    let dx = 0, dz = 0;
+    if (k >= 0) { [dx, dz] = this.hitD[i][k]; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l; }
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
+    p.fdx = dx * cy - dz * sy; p.fdz = dx * sy + dz * cy; p.flinch = 1 - 0.35 * e;
+    const step = 0.35 * Math.sin(Math.min(1, u * 1.8) * Math.PI / 2); // a stagger away from the shot
+    posePose(p, out, s.x + dx * step, s.y, s.z + dz * step, s.yaw + 0.3 * e * (i % 2 ? 1 : -1));
+    // the slump: chest and head sag forward over the knees, arms and rifle hang
+    const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), sag = e * e;
+    const drop = (jj, dy, fw) => { out[jj * 3 + 1] -= dy * sag; out[jj * 3] += fx * fw * sag; out[jj * 3 + 2] += fz * fw * sag; };
+    drop(J.chest, 0.1, 0.1); drop(J.neck, 0.18, 0.16); drop(J.head, 0.24, 0.2);
+    drop(J.shL, 0.14, 0.12); drop(J.shR, 0.14, 0.12); drop(J.elbL, 0.3, 0.05); drop(J.elbR, 0.3, 0.05);
+    drop(J.handL, 0.42, 0.02); drop(J.handR, 0.42, 0.02); drop(J.grip, 0.45, 0.02); drop(J.muzzle, 0.75, -0.1);
   }
 
   living(i, s, tau, out) {
@@ -125,9 +165,11 @@ export class Soldiers {
     const st = this.S.actors[i];
     const j = this.joints;
     if (s.mode === MODE.DEAD && !this.ragdolls[i] && this.pb) this.computeRagdoll(i);
-    if (s.mode === MODE.DEAD && this.ragdolls[i]) {
+    if (s.mode === MODE.DEAD && this.ragdolls[i] && tau - st.deathTime < this.slump[i]) {
+      this.slumpPose(i, (tau - st.deathTime) / this.slump[i], j);
+    } else if (s.mode === MODE.DEAD && this.ragdolls[i]) {
       const R = this.ragdolls[i], nf = R.length / (NJ * 3);
-      const f = Math.min(nf - 1.001, Math.max(0, (tau - st.deathTime) * 30));
+      const f = Math.min(nf - 1.001, Math.max(0, (tau - st.deathTime - this.slump[i]) * 30));
       const a = Math.floor(f), t = f - a, o0 = a * NJ * 3, o1 = Math.min(nf - 1, a + 1) * NJ * 3;
       for (let k = 0; k < NJ * 3; k++) j[k] = R[o0 + k] + (R[o1 + k] - R[o0 + k]) * t;
     } else {

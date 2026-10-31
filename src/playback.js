@@ -129,9 +129,8 @@ export class Playback {
         }
       }
       const k = this.sol.pose(i, s, tau);
-      if (s.mode === MODE.GROUND) {
-        h.ok = true; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
-      }
+      // keypoints are kept for the dead too (cameras and voices follow bodies); only the living are hittable
+      h.ok = s.mode === MODE.GROUND; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
       h.pos.set(s.x, s.y, s.z); h.yaw = s.yaw; h.pitch = s.pitch;
     }
     this.sol.commit();

@@ -185,6 +185,7 @@ function startTape() {
   overlay('', 'hidden');
   const S = G.S;
   G.tau = S.T_START; G.body = S.startId; G.lives = [S.startId];
+  G.introK = undefined; G.introA = undefined;
   G.playT = 0; if (G.audio && G.audio.wilhelm) { G.audio.wilhelm.clear(); G.audio.wilhelmArmed = false; G.audio.wilhelmNext = 0; }
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
   G.player.setSide(0); G.player.health = 100;
@@ -296,12 +297,12 @@ function playerFire(muzzle, inp) {
   G.audio.gun(p.side);
   if (who >= 0 && best < tEnv) {
     end.copy(_o).addScaledVector(_d, best);
+    // friendly fire: anyone can be shot, and anyone you kill becomes you
     const friendly = G.S.actors[who].side === side;
     addTracer(muzzle, end);
-    if (friendly) return;
     addImpact(end, 3);
     G.enemyHp[who] -= head ? 200 : 42;
-    if (G.enemyHp[who] <= 0) { hitMarker(true); beginPossess(who); }
+    if (G.enemyHp[who] <= 0) { hitMarker(true); beginPossess(who, friendly); }
     else hitMarker(false);
   } else {
     const t = Math.min(tEnv, 300);
@@ -390,11 +391,11 @@ function addMineBlast(p) {
 }
 
 // ---------------------------------------------------------------- state changes
-function beginPossess(i) {
+function beginPossess(i, friendly = false) {
   G.state = 'possess'; G.stateT = 0;
   G.pz = { i, from: camera.position.clone(), fromQ: camera.quaternion.clone(), oldBody: G.body, oldPos: G.player.pos.clone(), oldYaw: G.player.yaw };
   G.audio.play(G.audio.R.whoosh, 0.7); G.audio.play(G.audio.B.thump, 0.9);
-  feed(`${short(i)} ▸ YOU`);
+  feed(friendly ? `${short(i)} ▸ YOU · friendly fire` : `${short(i)} ▸ YOU`);
 }
 function finishPossess() {
   const z = G.pz;
@@ -471,21 +472,38 @@ function tick(dt, draw = true) {
     }
     case 'intro': {
       const st = S.actors[G.body];
-      if (G.stateT < 3.2) { tauRate = 0; stuckTape(dt); osd = Math.sin(G.real * 5) > -0.3 ? '◀ SLOW' : ''; rew = 0.25; stuck = 1 - G.stateT / 3.2; G.tau = Math.max(G.tau, st.deathTime + 0.6); }
+      if (G.stateT < 3.2) { tauRate = 0; stuckTape(dt); osd = Math.sin(G.real * 5) > -0.3 ? '◀ SLOW' : ''; rew = 0.25; stuck = 1 - G.stateT / 3.2; G.tau = Math.max(G.tau, st.deathTime + 5.5); }
       else if (!G.caught) { G.caught = true; G.audio.play(G.audio.B.clunk, 0.7); G.flash = 0.4; }
       const h = G.pb.hit[G.body];
-      // ride the ragdoll's head: camera looks along the head's forward axis
-      const e = h.headM.elements;
-      tmpV.set(e[8], e[9], e[10]); // forward (z)
-      camera.position.set(e[12], e[13], e[14]).addScaledVector(tmpV, 0.09); camera.position.y += 0.1;
-      const up = new THREE.Vector3(e[4], e[5], e[6]);
-      const m = new THREE.Matrix4().lookAt(camera.position, camera.position.clone().add(tmpV), up);
-      camera.quaternion.setFromRotationMatrix(m);
-      if (G.tau <= st.deathTime) {
-        beginPlayFromBody(G.body, G.tau);
-        saveCheckpoint();
-        G.state = 'play'; G.stateT = 0;
-        sub(identityHTML(G.body), 6);
+      const left = G.tau - st.deathTime;
+      if (left > -0.1 || G.introK === undefined) {
+        // from outside: the mortar un-explodes — smoke and dirt fall back up into the crater, the fire inhales,
+        // and the body that will be you flies back together and stands
+        const op = S.explosions.find((e) => e.opener) || { ix: h.pelvis.x + 2, iz: h.pelvis.z };
+        const cx = (h.pelvis.x * 2 + op.ix) / 3, cz = (h.pelvis.z * 2 + op.iz) / 3;
+        if (G.introA === undefined) G.introA = Math.atan2(h.pelvis.x - op.ix, h.pelvis.z - op.iz) + 1.25;
+        const a = G.introA + G.real * 0.04, d = 12 + Math.max(0, left - 1) * 0.9;
+        const px = cx + Math.sin(a) * d, pz = cz + Math.cos(a) * d;
+        camera.position.set(px, Math.max(heightAt(px, pz) + 3, h.pelvis.y + 5 + Math.max(0, left - 1) * 0.5), pz);
+        camera.lookAt(cx, h.pelvis.y + 1.0, cz);
+        if (left <= -0.1) { G.introK = 0; G.introFrom = camera.position.clone(); G.introQ = camera.quaternion.clone(); }
+      }
+      if (left <= -0.1 && G.introK !== undefined) {
+        // then dive into his eyes, as with every body you take
+        G.introK = Math.min(1, G.introK + dt / 0.9);
+        const k = G.introK, e = k * k * (3 - 2 * k);
+        tmpV.copy(h.head); tmpV.y += 0.03;
+        camera.position.lerpVectors(G.introFrom, tmpV, e);
+        tmpE.set(h.pitch * 0.5, h.yaw + Math.PI, 0, 'YXZ'); tmpQ.setFromEuler(tmpE);
+        camera.quaternion.slerpQuaternions(G.introQ, tmpQ, e);
+        camera.fov = 74 + Math.sin(e * Math.PI) * 26; camera.updateProjectionMatrix();
+        if (k >= 1) {
+          G.introK = undefined; G.introA = undefined; camera.fov = 74; camera.updateProjectionMatrix();
+          beginPlayFromBody(G.body, G.tau);
+          saveCheckpoint();
+          G.state = 'play'; G.stateT = 0; G.flash = 0.6;
+          sub(identityHTML(G.body), 6);
+        }
       }
       break;
     }
@@ -567,7 +585,8 @@ function tick(dt, draw = true) {
   ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body; ctx.camPos = camera.position;
   ctx.playerPos.copy(p.pos); ctx.playerHeight = p.eyeH + 0.1; ctx.playerAlive = G.state === 'play';
   ctx.sound = G.state !== 'title' && G.state !== 'end';
-  ctx.hideBody = G.state !== 'title';
+  // during the opening you watch your first body from outside, until the dive into its eyes
+  ctx.hideBody = G.state !== 'title' && !(G.state === 'intro' && (G.introK === undefined || G.introK < 0.85));
   G.live = G.live.filter((l) => G.real - l.t0 < l.life);
   ctx.liveFx.length = 0;
   for (const l of G.live) { const age = G.real - l.t0; ctx.liveFx.push((sm, gl, tr) => l.fn(sm, gl, tr, age)); }

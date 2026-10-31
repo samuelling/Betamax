@@ -533,7 +533,23 @@ export function simulate(seed = 7) {
     const anyDef = actors.filter((a) => a.side === 0 && a.deathTime > 60).sort((p, q) => q.deathTime - p.deathTime);
     start = anyDef[0] || actors.find((a) => a.side === 0);
   }
-  const T_START = start.deathTime > 0 ? Math.min(start.deathTime + 3.5, T_SIM - 0.1) : T_SIM - 0.1;
+  // the tape opens on a mortar: your first body is caught by a round, and the game begins with that blast
+  // running backwards — fire sucked into the crater, the body flying back together, the round leaving the ground
+  if (start.deathTime > 0) {
+    const ra = mulberry32(seed * 31 + 5), dt = start.deathTime;
+    const ang = start.yaw + Math.PI * (0.6 + ra() * 0.8), off = 1.3 + ra() * 0.6;
+    const ix = start.x + Math.sin(ang) * off, iz = start.z + Math.cos(ang) * off;
+    explosions.push({ done: true, big: 1.05, side: 1, sy: 6, kind: 'mortar', launchT: dt - 15.5, t: dt, sx: (ra() - 0.5) * 140, sz: 350, ix, iy: Math.max(heightAt(ix, iz), 0), iz, opener: true });
+    explosions.sort((p, q) => p.t - q.t);
+    // the bullet that killed him in the sim now goes into the sand instead
+    for (let i = 0; i < shots.length; i++) {
+      const o = i * SHOT_F;
+      if (S[o + 9] === start.id && Math.abs(S[o + 1] - dt) < 0.08) { S[o + 9] = -1; S[o + 10] = 1; }
+    }
+    start.cause = 'mortar'; start.killer = -1;
+    const de = deaths.find((d) => d.id === start.id); if (de) { de.cause = 'mortar'; de.killer = -1; }
+  }
+  const T_START = start.deathTime > 0 ? Math.min(start.deathTime + 6, T_SIM - 0.1) : T_SIM - 0.1;
 
   const statics = actors.map((a) => ({
     id: a.id, side: a.side, spawn: a.spawn, deathTime: a.deathTime, fallSign: a.fallSign, killer: a.killer, cause: a.cause,
