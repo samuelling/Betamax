@@ -166,6 +166,20 @@ export function simulate(seed = 7) {
   const deaths = [];
 
   const tgtList = [];
+  const rc = mulberry32(seed * 613 + 11), COWARD_T = 164 + rc() * 4; let coward = null;
+  function updateCoward(a, t) {
+    const c = a.coward, d = Math.hypot(c.x - a.x, c.z - a.z);
+    if (d > 0.8 && !c.arrived) { moveTo(a, c.x, c.z, 4.6); a.crouchT = 0.15; a.pitch = 0; return; }
+    c.arrived = true; a.speed = 0; a.crouchT = 1; a.pitch = -0.05;
+    turn(a, 0, 2.5); // looking back toward the beach he ran from
+    if (!c.boom) {
+      // crouched behind the cars... and the round comes in anyway
+      const te = t + 3.5 + rc() * 2, ang = rc() * Math.PI * 2, off = 1.0 + rc() * 0.5;
+      const ix = a.x + Math.sin(ang) * off, iz = a.z + Math.cos(ang) * off;
+      explosions.push({ done: false, big: 1.0, side: 1, sy: 6, kind: 'mortar', launchT: te - 16, t: te, sx: (rc() - 0.5) * 140, sz: 360, ix, iy: Math.max(heightAt(ix, iz), 0), iz, opener: true });
+      c.boom = te;
+    }
+  }
   // staggered late kills on the sand (own random stream)
   const rl = mulberry32(seed * 977 + 3), LATE_KILLS = []; let lateK = 0;
   for (let tk = 128 + rl() * 3; tk < T_SIM - 5; tk += 1.2 + rl() * 2.2) LATE_KILLS.push(tk);
@@ -191,6 +205,7 @@ export function simulate(seed = 7) {
       if (e.air) continue;
       for (const a of actors) {
         if (!a.alive || a.mode !== MODE.GROUND) continue;
+        if (a.coward && !e.opener) continue;
         const d = Math.hypot(a.x - e.ix, a.z - e.iz);
         // dug-in defenders crouched behind sandbags are much harder to kill
         const cover = a.side === 0 && a.state === 'defend' && a.crouch > 0.6 ? 0.55 : 1;
@@ -218,8 +233,15 @@ export function simulate(seed = 7) {
       pending.push({ t: impT, target: v.id, dmg: 999, shooter: sh.id, dx: v.x - sh.x, dz: v.z - sh.z });
     }
     curT = t;
+    // the coward: late in the battle one defender breaks and runs for the parking lot. He makes it — and a
+    // stray mortar finds him there anyway. He's your first body; the tape opens on that blast, far from the fight.
+    if (!coward && t >= COWARD_T) {
+      const c = actors.filter((a) => a.alive && a.side === 0 && a.mode === MODE.GROUND && a.z > -70).sort((p, q) => Math.abs(p.x) - Math.abs(q.x))[0];
+      if (c) { coward = c; c.coward = { x: -14 + rc() * 10, z: -100 - rc() * 8 }; c.target = -1; c.burst = 0; c.hp = 1e6; }
+    }
     for (const a of actors) {
       if (!a.alive) { a.speed = 0; continue; }
+      if (a.coward) { updateCoward(a, t); a.crouch += clamp(a.crouchT - a.crouch, -4 * DT, 4 * DT); continue; }
       if (a.side === 1) updateInvader(a, t); else updateDefender(a, t);
       if (a.mode === MODE.GROUND) combat(a, t);
       // smooth stance
@@ -546,16 +568,18 @@ export function simulate(seed = 7) {
 
   // choose the opening body: a defender who dies late in the battle, near the middle
   let start = null;
+  const cw = actors.find((a) => a.coward && a.deathTime > 0);
   const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 168 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
   lateDef.sort((p, q) => Math.abs(p.fp.x) - Math.abs(q.fp.x));
-  if (lateDef.length) start = lateDef[0];
+  if (cw) start = cw;
+  else if (lateDef.length) start = lateDef[0];
   else {
     const anyDef = actors.filter((a) => a.side === 0 && a.deathTime > 60).sort((p, q) => q.deathTime - p.deathTime);
     start = anyDef[0] || actors.find((a) => a.side === 0);
   }
   // the tape opens on a mortar: your first body is caught by a round, and the game begins with that blast
   // running backwards — fire sucked into the crater, the body flying back together, the round leaving the ground
-  if (start.deathTime > 0) {
+  if (!cw && start.deathTime > 0) {
     const ra = mulberry32(seed * 31 + 5), dt = start.deathTime;
     const ang = start.yaw + Math.PI * (0.6 + ra() * 0.8), off = 1.3 + ra() * 0.6;
     const ix = start.x + Math.sin(ang) * off, iz = start.z + Math.cos(ang) * off;
