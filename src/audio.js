@@ -12,6 +12,7 @@
 //    and sand raining back down for seconds. Into water: a dull boom and a long collapsing splash.
 //  - mortar rounds arrive with a short rushing whistle; the tube's hollow "thoonk" is heard 13-18 s earlier.
 import { mulberry32 } from './rng.js';
+import { WILHELM_MP3 } from './wilhelm.js';
 
 const C_SOUND = 343;
 const TAU2 = Math.PI * 2;
@@ -449,6 +450,8 @@ export class Audio {
     // world sounds: synthesize raw forward recipes now (usable immediately), bake reflections in the background
     this.W = {};
     this.bakeP = this.bakeAll();
+    this.wilhelmId = -1; this.wilhelmArmed = false;
+    this.loadWilhelm();
 
     this.eng = {};
     setTimeout(() => this.makeEngines(), 30);
@@ -482,6 +485,20 @@ export class Audio {
         this.eng[cls].push({ src, g, lp, pn, id: -1 });
       }
     }
+  }
+
+  // one soldier per tape gets the Wilhelm scream (reversed, like everything else)
+  async loadWilhelm() {
+    try {
+      const bin = atob(WILHELM_MP3), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const ab = await new Promise((res, rej) => { const p = this.ctx.decodeAudioData(u8.buffer, res, rej); if (p && p.then) p.then(res, rej); });
+      const ch = ab.getChannelData(0), sr0 = ab.sampleRate;
+      const n = Math.floor(ch.length * this.sr / sr0), x = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const f = i * sr0 / this.sr, k = Math.floor(f), t = f - k; x[i] = (ch[k] || 0) * (1 - t) + (ch[k + 1] || 0) * t; }
+      let pk = 1e-6; for (const v of x) pk = Math.max(pk, Math.abs(v)); for (let i = 0; i < n; i++) x[i] *= 0.95 / pk;
+      const mid = x.slice(); filt(mid, 'lp', 5000, 0.6, this.sr);
+      this.W.vwilhelm = { near: [this.entry(x, 0)], mid: [this.entry(mid, 0)], fwd: false };
+    } catch (e) { console.warn('wilhelm', e); }
   }
 
   toBuf(x) { const b = this.ctx.createBuffer(1, x.length, this.sr); b.getChannelData(0).set(x); return b; }

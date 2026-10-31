@@ -54,9 +54,16 @@ export function worldSounds(S, tau, L, body, A, pb) {
   if (pb) for (let k = 0; k < D.length; k++) {
     const de = D[k]; if (de.t < tau - 3.5) continue; if (de.t > tau + 0.1) break;
     if (de.id === body) continue;
-    const v = DEATH_VOX[(de.id * 7 + k) % DEATH_VOX.length]; if (!v) continue;
+    const v = DEATH_VOX[(de.id * 7 + k) % DEATH_VOX.length];
     const h = pb.hit[de.id]; if (!h || !h.head) continue;
     const late = de.cause === 'shot' ? 0.08 : 0.35; // blast victims cry out a beat after
+    // the Wilhelm: once per tape, the first death close enough to hear properly (blast victims preferred)
+    if (A.wilhelmId < 0 && A.wilhelmArmed && A.W && A.W.vwilhelm) {
+      const dd = Math.hypot(h.head.x - L.x, h.head.z - L.z);
+      if ((de.cause !== 'shot' && dd < 60) || dd < 28) A.wilhelmId = de.id;
+    }
+    if (de.id === A.wilhelmId) { A.world(DE_ID + de.id, 'vwilhelm', de.t + late, h.head.x, h.head.y, h.head.z, 1.3, tau, L); continue; }
+    if (!v) continue;
     A.world(DE_ID + de.id, de.cause === 'shot' || v !== 'vscream' ? v : 'vyelp', de.t + late, h.head.x, h.head.y, h.head.z, 1, tau, L);
   }
   // anti-armour and anti-air missile launches
