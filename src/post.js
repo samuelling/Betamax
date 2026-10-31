@@ -79,10 +79,35 @@ const VHS = {
     }`,
 };
 
+// crepuscular rays: radial blur of the bright sky toward the sun (occluders darken it for free)
+const RAYS = {
+  uniforms: { tDiffuse: { value: null }, uSun: { value: new THREE.Vector2(0.5, 0.5) }, uAmt: { value: 0 }, uAspect: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uAmt; uniform float uAspect; varying vec2 vUv;
+    void main(){
+      vec4 base = texture2D(tDiffuse, vUv);
+      if (uAmt <= 0.001) { gl_FragColor = base; return; }
+      vec2 d = (uSun - vUv) / 48.0 * 0.85;
+      vec2 p = vUv; float decay = 1.0; vec3 acc = vec3(0.0);
+      for (int i = 0; i < 48; i++) {
+        p += d;
+        vec3 c = texture2D(tDiffuse, p).rgb;
+        float l = dot(c, vec3(0.3, 0.5, 0.2));
+        acc += max(c - 1.35, 0.0) * decay;
+        decay *= 0.965;
+      }
+      vec2 q = (vUv - uSun) * vec2(uAspect, 1.0);
+      float fall = 1.0 / (1.0 + dot(q, q) * 6.0);
+      gl_FragColor = vec4(base.rgb + acc / 48.0 * uAmt * vec3(1.0, 0.8, 0.6) * (0.4 + fall), base.a);
+    }`,
+};
+
 export class Post {
   constructor(renderer, scene, camera, q) {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+    this.rays = new ShaderPass(RAYS); this.composer.addPass(this.rays);
+    this.camera = camera; this._v = new THREE.Vector3();
     if (q.bloom) {
       this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.5, 0.55, 0.92);
       this.composer.addPass(this.bloom);
@@ -94,5 +119,18 @@ export class Post {
     this.u = this.vhs.uniforms;
   }
   setSize(w, h, pr) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.u.uRes.value.set(w * pr, h * pr); }
-  render(t) { this.u.uTime.value = t; this.composer.render(); }
+  render(t, sunDir) {
+    this.u.uTime.value = t;
+    if (sunDir) {
+      const c = this.camera, v = this._v.copy(c.position).addScaledVector(sunDir, 1000).project(c);
+      const fwd = new THREE.Vector3(); c.getWorldDirection(fwd);
+      const facing = fwd.dot(sunDir);
+      const ru = this.rays.uniforms;
+      ru.uSun.value.set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5);
+      const edge = Math.max(0, 1 - Math.max(Math.abs(v.x), Math.abs(v.y)) / 1.6);
+      ru.uAmt.value = facing > 0 ? Math.min(1, facing * 2) * edge * 5 : 0;
+      ru.uAspect.value = c.aspect;
+    }
+    this.composer.render();
+  }
 }

@@ -95,6 +95,43 @@ export class World {
     this.buildVehicles();
     this.buildHelos();
     this.buildDecals();
+    this.buildTracks();
+  }
+
+  // AAV tread marks pressed into the wet flats; they exist only where the vehicle has already passed
+  buildTracks() {
+    this.tracks = [];
+    for (const v of this.L.vehicles) {
+      if (v.type !== 'aav') continue;
+      const z0 = v.zStop - 4, z1 = Math.min(WATERLINE_Z + 15, 160);
+      const segs = Math.ceil((z1 - z0) / 1.5);
+      const pos = [], uv = [], idx = [];
+      for (const sx of [-1.55, 1.55]) {
+        const base = pos.length / 3;
+        for (let k = 0; k <= segs; k++) {
+          const z = z0 + (k / segs) * (z1 - z0);
+          for (const w of [-0.27, 0.27]) { const x = v.x + sx + w; pos.push(x, heightAt(x, z) + 0.025, z); uv.push(w > 0 ? 1 : 0, z); }
+          if (k < segs) { const a = base + k * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uZ: { value: 999 } }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3,
+        vertexShader: 'varying vec2 vUv; varying float vZ; void main(){ vUv = uv; vZ = position.z; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+        fragmentShader: `uniform float uZ; varying vec2 vUv; varying float vZ;
+          void main(){
+            if (vZ < uZ - 3.5) discard;
+            float tread = step(0.45, fract(vUv.y * 3.2));
+            float edge = smoothstep(0.0, 0.12, vUv.x) * smoothstep(1.0, 0.88, vUv.x);
+            gl_FragColor = vec4(vec3(0.16, 0.13, 0.1), (0.28 + 0.2 * tread) * edge);
+          }`,
+      });
+      const m = new THREE.Mesh(g, mat); m.renderOrder = 2; this.root.add(m);
+      this.tracks.push({ v, m });
+    }
   }
 
   // ---------------- sky ----------------
@@ -705,6 +742,7 @@ export class World {
       o.rotor.rotation.y = tau * 28;
       o.tail.rotation.x = tau * 60;
     }
+    for (const t of this.tracks) t.m.material.uniforms.uZ.value = vehZ(t.v, tau);
     // scorch decals
     let n = 0;
     for (const e of explosions) {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { simulate, MODE, T_SIM } from './sim.js';
-import { World } from './world.js';
+import { World, SUN_DIR } from './world.js';
 import { Soldiers } from './soldiers.js';
 import { Billboards, Tracers } from './fx.js';
 import { Playback } from './playback.js';
@@ -39,11 +39,12 @@ setTimeout(boot, 30);
 function boot() {
   const world = new World(renderer, scene, Q);
   const S = simulate(7);
-  const sol = new Soldiers(scene, S.actors);
+  const sol = new Soldiers(scene, S);
   const smoke = new Billboards(scene, 5000, TX.makeSoftTex(), false, world.fogColor);
   const glow = new Billboards(scene, 2500, TX.makeFlashTex(), true, world.fogColor);
   const tracers = new Tracers(scene, 900);
   const pb = new Playback(S, world, sol, smoke, glow, tracers, scene);
+  sol.prepare(pb);
   const flashTex = TX.makeFlashTex();
   const player = new Player(camera, scene, flashTex);
   const input = new Input(renderer.domElement, $('touch'));
@@ -51,7 +52,30 @@ function boot() {
   const post = new Post(renderer, scene, camera, Q);
   post.setSize(innerWidth, innerHeight, Q.pr);
   G = { world, S, sol, pb, player, input, audio, post };
+  // brass casings + dropped magazines live in forward time
+  const brassGeo = new THREE.CylinderGeometry(0.0065, 0.0065, 0.05, 8).rotateZ(Math.PI / 2);
+  G.brass = new THREE.InstancedMesh(brassGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.75, 0.56, 0.26, THREE.SRGBColorSpace), metalness: 1, roughness: 0.3 }), 48);
+  G.brass.castShadow = true; G.brass.frustumCulled = false; G.brass.count = 0; scene.add(G.brass);
+  G.casings = []; G.props = [];
   window.BW = G; G.possess = (i) => beginPossess(i);
+  // debug: look at actor i from distance d (no player control)
+  G.studio = (i, tau, d = 3, ang = 0.6, h = 1.2, clean = true) => {
+    G.state = 'studio'; G.tau = tau; tick(0.0001, false);
+    G.world.root.visible = !clean; scene.fog = clean ? null : G.fogSave || scene.fog; if (!G.fogSave) G.fogSave = scene.fog;
+    G.studioFloor = G.studioFloor || (() => { const m = new THREE.Mesh(new THREE.PlaneGeometry(400, 400).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x8a7a62, roughness: 0.95 })); m.receiveShadow = true; scene.add(m); return m; })();
+    G.studioFloor.visible = clean; G.studioFloor.position.y = G.pb.hit[i].pos.y - 0.005;
+    const k = G.pb.hit[i]; const c = k.pos;
+    camera.position.set(c.x + Math.sin(ang) * d, c.y + h, c.z + Math.cos(ang) * d); camera.lookAt(c.x, c.y + 0.9, c.z);
+    G.player.vm.visible = false; tick(0.0001, true);
+  };
+  G.raw = () => { renderer.render(scene, camera); };
+  G.vmStudio = (side, reloadT, tactical) => {
+    G.state = 'play'; G.world.root.visible = false; scene.fog = null; G.sol.mesh.visible = false;
+    const p = G.player; p.setSide(side); p.health = 1e9; p.pos.set(0, 50, 0); p.vel.set(0, 0, 0); p.yaw = 0; p.pitch = 0;
+    if (reloadT !== undefined) { p.ammo = tactical ? 5 : 0; p.startReload(); p.reloadT = reloadT; }
+    G.input.keys = {}; tick(0.0001, false); p.pos.set(0, 50, 0); p.vel.set(0,0,0); tick(0.0001, false); renderer.render(scene, camera);
+  };
+  G.renderer = renderer; G.scene = scene; G.camera = camera;
   Object.assign(G, {
     state: 'title', tau: S.T_START, tauRate: 0, real: 0, body: S.startId, lives: [], overrides: new Map(), live: [],
     enemyHp: new Float32Array(S.N).fill(100), cp: null, stateT: 0, shake: 0, feed: [], flash: 0, damageFx: 0,
@@ -243,7 +267,8 @@ function playerFire(muzzle, inp) {
   const tEnv = Math.min(tT, tV);
   const end = new THREE.Vector3();
   const sound = p.side === 0 ? G.audio.B.player : G.audio.B.playerInv;
-  G.audio.play(sound[Math.floor(Math.random() * sound.length)], 0.55, 0, 0.97 + Math.random() * 0.06);
+  // the M7's SLX suppressor knocks off the muzzle blast but not the supersonic crack
+  G.audio.play(sound[Math.floor(Math.random() * sound.length)], p.side === 0 ? 0.42 : 0.6, 0, p.side === 0 ? 1.12 + Math.random() * 0.05 : 0.95 + Math.random() * 0.06);
   if (who >= 0 && best < tEnv) {
     end.copy(_o).addScaledVector(_d, best);
     const friendly = G.S.actors[who].side === side;
@@ -258,6 +283,54 @@ function playerFire(muzzle, inp) {
     end.copy(_o).addScaledVector(_d, t);
     addTracer(muzzle, end);
     if (t < 300) addImpact(end, end.y <= 0.01 && heightAt(end.x, end.z) < 0 ? 2 : tV < tT ? 4 : 1);
+  }
+}
+
+function handlePlayerEvents() {
+  const p = G.player, A = G.audio;
+  for (const e of p.events) {
+    if (e === 'drop') {
+      const { p: mp, q } = p.magWorld();
+      const m = p.gun.userData.makeMag(); m.position.copy(mp); m.quaternion.copy(q);
+      m.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      scene.add(m);
+      G.props.push({ m, v: new THREE.Vector3(p.vel.x * 0.8, -0.6, p.vel.z * 0.8), w: new THREE.Vector3(Math.random() * 6 - 3, Math.random() * 4, 2), t0: G.real, landed: false });
+      A.play(A.B.magOut, 0.5);
+    } else if (e === 'magOut') A.play(A.B.magOut, 0.45);
+    else if (e === 'magIn') A.play(A.B.magIn, 0.7);
+    else if (e === 'tug') A.play(A.B.tug, 0.35);
+    else if (e === 'bolt') { A.play(A.B.bolt, 0.8); p.shake = Math.max(p.shake, 0.1); }
+    else if (e === 'rack') A.play(A.B.rack, 0.8);
+  }
+  p.events.length = 0;
+}
+function ejectBrass() {
+  const p = G.player; if (!p.eject) return;
+  const c = { p: p.eject.p.clone(), v: p.eject.r.clone().multiplyScalar(2.6 + Math.random()).add(new THREE.Vector3(p.vel.x, 1.2 + Math.random(), p.vel.z)), r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: new THREE.Vector3(Math.random() * 30, Math.random() * 30, 0), t0: G.real, b: 0 };
+  G.casings.push(c); if (G.casings.length > 48) G.casings.shift();
+}
+const _bm = new THREE.Matrix4(), _bq = new THREE.Quaternion(), _bs = new THREE.Vector3(1, 1, 1);
+function updateForwardProps(dt) {
+  // brass
+  let n = 0;
+  G.casings = G.casings.filter((c) => G.real - c.t0 < 8);
+  for (const c of G.casings) {
+    const gy = Math.max(heightAt(c.p.x, c.p.z), -0.05) + 0.007;
+    if (c.b < 3) {
+      c.v.y -= 9.8 * dt; c.p.addScaledVector(c.v, dt); c.r.x += c.w.x * dt; c.r.y += c.w.y * dt;
+      if (c.p.y < gy) { c.p.y = gy; c.v.multiplyScalar(0.3); c.v.y = Math.abs(c.v.y) * 0.5; c.w.multiplyScalar(0.4); c.b++; if (c.b === 1 && c.p.distanceTo(G.player.pos) < 4) G.audio.play(G.audio.B.brass, 0.15, 0, 0.9 + Math.random() * 0.3); if (c.b >= 3) { c.r.x = Math.PI / 2; c.r.z = 0; } }
+    }
+    _bq.setFromEuler(c.r); _bm.compose(c.p, _bq, _bs); G.brass.setMatrixAt(n++, _bm);
+  }
+  G.brass.count = n; G.brass.instanceMatrix.needsUpdate = true;
+  // dropped magazines
+  G.props = G.props.filter((o) => { if (G.real - o.t0 > 40) { scene.remove(o.m); return false; } return true; });
+  for (const o of G.props) {
+    if (o.landed) continue;
+    o.v.y -= 9.8 * dt; o.m.position.addScaledVector(o.v, dt);
+    o.m.rotation.x += o.w.x * dt; o.m.rotation.y += o.w.y * dt; o.m.rotation.z += o.w.z * dt;
+    const gy = Math.max(heightAt(o.m.position.x, o.m.position.z), -0.05) + 0.02;
+    if (o.m.position.y < gy) { o.m.position.y = gy; o.landed = true; o.m.rotation.set(Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1), Math.random() * 6, 0, 'YXZ'); G.audio.play(G.audio.B.drop, 0.4); }
   }
 }
 
@@ -376,10 +449,13 @@ function tick(dt, draw = true) {
       if (G.stateT < 3.2) { tauRate = 0; stuckTape(dt); osd = Math.sin(G.real * 5) > -0.3 ? '◀ SLOW' : ''; rew = 0.25; stuck = 1 - G.stateT / 3.2; G.tau = Math.max(G.tau, st.deathTime + 0.6); }
       else if (!G.caught) { G.caught = true; G.audio.play(G.audio.B.clunk, 0.7); G.flash = 0.4; }
       const h = G.pb.hit[G.body];
-      const f = Math.min(1, Math.max(0, (G.tau - st.deathTime) / 0.75)); const ff2 = f * f;
-      camera.position.copy(h.head); camera.position.y += 0.05;
-      const pitch = st.fallSign < 0 ? ff2 * 1.35 : -ff2 * 1.1;
-      camera.rotation.set(pitch, h.yaw + Math.PI, ff2 * 0.3, 'YXZ');
+      // ride the ragdoll's head: camera looks along the head's forward axis
+      const e = h.headM.elements;
+      tmpV.set(e[8], e[9], e[10]); // forward (z)
+      camera.position.set(e[12], e[13], e[14]).addScaledVector(tmpV, 0.09); camera.position.y += 0.1;
+      const up = new THREE.Vector3(e[4], e[5], e[6]);
+      const m = new THREE.Matrix4().lookAt(camera.position, camera.position.clone().add(tmpV), up);
+      camera.quaternion.setFromRotationMatrix(m);
       if (G.tau <= st.deathTime) {
         beginPlayFromBody(G.body, G.tau);
         saveCheckpoint();
@@ -394,7 +470,8 @@ function tick(dt, draw = true) {
       const out = p.update(dt, inp, dynamicColliders(), S.L.boardwalk);
       if (p.jumped) G.input.consumeJump();
       const mz = p.tryFire(inp);
-      if (mz) playerFire(mz, inp);
+      if (mz) { playerFire(mz, inp); ejectBrass(); }
+      handlePlayerEvents();
       if (G.real - p.lastHit > 3.5) p.health = Math.min(100, p.health + dt * 22);
       // minefield
       const dx = Math.max(ARENA.x0 - p.pos.x, p.pos.x - ARENA.x1, 0), dz = Math.max(ARENA.z0 - p.pos.z, p.pos.z - ARENA.z1, 0);
@@ -450,6 +527,7 @@ function tick(dt, draw = true) {
       tauRate = 0; osd = '■ STOP'; rew = 0; pause = 0.3;
       break;
     }
+    case 'studio': { tauRate = 0; rew = 0; break; }
     case 'paused': {
       tauRate = 0; osd = Math.sin(G.real * 4) > -0.5 ? '❚❚ PAUSE' : ''; rew = 0; pause = 1;
       break;
@@ -468,6 +546,8 @@ function tick(dt, draw = true) {
   ctx.liveFx.length = 0;
   for (const l of G.live) { const age = G.real - l.t0; ctx.liveFx.push((sm, gl, tr) => l.fn(sm, gl, tr, age)); }
   const ev = G.pb.update(G.tau, G.state === 'ff' ? G.tau : tauPrev, ctx);
+  updateForwardProps(dt);
+  G.sol.warm(1);
   G.world.update(G.tau, camera, S.explosions);
 
   // events
@@ -504,6 +584,7 @@ function tick(dt, draw = true) {
   $('stamp').innerHTML = `OCT.31.2026<br>${fmtClock(G.tau)}`;
   hud(showHud);
   p.vm.visible = G.state === 'play' || G.state === 'paused';
+  if (G.state === 'studio') { hud(false); }
   if (showHud) {
     const st = S.actors[G.body];
     $('ident').innerHTML = `<span class="side">${st.side ? 'INVADER' : 'DEFENDER'}</span>${short(G.body)}`;
@@ -524,7 +605,7 @@ function tick(dt, draw = true) {
   pu.uRew.value = rew; pu.uFF.value = ff; pu.uPause.value = pause; pu.uDesat.value = Math.max(desat, lowHp * 0.6);
   pu.uDamage.value = Math.min(1, G.damageFx + lowHp); pu.uFlash.value = G.state === 'possess' ? Math.max(G.flash, 0) : G.flash * 0.8;
   pu.uAmt.value = 1; pu.uStuck.value = stuck;
-  if (draw) G.post.render(G.real);
+  if (draw) G.post.render(G.real, SUN_DIR);
 }
 
 // a tape that can't quite rewind: crawls back in jerky fields, slips, repeats

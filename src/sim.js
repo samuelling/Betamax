@@ -168,7 +168,7 @@ export function simulate(seed = 7) {
     return {
       id, side, alive: true, hp: 100, x: 0, y: 0, z: 0, yaw: side ? Math.PI : 0, pitch: 0, crouch: 1, crouchT: 1,
       speed: 0, phase: r() * 6, mode: MODE.HIDDEN, state: 'wait', target: -1, retarget: 0,
-      burst: 0, nextShot: 0, pauseUntil: 0, mag: 30, reloadUntil: 0, deathTime: -1, fallSign: -1, killer: -1, cause: '',
+      burst: 0, nextShot: 0, pauseUntil: 0, mag: side ? 30 : 20, reloadUntil: 0, reloads: [], deathTime: -1, fallSign: -1, killer: -1, cause: '',
       hitFlinch: -9,
     };
   }
@@ -269,7 +269,8 @@ export function simulate(seed = 7) {
     }
   }
 
-  function advancePhase(a) { a.phase += (a.speed * DT / 1.5) * Math.PI * 2; }
+  // gait cycles per metre depend on speed: walking strides are short, running strides long (matches the mocap)
+  function advancePhase(a) { const stride = 1.45 + 1.5 * clamp((a.speed - 1.4) / 2.8, 0, 1); a.phase += (a.speed * DT / stride) * Math.PI * 2; }
 
   function combat(a, t) {
     const fighting = (a.side === 1 && a.state === 'cover') || (a.side === 0 && a.state === 'defend');
@@ -352,7 +353,7 @@ export function simulate(seed = 7) {
     a.burst--; a.mag--;
     a.nextShot = t + 0.085 + r() * 0.04;
     if (a.burst <= 0) a.pauseUntil = t + 0.7 + r() * 1.9;
-    if (a.mag <= 0) { a.reloadUntil = t + 2.6; a.mag = 30; a.burst = 0; }
+    if (a.mag <= 0) { a.reloadUntil = t + 2.6; a.mag = a.side ? 30 : 20; a.burst = 0; a.reloads.push(t); }
   }
 
   // pack shots
@@ -379,7 +380,7 @@ export function simulate(seed = 7) {
 
   const statics = actors.map((a) => ({
     id: a.id, side: a.side, spawn: a.spawn, deathTime: a.deathTime, fallSign: a.fallSign, killer: a.killer, cause: a.cause,
-    veh: a.veh ?? -1, helo: a.helo ?? -1, te: a.te ?? 0, ident: a.id_,
+    veh: a.veh ?? -1, helo: a.helo ?? -1, te: a.te ?? 0, ident: a.id_, reloads: Float32Array.from(a.reloads),
     skin: r(),
   }));
 

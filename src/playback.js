@@ -42,7 +42,7 @@ export class Playback {
   constructor(sim, world, soldiers, smoke, glow, tracers, scene) {
     this.S = sim; this.world = world; this.sol = soldiers; this.smoke = smoke; this.glow = glow; this.tr = tracers;
     this.samp = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, crouch: 0, speed: 0, phase: 0, mode: 0 };
-    this.hit = sim.actors.map(() => ({ ok: false, head: new THREE.Vector3(), neck: new THREE.Vector3(), pelvis: new THREE.Vector3(), pos: new THREE.Vector3(), yaw: 0, pitch: 0 }));
+    this.hit = sim.actors.map(() => ({ ok: false, headM: new THREE.Matrix4(), head: new THREE.Vector3(), neck: new THREE.Vector3(), pelvis: new THREE.Vector3(), pos: new THREE.Vector3(), yaw: 0, pitch: 0 }));
     this.lights = [];
     for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xffa060, 0, 60, 1.6); scene.add(l); this.lights.push(l); }
     this.hitShots = new Set();
@@ -118,9 +118,7 @@ export class Playback {
           s.x = ov.x + (s.x - ov.x) * e; s.z = ov.z + (s.z - ov.z) * e; s.y = ov.y + (s.y - ov.y) * e; s.yaw = lerpAng(ov.yaw, s.yaw, e);
         }
       }
-      const st = S.actors[i];
-      const deadAge = s.mode === MODE.DEAD ? tau - st.deathTime : -1;
-      const k = this.sol.pose(i, s, deadAge, st.fallSign);
+      const k = this.sol.pose(i, s, tau);
       if (s.mode === MODE.GROUND) {
         h.ok = true; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
       }
@@ -362,11 +360,9 @@ export class Playback {
 
   capture(i, s, tau) {
     // pose (hidden) to get key points of the player's own body for camera/intro
-    const st = this.S.actors[i];
-    const deadAge = s.mode === MODE.DEAD ? tau - st.deathTime : -1;
-    const k = this.sol.pose(i, s, deadAge, st.fallSign);
+    const k = this.sol.pose(i, s, tau);
     this.sol.hide(i);
-    const h = this.hit[i]; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis); h.pos.set(s.x, s.y, s.z); h.yaw = s.yaw; h.pitch = s.pitch;
+    const h = this.hit[i]; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis); h.headM.copy(k.headM); h.pos.set(s.x, s.y, s.z); h.yaw = s.yaw; h.pitch = s.pitch;
   }
 
   arc(e, u, apex) {

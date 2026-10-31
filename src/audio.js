@@ -28,6 +28,14 @@ export class Audio {
     this.B.click = this.makeClick(r, 0.04);
     this.B.clunk = this.makeClick(r, 0.25);
     this.B.mine = this.makeBoom(mulberry32(5));
+    // weapon handling foley
+    this.B.magOut = this.makeFoley(r, [[0, 0.5, 2400], [0.03, 0.3, 900]]);
+    this.B.magIn = this.makeFoley(r, [[0, 0.9, 1600], [0.012, 0.6, 3800], [0.05, 0.3, 700]]);
+    this.B.tug = this.makeFoley(r, [[0, 0.3, 1200]]);
+    this.B.bolt = this.makeFoley(r, [[0, 1.0, 900], [0.004, 0.8, 4200], [0.03, 0.4, 300]]);
+    this.B.rack = this.makeFoley(r, [[0, 0.7, 2000], [0.09, 1.0, 1000], [0.1, 0.6, 4000]]);
+    this.B.drop = this.makeFoley(r, [[0, 0.5, 400], [0.06, 0.25, 600]]);
+    this.B.brass = this.makeFoley(r, [[0, 0.25, 6500], [0.05, 0.12, 7200]]);
     const rev = (b) => { const o = this.ctx.createBuffer(1, b.length, this.sr); const s = b.getChannelData(0), d = o.getChannelData(0); for (let i = 0; i < s.length; i++) d[i] = s[s.length - 1 - i]; return o; };
     const far = (b) => { const o = this.ctx.createBuffer(1, b.length, this.sr); const s = b.getChannelData(0), d = o.getChannelData(0); let y = 0; for (let i = 0; i < s.length; i++) { y += (s[i] - y) * 0.12; d[i] = y * 2.2; } return o; };
     this.R = {
@@ -59,6 +67,15 @@ export class Audio {
       const thump = Math.sin(2 * Math.PI * (60 + heavy * -15) * t * (1 + Math.exp(-t / 0.02))) * Math.exp(-t / (0.07 + heavy * 0.05)) * (0.8 + heavy * 0.5);
       const tail = lp2 * Math.exp(-t / 0.25) * 0.6;
       d[i] = (crack + body + thump + tail) * 0.55 * Math.min(1, t / 0.0005);
+    }
+    return b;
+  }
+  makeFoley(r, hits) {
+    const b = this.buf(0.25), d = b.getChannelData(0), sr = this.sr;
+    for (let i = 0; i < d.length; i++) {
+      const t = i / sr; let v = 0;
+      for (const [t0, amp, f] of hits) { const dt = t - t0; if (dt < 0) continue; v += amp * Math.exp(-dt / 0.012) * (Math.sin(2 * Math.PI * f * dt) * 0.6 + (r() * 2 - 1) * 0.5); }
+      d[i] = v * 0.7;
     }
     return b;
   }
