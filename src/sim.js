@@ -166,6 +166,9 @@ export function simulate(seed = 7) {
   const deaths = [];
 
   const tgtList = [];
+  // staggered late kills on the sand (own random stream)
+  const rl = mulberry32(seed * 977 + 3), LATE_KILLS = []; let lateK = 0;
+  for (let tk = 128 + rl() * 3; tk < T_SIM - 5; tk += 1.2 + rl() * 2.2) LATE_KILLS.push(tk);
   for (let s = 0; s < simSteps; s++) {
     const t = s * DT;
 
@@ -197,6 +200,23 @@ export function simulate(seed = 7) {
       }
     }
 
+    // the shoreline in the last minute: defenders pick off invaders on the sand one by one, so that when the
+    // tape starts (near the end) the bodies on the beach get up again at staggered moments and walk off backwards
+    while (lateK < LATE_KILLS.length && LATE_KILLS[lateK] <= t) {
+      lateK++;
+      const cands = actors.filter((a) => a.alive && a.side === 1 && a.mode === MODE.GROUND && a.z > 6 && a.z < 100 && Math.abs(a.x) < 75);
+      const shooters = actors.filter((a) => a.alive && a.side === 0 && a.mode === MODE.GROUND);
+      if (!cands.length || !shooters.length) continue;
+      const v = cands[Math.floor(rl() * cands.length)];
+      let sh = shooters[0], bd = 1e9;
+      for (const a of shooters) { const d = Math.hypot(a.x - v.x, a.z - v.z); if (d < bd) { bd = d; sh = a; } }
+      const fx = Math.sin(sh.yaw), fz = Math.cos(sh.yaw);
+      const mx = sh.x + fx * 0.75, my = sh.y + lerp(1.45, 0.95, sh.crouch), mz = sh.z + fz * 0.75;
+      const ix = v.x + (rl() - 0.5) * 0.2, iy = v.y + lerp(1.3, 0.95, v.crouch), iz = v.z + (rl() - 0.5) * 0.2;
+      const impT = t + Math.hypot(ix - mx, iy - my, iz - mz) / BULLET_SPEED;
+      shots.push({ fireT: t, impT, shooter: sh.id, target: v.id, fx: mx, fy: my, fz: mz, ix, iy, iz, kind: 3 });
+      pending.push({ t: impT, target: v.id, dmg: 999, shooter: sh.id, dx: v.x - sh.x, dz: v.z - sh.z });
+    }
     curT = t;
     for (const a of actors) {
       if (!a.alive) { a.speed = 0; continue; }
