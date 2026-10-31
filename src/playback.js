@@ -153,7 +153,6 @@ export class Playback {
       const ship = shooter <= -100;
       const side = veh ? 1 : S.actors[shooter].side;
       // reversed sound lead
-      if (ctx.sound && fireT + 0.42 <= tauPrev && fireT + 0.42 > tau) ev.sounds.push(['shot', A[o + 2], A[o + 3], A[o + 4], veh ? 2 : side]);
       // muzzle flash
       const fa = tau - fireT;
       if (fa > -0.035 && fa < 0.035) {
@@ -175,7 +174,7 @@ export class Playback {
         // near-miss whiz
         if (ctx.playerAlive && !this.whizzed.has(si)) {
           const dx = pa.x - pp.x, dy = pa.y - (pp.y + 1.2), dz = pa.z - pp.z;
-          if (dx * dx + dy * dy + dz * dz < 14) { this.whizzed.add(si); ev.sounds.push(['whiz', pa.x, pa.y, pa.z, 0]); }
+          if (dx * dx + dy * dy + dz * dz < 14) this.whizzed.add(si);
         }
       }
       // damage to player: reversed bullets are still bullets
@@ -270,7 +269,6 @@ export class Playback {
           sm.push(p.x + a * 0.7, p.y + a * 0.25, p.z, 0.45 + a * 0.8, 0.85, 0.84, 0.82, 0.32 * (1 - a / 7), k);
         }
       }
-      if (ctx.sound && e.t + 2.6 <= tauPrev && e.t + 2.6 > tau) ev.sounds.push(['boom', e.ix, e.iy, e.iz, Math.min(2.5, e.big)]);
       if (e.t <= tauPrev && e.t > tau && ctx.playerAlive && !e.air) {
         const d = Math.hypot(e.ix - pp.x, e.iz - pp.z);
         const rad = e.big > 1.5 ? 9 : 6.5 * e.big;

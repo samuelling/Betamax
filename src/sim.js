@@ -108,6 +108,23 @@ export function simulate(seed = 7) {
       ex({ launchT: t - 4, t, sx: ix * 0.3, sz: -1400, sy: 200, ix, iy: Math.max(heightAt(ix, iz), 0), iz, side: 0, kind: 'mlrs', big: 1.25 });
     }
   });
+  // mortar barrages (own random stream so the rest of the battle stays put). 120 mm tubes fire from the
+  // landing ships offshore onto the dunes; the defenders' 81 mm section behind the lot walks rounds along the flats.
+  {
+    const rm = mulberry32(seed * 7919 + 13);
+    for (let t = 22; t < T_SIM - 4; t += 4.5 + rm() * 6) {
+      const inv = rm() < 0.55, n = 3 + Math.floor(rm() * 4);
+      let cx, cz;
+      if (inv) { const p = L.positions[Math.floor(rm() * L.positions.length)]; cx = p.x + (rm() - 0.5) * 10; cz = p.z + (rm() - 0.5) * 10; }
+      else { cx = (rm() - 0.5) * 200; cz = 8 + rm() * 95; }
+      const sx = (rm() - 0.5) * 160, sz = inv ? 330 + rm() * 80 : -230 - rm() * 40, tof = 13 + rm() * 5;
+      for (let k = 0; k < n; k++) {
+        const tk = t + k * (0.6 + rm() * 1.1);
+        const ix = cx + (rm() - 0.5) * (inv ? 16 : 26), iz = cz + (rm() - 0.5) * (inv ? 14 : 22);
+        ex({ launchT: tk - tof, t: tk, sx, sy: inv ? 6 : 4, sz, ix, iy: Math.max(heightAt(ix, iz), 0), iz, side: inv ? 1 : 0, kind: 'mortar', big: inv ? 0.95 : 0.8 });
+      }
+    }
+  }
   // gunship rocket salvos at the crest
   const gp = {};
   L.gunships.forEach((g, gi) => {
@@ -450,12 +467,14 @@ export function simulate(seed = 7) {
       else cover = b.state === 'cover' ? (b.crouch > 0.8 ? 0.4 : 0.65) : 0.95;
       hitP = base * rangeF * cover;
     }
-    const shot = { fireT: t, shooter: a.id, target: -1, fx: mx, fy: my, fz: mz };
+    // fire on the gun's own cadence, not the 20 Hz sim tick (real cyclic rates: M240 ~650-950 rpm, PKM ~650-750)
+    const tf = Math.min(t, Math.max(t - DT + 1e-3, a.nextShot));
+    const shot = { fireT: tf, shooter: a.id, target: -1, fx: mx, fy: my, fz: mz };
     if (r() < hitP) {
       shot.ix = b.x + (r() - 0.5) * 0.3; shot.iy = aimY + (r() - 0.5) * 0.3; shot.iz = b.z + (r() - 0.5) * 0.3;
       shot.kind = 3; shot.target = b.id;
       const len = Math.hypot(shot.ix - mx, shot.iy - my, shot.iz - mz);
-      shot.impT = t + len / BULLET_SPEED;
+      shot.impT = tf + len / BULLET_SPEED;
       const head = r() < 0.12;
       pending.push({ t: shot.impT, target: b.id, dmg: head ? 150 : 34 + r() * 36, shooter: a.id, dx, dz });
     } else {
@@ -485,11 +504,11 @@ export function simulate(seed = 7) {
       const hb = O.segment(mx, my, mz, px, py, pz, t, a.veh ?? -1);
       if (hb > 0.02) { px = mx + (px - mx) * hb; py = my + (py - my) * hb; pz = mz + (pz - mz) * hb; hit = 4; }
       shot.ix = px; shot.iy = py; shot.iz = pz; shot.kind = hit;
-      shot.impT = t + Math.hypot(px - mx, py - my, pz - mz) / BULLET_SPEED;
+      shot.impT = tf + Math.hypot(px - mx, py - my, pz - mz) / BULLET_SPEED;
     }
     shots.push(shot);
     a.burst--; a.mag--;
-    a.nextShot = t + (a.mg ? 0.07 : 0.085 + r() * 0.04);
+    a.nextShot = tf + (a.mg ? (a.side === 0 ? 0.075 : 0.086) : 0.085 + r() * 0.04);
     if (a.burst <= 0) a.pauseUntil = t + 0.7 + r() * 1.9;
     if (a.mag <= 0) { a.reloadUntil = t + 2.6; a.mag = a.side ? 30 : 20; a.burst = 0; a.reloads.push(t); }
   }

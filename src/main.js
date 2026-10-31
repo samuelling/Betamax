@@ -7,6 +7,7 @@ import { Playback } from './playback.js';
 import { Player } from './player.js';
 import { Input } from './input.js';
 import { Audio } from './audio.js';
+import { worldSounds, machineSounds } from './sfx.js';
 import { Post } from './post.js';
 import { heightAt, inMinefield, ARENA } from './terrain.js';
 import { vehZ, heloPose } from './layout.js';
@@ -290,9 +291,8 @@ function playerFire(muzzle, inp) {
   }
   const tEnv = Math.min(tT, tV);
   const end = new THREE.Vector3();
-  const sound = p.side === 0 ? G.audio.B.player : G.audio.B.playerInv;
-  // the M7's SLX suppressor knocks off the muzzle blast but not the supersonic crack
-  G.audio.play(sound[Math.floor(Math.random() * sound.length)], p.side === 0 ? 0.42 : 0.6, 0, p.side === 0 ? 1.12 + Math.random() * 0.05 : 0.95 + Math.random() * 0.06);
+  // your own shot is the one sound on the tape that runs forward
+  G.audio.gun(p.side);
   if (who >= 0 && best < tEnv) {
     end.copy(_o).addScaledVector(_d, best);
     const friendly = G.S.actors[who].side === side;
@@ -576,7 +576,11 @@ function tick(dt, draw = true) {
 
   // events
   const L = listener();
-  for (const s of ev.sounds) G.audio.at(s[0], s[1], s[2], s[3], L, s[4]);
+  if (G.audio.enabled) {
+    G.audio.update(G.tau, ctx.sound ? tauRate : 0, dt);
+    if (ctx.sound) worldSounds(S, G.tau, L, G.body, G.audio, G.pb);
+    machineSounds(S, G.tau, L, G.audio);
+  }
   if (G.state === 'play' && G.stateT > 2.2) { // brief grace after taking a body
     for (const h of ev.playerHits) {
       p.health -= h.dmg; p.lastHit = G.real; G.damageFx = Math.min(1, G.damageFx + 0.5); damageDir(h.fromX, h.fromZ);
@@ -590,12 +594,12 @@ function tick(dt, draw = true) {
     if (d.killer !== G.body && hp.distanceTo(camera.position) > 45) continue;
     const v = short(d.id);
     if (d.killer >= 0) feed(`${v} ◂◂ un-shot by ${d.killer === G.body ? 'YOU' : short(d.killer)}`);
-    else feed(`${v} ◂◂ ${({ drone: 'un-hit by a drone', vehicle: 'un-burned', rocket: 'un-rocketed', mlrs: 'un-shelled', crash: 'un-crushed' })[d.cause] || 'un-shelled'}`);
+    else feed(`${v} ◂◂ ${({ mortar: 'un-mortared', drone: 'un-hit by a drone', vehicle: 'un-burned', rocket: 'un-rocketed', mlrs: 'un-shelled', crash: 'un-crushed' })[d.cause] || 'un-shelled'}`);
   }
 
   // audio loops
   if (G.audio.enabled) {
-    G.audio.setLoop('heli', Math.min(0.9, 30 / (ev.heloDist + 10)), 1);
+    G.audio.setLoop('heli', 0);
     G.audio.setLoop('drone', ev.nearestDrone < 150 ? Math.min(0.5, 12 / (ev.nearestDrone + 4)) : 0, 1);
     G.audio.setLoop('fire', ev.wrecks.length ? 0.06 : 0);
     G.audio.setLoop('battle', G.state === 'end' || G.state === 'title' ? 0.05 : 0.2, tauRate > 1 ? 1.4 : 1);
@@ -706,7 +710,7 @@ addEventListener('keydown', (e) => { if (e.code === 'Escape' && G && G.state ===
 
 function listener() {
   const e = camera.matrixWorld.elements;
-  return { x: camera.position.x, y: camera.position.y, z: camera.position.z, rx: e[0], rz: e[2] };
+  return { x: camera.position.x, y: camera.position.y, z: camera.position.z, rx: e[0], rz: e[2], fx: -e[8], fz: -e[10] };
 }
 
 function dynamicColliders() {

@@ -85,8 +85,8 @@ export function posePose(p, out, x, y, z, yaw) {
   PJ[J.neck].x += p.fdx * 0.05 * fl; PJ[J.neck].z += p.fdz * 0.05 * fl;
   PJ[J.head].set(0, 0.13, 0.012).applyMatrix3(Rh).add(PJ[J.neck]);
   PJ[J.head].x += p.fdx * 0.05 * fl; PJ[J.head].z += p.fdz * 0.05 * fl;
-  PJ[J.shL].set(0.185, 0.12, -0.01).applyMatrix3(Rc).add(PJ[J.chest]);
-  PJ[J.shR].set(-0.185, 0.12, -0.01).applyMatrix3(Rc).add(PJ[J.chest]);
+  PJ[J.shL].set(0.196, 0.12, -0.01).applyMatrix3(Rc).add(PJ[J.chest]);
+  PJ[J.shR].set(-0.196, 0.12, -0.01).applyMatrix3(Rc).add(PJ[J.chest]);
   PJ[J.hipL].set(0.095, -0.05, 0).applyMatrix3(Rp).add(hips);
   PJ[J.hipR].set(-0.095, -0.05, 0).applyMatrix3(Rp).add(hips);
   // ---- legs: mocap foot paths, IK with mocap knee direction ----

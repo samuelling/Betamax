@@ -23,8 +23,8 @@ export function bindJoints() {
   const j = new Float32Array(NJ * 3);
   const set = (k, x, y, z) => { j[k * 3] = x; j[k * 3 + 1] = y; j[k * 3 + 2] = z; };
   set(J.hips, 0, 0.97, 0); set(J.spine, 0, 1.10, 0.005); set(J.chest, 0, 1.33, 0); set(J.neck, 0, 1.5, -0.01); set(J.head, 0, 1.63, 0.01);
-  set(J.shL, 0.185, 1.45, -0.01); set(J.elbL, 0.21, 1.17, -0.03); set(J.handL, 0.225, 0.915, 0.0);
-  set(J.shR, -0.185, 1.45, -0.01); set(J.elbR, -0.21, 1.17, -0.03); set(J.handR, -0.225, 0.915, 0.0);
+  set(J.shL, 0.196, 1.45, -0.01); set(J.elbL, 0.222, 1.17, -0.03); set(J.handL, 0.236, 0.915, 0.0);
+  set(J.shR, -0.196, 1.45, -0.01); set(J.elbR, -0.222, 1.17, -0.03); set(J.handR, -0.236, 0.915, 0.0);
   set(J.hipL, 0.095, 0.92, 0); set(J.kneeL, 0.10, 0.495, 0.02); set(J.ankleL, 0.105, 0.075, -0.02); set(J.toeL, 0.105, 0.02, 0.15);
   set(J.hipR, -0.095, 0.92, 0); set(J.kneeR, -0.10, 0.495, 0.02); set(J.ankleR, -0.105, 0.075, -0.02); set(J.toeR, -0.105, 0.02, 0.15);
   set(J.grip, -0.12, 1.0, 0.3); set(J.muzzle, -0.12, 1.0, 1.0);
@@ -162,8 +162,8 @@ export function buildSoldierGeometry(bindMats) {
   const toBind = (g, bi) => g.applyMatrix4(bindMats[bi]);
   // ---- torso loft (vertical), weights by height ----
   const sec = [ // y, rx, rz, oz
-    [0.84, 0.12, 0.09, 0.0], [0.90, 0.165, 0.115, 0.0], [0.97, 0.172, 0.12, -0.005], [1.05, 0.155, 0.105, 0.005], [1.14, 0.158, 0.11, 0.01],
-    [1.24, 0.175, 0.12, 0.012], [1.33, 0.185, 0.125, 0.01], [1.41, 0.18, 0.115, 0.0], [1.47, 0.14, 0.095, -0.01], [1.51, 0.07, 0.06, -0.01],
+    [0.82, 0.13, 0.1, -0.005], [0.88, 0.178, 0.13, -0.008], [0.96, 0.186, 0.135, -0.01], [1.05, 0.172, 0.122, 0.0], [1.14, 0.178, 0.128, 0.008],
+    [1.24, 0.186, 0.14, 0.012], [1.33, 0.194, 0.145, 0.01], [1.41, 0.19, 0.132, 0.0], [1.47, 0.16, 0.11, -0.01], [1.52, 0.085, 0.07, -0.01],
   ];
   const torsoW = (yy) => {
     if (yy < 1.0) return [[B.pelvis], [1]];
@@ -193,7 +193,7 @@ export function buildSoldierGeometry(bindMats) {
     }
   }
   // neck
-  tube(mb, v(0, 1.47, -0.01), v(0, 1.6, 0.0), X, () => [0.055, 0.05], 3, 10, (t) => [[B.chest, B.head], [1 - ss(0.2, 0.9, t), ss(0.2, 0.9, t)]], M.SKIN, false, false);
+  tube(mb, v(0, 1.47, -0.01), v(0, 1.6, 0.0), X, () => [0.064, 0.06], 3, 10, (t) => [[B.chest, B.head], [1 - ss(0.2, 0.9, t), ss(0.2, 0.9, t)]], M.SKIN, false, false);
   // head
   const hc = v(0, 1.635, 0.012);
   const head = new THREE.SphereGeometry(1, 14, 10); head.scale(0.092, 0.112, 0.103); head.translate(hc.x, hc.y, hc.z);
@@ -202,56 +202,67 @@ export function buildSoldierGeometry(bindMats) {
   const nose = new THREE.ConeGeometry(0.018, 0.04, 6); nose.rotateX(Math.PI / 2 + 0.3); nose.translate(0, 1.63, 0.118); mb.addGeo(nose, [B.head], [1], M.FACE);
   [-1, 1].forEach((s) => { const ear = new THREE.SphereGeometry(0.022, 8, 6); ear.scale(0.5, 1, 0.8); ear.translate(s * 0.092, 1.635, 0.0); mb.addGeo(ear, [B.head], [1], M.FACE); });
   // helmet (ops-core style) + NVG mount, rails, chin strap
-  const helm = new THREE.SphereGeometry(1, 16, 7, 0, Math.PI * 2, 0, Math.PI * 0.56); helm.scale(0.128, 0.115, 0.14); helm.translate(0, 1.655, 0.0);
+  const helm = new THREE.SphereGeometry(1, 16, 7, 0, Math.PI * 2, 0, Math.PI * 0.56); helm.scale(0.138, 0.124, 0.15); helm.translate(0, 1.655, 0.0);
   mb.addGeo(helm, [B.head], [1], M.HELM);
-  const rim = new THREE.TorusGeometry(1, 0.06, 4, 18); rim.rotateX(Math.PI / 2); rim.scale(0.125, 1, 0.137); rim.translate(0, 1.66, 0.0); mb.addGeo(rim, [B.head], [1], M.HELM);
-  [-1, 1].forEach((s) => { const rail = new RoundedBoxGeometry(0.012, 0.03, 0.11, 1, 0.005); rail.translate(s * 0.127, 1.655, 0.0); mb.addGeo(rail, [B.head], [1], M.METAL); });
+  const rim = new THREE.TorusGeometry(1, 0.06, 4, 18); rim.rotateX(Math.PI / 2); rim.scale(0.134, 1, 0.147); rim.translate(0, 1.66, 0.0); mb.addGeo(rim, [B.head], [1], M.HELM);
+  [-1, 1].forEach((s) => { const rail = new RoundedBoxGeometry(0.012, 0.03, 0.11, 1, 0.005); rail.translate(s * 0.137, 1.655, 0.0); mb.addGeo(rail, [B.head], [1], M.METAL); });
   const shroud = new RoundedBoxGeometry(0.05, 0.035, 0.02, 1, 0.006); shroud.translate(0, 1.73, 0.13); mb.addGeo(shroud, [B.head], [1], M.METAL);
   const nvgArm = new THREE.BoxGeometry(0.03, 0.03, 0.05); nvgArm.translate(0, 1.745, 0.155); mb.addGeo(nvgArm, [B.head], [1], M.METAL);
   const cover = new RoundedBoxGeometry(0.07, 0.04, 0.05, 1, 0.01); cover.translate(0.05, 1.74, -0.1); mb.addGeo(cover, [B.head], [1], M.POUCH); // battery pack
   // plate carrier: front & back plates, cummerbund, shoulder straps, pouches
-  const front = new RoundedBoxGeometry(0.29, 0.31, 0.05, 1, 0.02); front.translate(0, 1.29, 0.125); mb.addGeo(front, (pp) => torsoW(pp.y), null, M.VEST);
-  const back = new RoundedBoxGeometry(0.30, 0.33, 0.05, 1, 0.02); back.translate(0, 1.30, -0.125); mb.addGeo(back, (pp) => torsoW(pp.y), null, M.VEST);
+  const front = new RoundedBoxGeometry(0.33, 0.34, 0.075, 1, 0.025); front.translate(0, 1.28, 0.14); mb.addGeo(front, (pp) => torsoW(pp.y), null, M.VEST);
+  const back = new RoundedBoxGeometry(0.34, 0.36, 0.07, 1, 0.025); back.translate(0, 1.29, -0.14); mb.addGeo(back, (pp) => torsoW(pp.y), null, M.VEST);
   [-1, 1].forEach((s) => {
-    const cb = new RoundedBoxGeometry(0.05, 0.16, 0.22, 1, 0.015); cb.translate(s * 0.175, 1.2, 0.0); mb.addGeo(cb, (pp) => torsoW(pp.y), null, M.VEST);
-    const st = new RoundedBoxGeometry(0.06, 0.03, 0.26, 1, 0.01); st.translate(s * 0.1, 1.475, 0.0); mb.addGeo(st, [B.chest], [1], M.VEST);
+    const cb = new RoundedBoxGeometry(0.07, 0.19, 0.27, 1, 0.02); cb.translate(s * 0.192, 1.19, 0.0); mb.addGeo(cb, (pp) => torsoW(pp.y), null, M.VEST);
+    const st = new RoundedBoxGeometry(0.075, 0.04, 0.3, 1, 0.012); st.translate(s * 0.105, 1.48, 0.0); mb.addGeo(st, [B.chest], [1], M.VEST);
   });
-  for (let k = 0; k < 3; k++) { const pch = new RoundedBoxGeometry(0.075, 0.13, 0.045, 1, 0.012); pch.translate(-0.085 + k * 0.085, 1.2, 0.165); mb.addGeo(pch, (pp) => torsoW(pp.y), null, M.POUCH); }
-  const radio = new RoundedBoxGeometry(0.07, 0.14, 0.05, 1, 0.012); radio.translate(0.12, 1.34, 0.165); mb.addGeo(radio, [B.chest], [1], M.POUCH);
+  for (let k = 0; k < 3; k++) { const pch = new RoundedBoxGeometry(0.085, 0.15, 0.06, 1, 0.014); pch.translate(-0.095 + k * 0.095, 1.18, 0.195); mb.addGeo(pch, (pp) => torsoW(pp.y), null, M.POUCH); }
+  const radio = new RoundedBoxGeometry(0.07, 0.14, 0.05, 1, 0.012); radio.translate(0.13, 1.33, 0.19); mb.addGeo(radio, [B.chest], [1], M.POUCH);
   const ant = new THREE.CylinderGeometry(0.004, 0.004, 0.32, 4); ant.translate(0.16, 1.55, -0.14); mb.addGeo(ant, [B.chest], [1], M.METAL);
-  const pack = new RoundedBoxGeometry(0.27, 0.32, 0.12, 1, 0.04); pack.translate(0, 1.28, -0.2); mb.addGeo(pack, [B.chest], [1], M.POUCH);
+  const pack = new RoundedBoxGeometry(0.27, 0.33, 0.13, 2, 0.055); pack.translate(0, 1.27, -0.235); mb.addGeo(pack, [B.chest], [1], M.POUCH);
+  // seat and hips under the trousers, side plates, jacket collar, more kit on the carrier
+  [-1, 1].forEach((s) => {
+    const glute = new THREE.SphereGeometry(1, 10, 7); glute.scale(0.095, 0.11, 0.085); glute.translate(s * 0.08, 0.86, -0.06); mb.addGeo(glute, [B.pelvis], [1], M.UNI);
+    const sp = new RoundedBoxGeometry(0.03, 0.16, 0.15, 1, 0.01); sp.translate(s * 0.232, 1.2, 0.0); mb.addGeo(sp, (pp) => torsoW(pp.y), null, M.VEST);
+    const flap = new RoundedBoxGeometry(0.085, 0.035, 0.07, 1, 0.01); flap.translate(s * 0.095, 1.265, 0.2); mb.addGeo(flap, [B.chest], [1], M.POUCH);
+  });
+  const collar = new THREE.TorusGeometry(1, 0.35, 5, 14); collar.rotateX(Math.PI / 2); collar.scale(0.085, 0.06, 0.08); collar.translate(0, 1.5, -0.005); mb.addGeo(collar, [B.chest], [1], M.UNI);
+  const admin = new RoundedBoxGeometry(0.16, 0.08, 0.05, 1, 0.012); admin.translate(0, 1.36, 0.19); mb.addGeo(admin, [B.chest], [1], M.POUCH);
+  const ifak = new RoundedBoxGeometry(0.13, 0.08, 0.07, 1, 0.015); ifak.translate(0, 0.93, -0.16); mb.addGeo(ifak, [B.pelvis], [1], M.POUCH);
+  const hyd = new THREE.CylinderGeometry(0.008, 0.008, 0.36, 5); hyd.rotateZ(0.2); hyd.translate(-0.13, 1.42, 0.06); mb.addGeo(hyd, [B.chest], [1], M.POUCH);
+  const roll = new THREE.CylinderGeometry(0.05, 0.05, 0.28, 10); roll.rotateZ(Math.PI / 2); roll.translate(0, 1.47, -0.245); mb.addGeo(roll, [B.chest], [1], M.POUCH);
   // belt + pouches
-  const belt = new THREE.TorusGeometry(1, 0.08, 4, 16); belt.rotateX(Math.PI / 2); belt.scale(0.172, 0.5, 0.122); belt.translate(0, 0.985, 0); mb.addGeo(belt, (pp) => torsoW(pp.y), null, M.POUCH);
-  [-1, 1].forEach((s) => { const dp = new RoundedBoxGeometry(0.06, 0.09, 0.08, 1, 0.012); dp.translate(s * 0.16, 0.96, -0.08); mb.addGeo(dp, [B.pelvis], [1], M.POUCH); });
+  const belt = new THREE.TorusGeometry(1, 0.08, 4, 16); belt.rotateX(Math.PI / 2); belt.scale(0.19, 0.55, 0.14); belt.translate(0, 0.975, 0); mb.addGeo(belt, (pp) => torsoW(pp.y), null, M.POUCH);
+  [-1, 1].forEach((s) => { const dp = new RoundedBoxGeometry(0.06, 0.09, 0.08, 1, 0.012); dp.translate(s * 0.18, 0.95, -0.09); mb.addGeo(dp, [B.pelvis], [1], M.POUCH); });
   // arms
   [[J.shL, J.elbL, J.handL, B.uaL, B.faL, B.hdL, 1], [J.shR, J.elbR, J.handR, B.uaR, B.faR, B.hdR, -1]].forEach(([sh, el, hd, bu, bf, bh, s]) => {
     const S = p(sh), E = p(el), Hd = p(hd);
-    const deltoid = new THREE.SphereGeometry(1, 10, 7); deltoid.scale(0.07, 0.075, 0.07); deltoid.translate(S.x - s * 0.005, S.y - 0.01, S.z);
+    const deltoid = new THREE.SphereGeometry(1, 10, 7); deltoid.scale(0.082, 0.085, 0.08); deltoid.translate(S.x - s * 0.005, S.y - 0.01, S.z);
     mb.addGeo(deltoid, (pp) => [[B.chest, bu], [0.45, 0.55]], null, M.UNI);
-    tube(mb, S, E, X, (t) => [0.058 - 0.012 * t + 0.006 * Math.sin(t * Math.PI), 0.056 - 0.01 * t], 6, 10, (t) => t < 0.15 ? [[B.chest, bu], [0.35 * (1 - t / 0.15), 1 - 0.35 * (1 - t / 0.15)]] : t > 0.85 ? [[bu, bf], [1 - 0.5 * ss(0.85, 1, t), 0.5 * ss(0.85, 1, t)]] : [[bu], [1]], M.UNI);
-    tube(mb, E, Hd, X, (t) => [0.046 - 0.008 * t + 0.004 * Math.sin(t * 3), 0.042 - 0.008 * t], 6, 10, (t) => t < 0.15 ? [[bu, bf], [0.5 * (1 - t / 0.15), 1 - 0.5 * (1 - t / 0.15)]] : [[bf], [1]], M.UNI);
-    const cuff = new THREE.CylinderGeometry(0.044, 0.044, 0.05, 10); const dir = v().subVectors(Hd, E).normalize();
+    tube(mb, S, E, X, (t) => [0.069 - 0.012 * t + 0.008 * Math.sin(t * Math.PI), 0.066 - 0.01 * t], 6, 10, (t) => t < 0.15 ? [[B.chest, bu], [0.35 * (1 - t / 0.15), 1 - 0.35 * (1 - t / 0.15)]] : t > 0.85 ? [[bu, bf], [1 - 0.5 * ss(0.85, 1, t), 0.5 * ss(0.85, 1, t)]] : [[bu], [1]], M.UNI);
+    tube(mb, E, Hd, X, (t) => [0.055 - 0.01 * t + 0.006 * Math.sin(t * 3), 0.05 - 0.009 * t], 6, 10, (t) => t < 0.15 ? [[bu, bf], [0.5 * (1 - t / 0.15), 1 - 0.5 * (1 - t / 0.15)]] : [[bf], [1]], M.UNI);
+    const cuff = new THREE.CylinderGeometry(0.048, 0.048, 0.05, 10); const dir = v().subVectors(Hd, E).normalize();
     cuff.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)); cuff.translate(...v().copy(Hd).addScaledVector(dir, -0.04).toArray());
     mb.addGeo(cuff, [bf], [1], M.GLOVE);
-    const hand = new RoundedBoxGeometry(0.05, 0.1, 0.085, 1, 0.02); hand.translate(0, -0.05, 0.01); toBind(hand, bh); mb.addGeo(hand, [bh], [1], M.GLOVE);
+    const hand = new RoundedBoxGeometry(0.056, 0.105, 0.092, 1, 0.022); hand.translate(0, -0.05, 0.01); toBind(hand, bh); mb.addGeo(hand, [bh], [1], M.GLOVE);
     const thumb = new RoundedBoxGeometry(0.025, 0.05, 0.025, 1, 0.01); thumb.translate(0.0, -0.035, 0.05); toBind(thumb, bh); mb.addGeo(thumb, [bh], [1], M.GLOVE);
     const elbPad = new RoundedBoxGeometry(0.06, 0.07, 0.03, 1, 0.012); elbPad.translate(0, 0.0, -0.045); toBind(elbPad, bf); mb.addGeo(elbPad, [bf], [1], M.PAD);
   });
   // legs
   [[J.hipL, J.kneeL, J.ankleL, J.toeL, B.thL, B.shnL, B.ftL, 1], [J.hipR, J.kneeR, J.ankleR, J.toeR, B.thR, B.shnR, B.ftR, -1]].forEach(([hp, kn, an, to, bt, bs, bf, s]) => {
     const Hp = p(hp), K = p(kn), A = p(an);
-    tube(mb, v(Hp.x * 0.85, Hp.y + 0.06, Hp.z), K, X, (t) => [0.088 - 0.03 * t + 0.008 * Math.sin(t * Math.PI), 0.09 - 0.034 * t, 0, 0.01 * Math.sin(t * Math.PI)], 7, 12,
+    tube(mb, v(Hp.x * 0.85, Hp.y + 0.06, Hp.z), K, X, (t) => [0.104 - 0.032 * t + 0.01 * Math.sin(t * Math.PI), 0.106 - 0.036 * t, 0, 0.012 * Math.sin(t * Math.PI)], 7, 12,
       (t) => t < 0.2 ? [[B.pelvis, bt], [0.6 * (1 - t / 0.2), 1 - 0.6 * (1 - t / 0.2)]] : t > 0.86 ? [[bt, bs], [1 - 0.5 * ss(0.86, 1, t), 0.5 * ss(0.86, 1, t)]] : [[bt], [1]], M.UNI);
     // cargo pocket
-    const cargo = new RoundedBoxGeometry(0.035, 0.13, 0.11, 1, 0.012); cargo.translate(Hp.x + s * 0.075, 0.72, 0.0); mb.addGeo(cargo, [bt], [1], M.UNI);
-    tube(mb, K, v(A.x, A.y + 0.04, A.z), X, (t) => [0.06 - 0.016 * t + 0.006 * Math.sin(t * 2.5), 0.064 - 0.02 * t, 0, -0.01 * Math.sin(t * Math.PI)], 6, 10,
+    const cargo = new RoundedBoxGeometry(0.045, 0.15, 0.13, 1, 0.015); cargo.translate(Hp.x + s * 0.09, 0.72, 0.0); mb.addGeo(cargo, [bt], [1], M.UNI);
+    tube(mb, K, v(A.x, A.y + 0.04, A.z), X, (t) => [0.071 - 0.017 * t + 0.008 * Math.sin(t * 2.5), 0.076 - 0.022 * t, 0, -0.012 * Math.sin(t * Math.PI)], 6, 10,
       (t) => t < 0.14 ? [[bt, bs], [0.5 * (1 - t / 0.14), 1 - 0.5 * (1 - t / 0.14)]] : [[bs], [1]], M.UNI);
-    const kp = new RoundedBoxGeometry(0.085, 0.1, 0.04, 1, 0.015); kp.translate(0, 0.02, 0.06); toBind(kp, bs); mb.addGeo(kp, [bt, bs], [0.5, 0.5], M.PAD);
+    const kp = new RoundedBoxGeometry(0.095, 0.11, 0.045, 1, 0.016); kp.translate(0, 0.02, 0.07); toBind(kp, bs); mb.addGeo(kp, [bt, bs], [0.5, 0.5], M.PAD);
     // boot: shaft + foot
-    tube(mb, v(A.x, A.y - 0.02, A.z), v(A.x, A.y + 0.15, A.z), X, () => [0.058, 0.062], 2, 10, () => [[bs], [1]], M.BOOT, false, true);
+    tube(mb, v(A.x, A.y - 0.02, A.z), v(A.x, A.y + 0.15, A.z), X, () => [0.064, 0.068], 2, 10, () => [[bs], [1]], M.BOOT, false, true);
     const foot = new RoundedBoxGeometry(0.1, 0.085, 0.27, 1, 0.03); foot.translate(0, -0.035, 0.07);
     // foot bone y runs ankle->toe; build in a frame: x left, y forward, z down
-    const fg = new RoundedBoxGeometry(0.1, 0.27, 0.085, 1, 0.03); fg.translate(0, 0.06, 0.025); toBind(fg, bf); mb.addGeo(fg, [bf], [1], M.BOOT);
+    const fg = new RoundedBoxGeometry(0.105, 0.27, 0.095, 2, 0.04); fg.translate(0, 0.06, 0.025); toBind(fg, bf); mb.addGeo(fg, [bf], [1], M.BOOT);
     const sole = new THREE.BoxGeometry(0.105, 0.28, 0.02); sole.translate(0, 0.06, 0.07); toBind(sole, bf); mb.addGeo(sole, [bf], [1], M.METAL);
   });
   // rifles (bone y = barrel direction, x = body left, z = down). Built to real proportions.
