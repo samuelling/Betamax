@@ -5,12 +5,13 @@ const DEF_LAST = ['Hale', 'Costa', 'Nickerson', 'Doane', 'Snow', 'Atwood', 'Pina
 const DEF_TOWN = ['Wellfleet', 'Truro', 'Chatham', 'Eastham', 'Brockton', 'Worcester', 'Lowell', 'Falmouth', 'Fall River', 'New Bedford', 'Provincetown', 'Hyannis', 'Dorchester', 'Quincy', 'Orleans', 'Somerville', 'Watertown', 'Pittsfield'];
 const DEF_RANK = ['PVT', 'PFC', 'SPC', 'CPL', 'SGT'];
 
-const INV_FIRST = ['Ilsar', 'Tavin', 'Oresh', 'Kael', 'Vardo', 'Emric', 'Lusk', 'Anzo', 'Teiv', 'Moro', 'Halvic', 'Sela', 'Brann', 'Odrin', 'Yeva', 'Corin', 'Davor', 'Esk', 'Riv', 'Mattis', 'Ulo', 'Pell', 'Noor', 'Zarek', 'Ines', 'Garo'];
-const INV_PRE = ['Dr', 'V', 'Ors', 'K', 'T', 'Br', 'Hal', 'Mer', 'Z', 'Esk', 'Sor', 'Ven', 'Gal', 'Ruv'];
-const INV_VOW = ['a', 'e', 'o', 'i', 'u', 'ae'];
-const INV_SUF = ['mm', 'sk', 'lenk', 'var', 'rin', 'tov', 'dek', 'nar', 'sel', 'lov', 'mir', 'ech'];
-const INV_TOWN = ['Vessa', 'Ordun', 'Low Marrow', 'Saint Ilse', 'Brennick', 'Varr', 'Tolven', 'Hasp', 'Kael Harbor', 'Esmer', 'Drovna', 'Old Calder'];
-const INV_RANK = ['RFN', 'RFN', 'LCP', 'CPL', 'SGT'];
+// the invaders are Russian: names, ranks and towns from the north-west, around St. Petersburg
+const INV_FIRST_M = ['Ivan', 'Dmitri', 'Sergei', 'Alexei', 'Nikolai', 'Pavel', 'Mikhail', 'Andrei', 'Yuri', 'Oleg', 'Artyom', 'Kirill', 'Maxim', 'Roman', 'Viktor', 'Gleb', 'Stepan', 'Ilya', 'Denis', 'Grigory'];
+const INV_FIRST_F = ['Anna', 'Olga', 'Yelena', 'Marina', 'Svetlana', 'Daria', 'Irina', 'Natalia', 'Vera', 'Polina'];
+const INV_LAST = ['Ivanov', 'Smirnov', 'Kuznetsov', 'Popov', 'Sokolov', 'Lebedev', 'Kozlov', 'Novikov', 'Morozov', 'Volkov', 'Solovyov', 'Vasiliev', 'Zaitsev', 'Pavlov', 'Semyonov', 'Golubev', 'Vinogradov', 'Bogdanov', 'Vorobyov', 'Fyodorov', 'Mikhailov', 'Belyaev', 'Tarasov', 'Belov'];
+const INV_TOWN = ['Gatchina', 'Vsevolozhsk', 'Kolpino', 'Pushkin', 'Kirovsk', 'Tosno', 'Luga', 'Vyborg', 'Kingisepp', 'Priozersk', 'Sestroretsk', 'Lomonosov', 'Volkhov', 'Tikhvin', 'Pskov', 'Novgorod'];
+const INV_RANK = ['RYAD.', 'RYAD.', 'EFR.', 'ML.SGT', 'SGT'];
+export const FEMALE = new Set(['Ruth', 'Joanna', 'Teresa', 'Maggie', 'Rosa', 'June', 'Dee', 'Mae', 'Ana', 'Lena', ...INV_FIRST_F]);
 
 const LIVES = [
   'Wrote to a sister every Sunday.',
@@ -51,8 +52,9 @@ export function makeIdentity(side, idx) {
   const age = 18 + Math.floor(r() * r() * 17);
   const life = LIVES[(idx * 7 + side * 3 + Math.floor(r() * 5)) % LIVES.length];
   if (side === 0) {
-    return { rank: pick(DEF_RANK), first: pick(DEF_FIRST), last: pick(DEF_LAST), town: pick(DEF_TOWN) + ', MA', age, life };
+    const first = pick(DEF_FIRST);
+    return { rank: pick(DEF_RANK), first, last: pick(DEF_LAST), town: pick(DEF_TOWN) + ', MA', age, life, fem: FEMALE.has(first) };
   }
-  const last = pick(INV_PRE) + pick(INV_VOW) + pick(INV_SUF);
-  return { rank: pick(INV_RANK), first: pick(INV_FIRST), last: last[0].toUpperCase() + last.slice(1), town: pick(INV_TOWN), age, life };
+  const fem = r() < 0.18, first = pick(fem ? INV_FIRST_F : INV_FIRST_M), last = pick(INV_LAST) + (fem ? 'a' : '');
+  return { rank: pick(INV_RANK), first, last, town: pick(INV_TOWN), age, life, fem };
 }

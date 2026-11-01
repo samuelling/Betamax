@@ -20,7 +20,7 @@ export const FORM = 0.18; // seconds for the bowl to open
 export class CraterField {
   constructor() { this.list = []; this.cell = 6; this.grid = new Map(); }
   addExplosion(e) {
-    if (e.air || e.house || !CR[e.kind]) return;
+    if (e.air || e.house || e.car != null || !CR[e.kind]) return;
     const g = heightAt(e.ix, e.iz);
     if (e.iy - Math.max(g, 0) > 0.7) return;
     if (g < 0.05 && e.iz > 5) return; // into the water

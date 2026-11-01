@@ -27,13 +27,13 @@ function woodTex(seed, base = [92, 58, 34]) {
 }
 
 const SCREEN_GLSL = /* glsl */`
-  uniform sampler2D map; uniform float uOn; uniform float uTime; uniform float uNoise;
+  uniform sampler2D map; uniform float uOn; uniform float uTime; uniform float uNoise; uniform float uFx;
   varying vec2 vUv;
   float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main(){
     vec2 c = vUv - 0.5;
     float r2 = dot(c, c);
-    vec2 uv = 0.5 + c * (1.0 + 0.12 * r2);              // a little barrel
+    vec2 uv = 0.5 + c * (1.0 + 0.12 * r2 * uFx);        // a little barrel
     // power-on: a bright line opens into the picture
     float open = smoothstep(0.0, 1.0, (uOn - 0.15) / 0.5);
     float band = abs(vUv.y - 0.5) * 2.0;
@@ -43,17 +43,37 @@ const SCREEN_GLSL = /* glsl */`
     float row = floor(vUv.y * 140.0);
     float tear = uNoise * step(0.82, h(vec2(row, floor(uTime * 24.0))));
     col = mix(col, vec3(h(vUv * 400.0 + uTime)), clamp(uNoise * 0.6 + tear, 0.0, 1.0));
-    col *= 0.86 + 0.14 * sin(vUv.y * 900.0);           // scanlines
+    col *= mix(1.0, 0.86 + 0.14 * sin(vUv.y * 900.0), uFx);   // scanlines
     vec2 q = abs(c) * 2.0; float rr = pow(pow(q.x, 7.0) + pow(q.y, 7.0), 1.0 / 7.0);   // rounded-rect tube face
-    float face = 1.0 - smoothstep(0.93, 0.985, rr);
-    col *= (1.0 - 0.45 * smoothstep(0.1, 0.5, r2)) * face;
+    float face = mix(1.0, 1.0 - smoothstep(0.93, 0.985, rr), uFx);
+    col *= mix(1.0, 1.0 - 0.45 * smoothstep(0.1, 0.5, r2), uFx) * face;
     col += vec3(1.0) * (1.0 - open) * step(0.02, uOn) * vis * 1.4;   // the white line
-    float flick = 0.97 + 0.03 * h(vec2(floor(uTime * 30.0), 1.0));
+    float flick = mix(1.0, (0.97 + 0.03 * h(vec2(floor(uTime * 30.0), 1.0))) * 1.15, uFx);
     vec3 offc = (vec3(0.018, 0.02, 0.019) + 0.02 * (0.4 - r2)) * face;       // dark glass
     float spec = 0.05 * exp(-dot(c - vec2(-0.22, 0.2), c - vec2(-0.22, 0.2)) * 40.0);
-    gl_FragColor = vec4(mix(offc, col * flick * 1.15, vis * step(0.02, uOn)) + spec * face, 1.0);
+    gl_FragColor = vec4(mix(offc, col * flick, vis * step(0.02, uOn)) + spec * face * uFx, 1.0);
     #include <colorspace_fragment>
   }`;
+
+// the menu, as the set shows it — and the full-screen title is this very picture, so the two can't differ
+export const MENU_W = 1024, MENU_H = 768, PLAY_BOX = [362, 498, 300, 86];
+export function drawMenu(g, w = MENU_W, h = MENU_H) {
+  g.save();
+  const gr = g.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, 700); gr.addColorStop(0, '#2e2a22'); gr.addColorStop(1, '#0b0a08');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#f4f1e8';
+  g.shadowColor = 'rgba(255,40,60,.6)'; g.shadowOffsetX = -3; g.font = '190px "VT323", "Courier New", monospace'; g.fillText('BETAMAX', w / 2, 330);
+  g.shadowColor = 'rgba(0,0,0,0)'; g.shadowOffsetX = 0;
+  g.font = '34px "VT323", "Courier New", monospace'; g.fillText('a battle, in rewind \u00B7 Mayflower Beach, Dennis', w / 2, 410);
+  const [bx, by, bw, bh] = PLAY_BOX;
+  g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(bx, by, bw, bh);
+  g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25B6 PLAY', w / 2, by + 64);
+  g.globalAlpha = 0.55; g.font = '26px "VT323", "Courier New", monospace';
+  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 700);
+  g.globalAlpha = 1; g.textAlign = 'left';
+  g.font = '40px "VT323", "Courier New", monospace'; g.fillText('\u25C0\u25C0 REW', 60, 80);
+  g.restore();
+}
 
 export class VCRIntro {
   constructor(renderer) {
@@ -91,12 +111,11 @@ export class VCRIntro {
     const led = this.tvLed = add(tv, new THREE.SphereGeometry(0.005, 8, 8), new THREE.MeshBasicMaterial({ color: 0x220400 }), 0.31, 0.08, 0.252);
     // the glass
     this.screenC = canvas(1024, 768);
-    this.screenU = { map: { value: this.screenC.t }, uOn: { value: 0 }, uTime: { value: 0 }, uNoise: { value: 0 } };
-    const sg = new THREE.PlaneGeometry(0.54, 0.405, 24, 18);
-    { const p = sg.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i) / 0.27, y = p.getY(i) / 0.2; p.setZ(i, 0.012 * (1 - 0.5 * (x * x + y * y))); } sg.computeVertexNormals(); }
+    this.screenU = { map: { value: this.screenC.t }, uOn: { value: 0 }, uTime: { value: 0 }, uNoise: { value: 0 }, uFx: { value: 1 } };
+    const sg = new THREE.PlaneGeometry(0.54, 0.405);
     const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
     this.screen = add(tv, sg, new THREE.ShaderMaterial({ uniforms: this.screenU, vertexShader: vs, fragmentShader: SCREEN_GLSL }), -0.07, 0.31, 0.2625);
-    this.screenPos = new THREE.Vector3(-0.07, 0.38 + 0.31, 0.274);
+    this.screenPos = new THREE.Vector3(-0.07, 0.38 + 0.31, 0.2625);
     // glass sheen
 
     // the deck on top
@@ -190,16 +209,8 @@ export class VCRIntro {
       g.fillStyle = '#fff'; g.font = '64px "VT323", "Courier New", monospace'; g.fillText('PLAY ▶', 70, 110);
       g.fillText('SP', 70, 690); g.fillText('0:00:00', 700, 690);
     } else if (mode === 'menu') {
-      const gr = g.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, 700); gr.addColorStop(0, '#2e2a22'); gr.addColorStop(1, '#0b0a08');
-      g.fillStyle = gr; g.fillRect(0, 0, w, h);
-      g.textAlign = 'center'; g.fillStyle = '#f4f1e8';
-      g.shadowColor = 'rgba(255,40,60,.6)'; g.shadowOffsetX = -3; g.font = '190px "VT323", "Courier New", monospace'; g.fillText('BETAMAX', w / 2, 330);
-      g.shadowColor = 'rgba(0,0,0,0)'; g.shadowOffsetX = 0;
-      g.font = '34px "VT323", "Courier New", monospace'; g.fillText('a battle, in rewind · Mayflower Beach, Dennis', w / 2, 410);
-      g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(w / 2 - 150, 500, 300, 86);
-      g.font = '62px "VT323", "Courier New", monospace'; g.fillText('▶ PLAY', w / 2, 562);
-      g.textAlign = 'left';
-      g.font = '40px "VT323", "Courier New", monospace'; g.fillText('◀◀ REW', 60, 80);
+      drawMenu(g, w, h);
+      if (document.fonts && !this._fontWait) { this._fontWait = 1; document.fonts.load('64px "VT323"').then(() => { drawMenu(g, w, h); t.needsUpdate = true; }).catch(() => {}); }
     }
     t.needsUpdate = true;
   }
@@ -207,6 +218,7 @@ export class VCRIntro {
   insert(audio) {
     if (this.phase !== 'wait') return false;
     this.phase = 'insert'; this.pt = 0; this.audio = audio; this.cues = {};
+    if (audio && audio.vcrInsert) audio.vcrInsert(0.85);
     return true;
   }
   cue(name, at, fn) { if (this.pt >= at && !this.cues[name]) { this.cues[name] = 1; fn(); } }
@@ -225,35 +237,43 @@ export class VCRIntro {
     } else {
       const T = this.pt, A = this.audio;
       this.setTape(Math.min(1, T / 1.1));
-      this.cue('clunk', 0.85, () => { if (A) { A.play(A.B.clunk, 0.9, 0.2, 0.7); A.vcrMotor && A.vcrMotor(); } this.drawDisplay('LOAD', false); this.power.material.color.set(0xff3418); });
-      this.cue('play', 1.7, () => { this.drawDisplay('▶ 0:00', false); if (A) A.play(A.B.click, 0.7, 0.2); });
-      this.cue('tvon', 1.9, () => { this.drawScreen('blue'); this.tvLed.material.color.set(0xff2a10); if (A && A.tvOn) A.tvOn(); });
-      this.cue('menu', 3.25, () => { this.drawScreen('menu'); if (A && A.startMusic) A.startMusic(); });
-      U.uOn.value = Math.min(1, Math.max(0, (T - 1.9) / 0.6));
-      U.uNoise.value = T > 2.85 && T < 3.3 ? 0.5 + 0.5 * Math.sin(T * 40) : (T > 1.9 && T < 2.15 ? 0.3 : 0);
-      this.glow.intensity = U.uOn.value * (T > 3.25 ? 1.1 : 2.0);
-      this.glow.color.set(T > 3.25 ? 0xd8c8a8 : 0x5a7aff);
-      // pan from the deck down to the set, then into the glass
-      const fill = new THREE.Vector3().copy(this.screenPos).add(new THREE.Vector3(0, 0, this.fillDist()));
-      const k = ease3(Math.min(1, Math.max(0, (T - 1.25) / 2.6)));
-      const pos = new THREE.Vector3().lerpVectors(this.p0, fill, k);
+      this.cue('clunk', 0.85, () => { this.drawDisplay('LOAD', false); this.power.material.color.set(0xff3418); });
+      this.cue('thread', 2.8, () => this.drawDisplay('LOAD  \u25CF', false));
+      this.cue('play', 4.55, () => this.drawDisplay('\u25B6 0:00', false));
+      this.cue('tvon', 4.7, () => { this.drawScreen('blue'); this.tvLed.material.color.set(0xff2a10); if (A && A.tvOn) A.tvOn(); });
+      this.cue('menu', 5.95, () => { this.drawScreen('menu'); if (A && A.startMusic) A.startMusic(); });
+      U.uOn.value = Math.min(1, Math.max(0, (T - 4.7) / 0.6));
+      U.uNoise.value = T > 5.6 && T < 6.05 ? 0.5 + 0.5 * Math.sin(T * 40) : (T > 4.7 && T < 4.95 ? 0.3 : 0);
+      this.glow.intensity = U.uOn.value * (T > 5.95 ? 1.1 : 2.0);
+      this.glow.color.set(T > 5.95 ? 0xd8c8a8 : 0x5a7aff);
+      // while it loads, lean in toward the deck; once it plays, sink down to the set and into the glass
+      const D = this.fillDist(), fill = new THREE.Vector3().copy(this.screenPos).add(new THREE.Vector3(0, 0, D * 1.45));
+      const lean = ease(Math.min(1, T / 4.2)) * 0.12;
+      const p0 = new THREE.Vector3().copy(this.p0).lerp(new THREE.Vector3(-0.05, 1.05, 0.2), lean);
+      const k = ease3(Math.min(1, Math.max(0, (T - 4.4) / 2.2)));
+      const pos = new THREE.Vector3().lerpVectors(p0, fill, k);
       pos.x += Math.sin(k * Math.PI) * 0.12; pos.y += Math.sin(k * Math.PI) * 0.06;
       const look = new THREE.Vector3().lerpVectors(this.l0, this.screenPos, ease(Math.min(1, k * 1.25)));
       c.position.copy(pos); c.lookAt(look);
-      if (T > 3.9) {
-        dive = Math.min(1, (T - 3.9) / 0.9);
-        c.position.z = fill.z - (fill.z - this.screenPos.z) * 0.45 * ease3(dive);
+      if (T > 6.6) {
+        // the last push: the bezel slides out of frame, the tube's curve and lines relax, and the picture
+        // is left covering the window exactly as the full-screen menu will
+        dive = Math.min(1, (T - 6.6) / 0.9);
+        const e = ease3(dive);
+        c.position.set(this.screenPos.x, this.screenPos.y, this.screenPos.z + D * (1.45 - 0.45 * e)); c.lookAt(this.screenPos);
+        U.uFx.value = 1 - ease(Math.max(0, (dive - 0.2) / 0.8));
       }
     }
     this.r.setRenderTarget(null);
     this.r.render(this.scene, this.cam);
     return dive;
   }
-  // distance at which the 4:3 picture just covers the window
+  // distance at which the 4:3 picture just covers the window (CSS 'cover')
   fillDist() {
-    const vf = this.cam.fov * Math.PI / 180, a = this.cam.aspect;
-    const dh = 0.36 / 2 / Math.tan(vf / 2), dw = 0.48 / 2 / (Math.tan(vf / 2) * a);
-    return Math.min(dh, dw) + 0.012;
+    const t = Math.tan(this.cam.fov * Math.PI / 360), a = this.cam.aspect;
+    return Math.min(0.2025 / t, 0.27 / (t * a));
   }
+  // a second click while it loads: straight to the menu
+  skip() { if (this.phase === 'insert' && this.pt < 5.95) { this.pt = 5.95; return true; } return false; }
   dispose() { this.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
 }

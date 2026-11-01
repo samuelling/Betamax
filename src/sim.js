@@ -1,6 +1,6 @@
 // Deterministic forward simulation of the battle. The game only ever plays it backwards.
 import { mulberry32, clamp, lerp } from './rng.js';
-import { heightFast as heightAt, crestD } from './terrain.js';
+import { heightFast as heightAt, crestD, LOT } from './terrain.js';
 import { buildLayout, vehZ, gunshipPose, lcacDeckY } from './layout.js';
 import { makeIdentity } from './names.js';
 import { Obstacles } from './obstacles.js';
@@ -157,6 +157,9 @@ export function simulate(seed = 7) {
     missiles.push({ kind: 'javelin', vi, launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: heightAt(p.x, p.z) + 1.3, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, arc: 48 });
     ex({ launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: 0, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, side: 0, kind: 'vehicle', vi, big: 2, mi: missiles.length - 1 });
   });
+  // two cars in the lot: an FPV drone finds one, a shell the other. Burning wrecks — and in rewind the fire
+  // sucks back in and the pieces fly home
+  [[2, 146.5, 'drone'], [5, 92.0, 'shell']].forEach(([ci, t, kind]) => { const [cx, cz] = L.cars[ci]; ex({ launchT: t - (kind === 'drone' ? 9 : 3.2), t, sx: cx + 120, sz: 900, ix: cx, iy: LOT.y + 0.6, iz: cz, kind, big: 1.5, car: ci }); });
   explosions.sort((p, q) => p.t - q.t);
   // craters and wrecked houses follow from the explosions; the sim walks soldiers through both
   const D = computeDestruction(L, explosions);

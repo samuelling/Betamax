@@ -13,6 +13,7 @@
 //  - mortar rounds arrive with a short rushing whistle; the tube's hollow "thoonk" is heard 13-18 s earlier.
 import { mulberry32 } from './rng.js';
 import { WILHELM_MP3 } from './wilhelm.js';
+import { VCR_LOAD_MP3, VCR_LOAD_CLUNK, VCR_RUN } from './vcrfx.js';
 
 const C_SOUND = 343;
 const TAU2 = Math.PI * 2;
@@ -73,6 +74,46 @@ const RIFLES = [
   // 3: IFV 30 mm autocannon — big pressure thump and a steel clank
   { len: 0.85, nw: 0.0018, bA: 1.0, bD: 0.004, pA: 1.2, pD: 0.02, bodyF: 420, bodyQ: 0.7, bodyD: 0.05, bodyA: 0.8, hiA: 0.25, hiD: 0.012, tA: 0.35, tD: 0.11, tF: 380, blF: 900, th0: 130, th1: 55, thD: 0.06, thA: 0.6, mech: 0.3, mechF: 1250 },
 ];
+// ---------------------------------------------------------------- the deck running
+// A seamless loop of the Betamax transport in PLAY: noise with the measured spectrum (random phase, so it loops
+// without a seam) plus the measured tonal lines snapped to whole cycles per loop, and the faint 60 Hz flutter of
+// the drum. N must be a power of two.
+function fftInPlace(re, im, inv) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (inv ? 2 : -2) * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k], ai = im[i + k], br = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, bi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k] = ar + br; im[i + k] = ai + bi; re[i + k + len / 2] = ar - br; im[i + k + len / 2] = ai - bi;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+function synthVcrRun(r, sr, P, N = 1 << 17) {
+  const re = new Float64Array(N), im = new Float64Array(N);
+  const env = (f) => { const x = Math.log2(Math.max(f, P.f0) / P.f0) * P.perOct, i = Math.min(P.psd.length - 2, Math.floor(x)), t = Math.min(1, x - i); return P.psd[i] + (P.psd[i + 1] - P.psd[i]) * t; };
+  let pw = 0;
+  for (let k = 1; k < N / 2; k++) {
+    const f = k * sr / N; if (f > sr / 2 - 200) break;
+    const S = Math.pow(10, env(f) / 10) * (f < 25 ? (f / 25) ** 2 : 1), a = Math.sqrt(S), ph = r() * 2 * Math.PI;
+    re[k] = a * Math.cos(ph); im[k] = a * Math.sin(ph); re[N - k] = re[k]; im[N - k] = -im[k];
+    pw += S * sr / N;
+  }
+  fftInPlace(re, im, true);
+  const x = new Float32Array(N); let e = 0; for (let i = 0; i < N; i++) e += re[i] * re[i];
+  const k = Math.sqrt(pw) / Math.sqrt(e / N);
+  for (let i = 0; i < N; i++) x[i] = re[i] * k;
+  const T = N / sr;
+  for (const [f, amp] of P.tones) { const c = Math.max(1, Math.round(f * T)), w = 2 * Math.PI * c / N, ph = r() * 6.283; for (let i = 0; i < N; i++) x[i] += amp * Math.sin(w * i + ph); }
+  const cAM = Math.round(60 * T), wa = 2 * Math.PI * cAM / N;
+  for (let i = 0; i < N; i++) x[i] *= 1 + 0.12 * Math.sin(wa * i);
+  return x;
+}
+
 if (typeof globalThis !== 'undefined' && globalThis.__RIFLE_TUNE) globalThis.__RIFLE_TUNE(RIFLES);
 function synthRifle(r, sr, cal, opt = {}) {
   const P = RIFLES[cal], n = Math.floor(P.len * sr), d = new Float32Array(n);
@@ -615,6 +656,46 @@ export class Audio {
     this.musicSrc.playbackRate.setTargetAtTime(r, now, 0.15);
     this.musicGain.gain.setTargetAtTime((this.musicVol ?? 0.3) * (1 - 0.5 * duck), now, 0.3);
   }
+  // ---------------------------------------------------------------- the deck
+  // The real thing for the load: a Sony Betamax taking a cassette (public-domain recording, edited), then a
+  // loop of its transport running, synthesized to the measured spectrum of the same machine in PLAY.
+  vcrBus() {
+    if (!this.vcrGain) { this.vcrGain = this.ctx.createGain(); this.vcrGain.gain.value = 0.9; this.vcrGain.connect(this.master); }
+    return this.vcrGain;
+  }
+  vcrInsert(clunkAt) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t0 = ctx.currentTime, bus = this.vcrBus();
+    if (!this.vcrRunBuf) { const x = synthVcrRun(mulberry32(7), this.sr, VCR_RUN); for (let i = 0; i < x.length; i++) x[i] *= 0.95; this.vcrRunBuf = this.toBuf(x); }
+    const bin = atob(VCR_LOAD_MP3), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    ctx.decodeAudioData(u8.buffer).then((buf) => {
+      if (this.vcrSkipped) return;
+      const late = ctx.currentTime - t0, off = Math.max(0, VCR_LOAD_CLUNK - clunkAt + late), now = ctx.currentTime;
+      const src = ctx.createBufferSource(); src.buffer = buf; const g = ctx.createGain(); src.connect(g).connect(bus);
+      const end = now + (buf.duration - off);
+      g.gain.setValueAtTime(1, now); g.gain.setValueAtTime(1, end - 0.35); g.gain.linearRampToValueAtTime(0, end);
+      src.start(now, off); this.vcrLoadSrc = src;
+      this.vcrRunStart(end - 0.35, 0.35);
+    }).catch((e) => { console.warn('vcr load', e); this.vcrRunStart(ctx.currentTime + 4, 0.5); });
+  }
+  vcrRunStart(at, fade) {
+    if (this.vcrRunSrc || !this.vcrRunBuf) return;
+    const ctx = this.ctx, src = ctx.createBufferSource(); src.buffer = this.vcrRunBuf; src.loop = true;
+    const g = this.vcrRunGain = ctx.createGain(); g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + fade);
+    src.connect(g).connect(this.vcrBus()); src.start(at); this.vcrRunSrc = src;
+  }
+  vcrSkip() {
+    this.vcrSkipped = true;
+    if (this.vcrLoadSrc) { try { this.vcrLoadSrc.stop(); } catch (e) { /* */ } }
+    if (this.ctx) this.vcrRunStart(this.ctx.currentTime, 0.2);
+  }
+  // under the game the deck keeps running, quietly; its pitch follows the transport
+  vcrTape(rate, level) {
+    if (!this.vcrRunSrc) return;
+    const now = this.ctx.currentTime;
+    this.vcrRunSrc.playbackRate.setTargetAtTime(Math.max(0.3, Math.min(2.2, rate)), now, 0.2);
+    this.vcrRunGain.gain.setTargetAtTime(level, now, 0.4);
+  }
   // the deck taking the tape: a clunk, the threading arm, the drum spinning up
   vcrMotor() {
     if (!this.ctx) return;
@@ -719,6 +800,7 @@ export class Audio {
     const now = this.ctx.currentTime;
     if (this.lastTau !== null && Math.abs(tau - (this.lastTau - rate * dt)) > 0.3) this.resetWorld();
     this.lastTau = tau;
+    this.forward = rate < -0.05; rate = Math.abs(rate);
     const rr = Math.max(0.02, Math.min(3, rate));
     if (Math.abs(rr - this.rate) > 0.01) for (const v of this.wv) v.src.playbackRate.setTargetAtTime(rr, now, 0.04);
     this.rate = rr;
@@ -762,25 +844,26 @@ export class Audio {
     const [ref, g0, range] = FAMILY[fam(kind)];
     if (d > range) { this.sched.set(id, te); return; }
     const W = this.W[kind]; if (!W) return;
+    const fw = this.forward; if (fw && W.fwd) { this.sched.set(id, te); return; } // played forward, the shot itself is the bang
     const band = d < 35 && W.near ? 'near' : d < 140 && W.mid ? 'mid' : W.far ? 'far' : W.mid ? 'mid' : 'near';
     const list = W[band], e = list[id % list.length];
     const arrive = te + d / C_SOUND;
     // reversed: starts at arrive + (D - a) and ends on the event. forward ("bang"): starts on the event.
-    const trigger = W.fwd ? arrive : arrive + (e.D - e.a);
-    if (tau - trigger > 0.06 * this.rate) return; // not yet
+    const trigger = fw ? arrive - e.a : W.fwd ? arrive : arrive + (e.D - e.a);
+    if (fw ? trigger - tau > 0.06 * this.rate : tau - trigger > 0.06 * this.rate) return; // not yet
     this.sched.set(id, te);
-    const offset = Math.max(0, trigger - tau);
+    const offset = Math.max(0, fw ? tau - trigger : trigger - tau);
     if (offset >= e.D - 0.02) return; // already passed
     const g = g0 * gm * ref / (ref + d);
     if (g < 0.008) return;
-    const now = this.ctx.currentTime, when = now + Math.max(0, tau - trigger) / this.rate;
+    const now = this.ctx.currentTime, when = now + Math.max(0, fw ? trigger - tau : tau - trigger) / this.rate;
     // voice budget: the quietest world voice makes room
     if (this.wv.length >= 56) {
       let mi = 0; for (let i = 1; i < this.wv.length; i++) if (this.wv[i].g < this.wv[mi].g) mi = i;
       if (this.wv[mi].g >= g) return;
       try { this.wv[mi].src.stop(); } catch (er) { /* */ } this.wv.splice(mi, 1);
     }
-    const src = this.ctx.createBufferSource(); src.buffer = W.fwd ? e.fwd : e.rev; src.playbackRate.value = this.rate;
+    const src = this.ctx.createBufferSource(); src.buffer = W.fwd || fw ? e.fwd : e.rev; src.playbackRate.value = this.rate;
     const gn = this.ctx.createGain(); gn.gain.value = g;
     const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5;
     // air absorption + head shadow for sounds behind you
@@ -791,7 +874,7 @@ export class Audio {
     src.start(when, offset);
     this.wv.push({ src, g, end: when + (e.D - offset) / this.rate });
     // a blast close enough to hurt your ears: ringing and a dulled world, starting at the moment of the blast
-    if (kind[0] === 'e' && !W.fwd && d < 20 * Math.max(1, gm)) this.deafen(when + (e.D - e.a - offset) / this.rate, 1 - d / (20 * Math.max(1, gm)));
+    if (kind[0] === 'e' && !W.fwd && d < 20 * Math.max(1, gm)) this.deafen(when + ((fw ? e.a : e.D - e.a) - offset) / this.rate, 1 - d / (20 * Math.max(1, gm)));
   }
   deafen(at, k) {
     const ears = this.ears.frequency;
@@ -979,4 +1062,4 @@ export class Audio {
 }
 
 // exported for offline rendering / tuning against reference recordings
-export { synthBang, synthVoice, synthRifle, synthCrack, synthImpact, synthBoom, synthWhistle, synthThoonk, synthMissile, synthEngine, synthTrack, synthLCAC, synthRotor, synthIR, RIFLES, BOOMS };
+export { synthVcrRun, synthBang, synthVoice, synthRifle, synthCrack, synthImpact, synthBoom, synthWhistle, synthThoonk, synthMissile, synthEngine, synthTrack, synthLCAC, synthRotor, synthIR, RIFLES, BOOMS };

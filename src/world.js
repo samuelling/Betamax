@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } from './terrain.js';
 import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose, lcacBase } from './layout.js';
 import { pieceState } from './destruction.js';
+import { buildCar, planBlast, poseBlast, PAINT } from './cars.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 import { buildIFV, buildLCAC, buildUH60, buildGunship, VM } from './vehicles.js';
@@ -723,21 +724,13 @@ export class World {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: t, roughness: 0.92 }));
     m.position.set((Lt.x0 + Lt.x1) / 2, Lt.y + 0.03, (Lt.z0 + Lt.z1) / 2);
     m.receiveShadow = true; this.root.add(m);
-    // abandoned cars
-    const B = new Builder();
-    const cols = [[0.55, 0.57, 0.6], [0.15, 0.17, 0.2], [0.6, 0.12, 0.1], [0.85, 0.85, 0.82], [0.2, 0.3, 0.45], [0.35, 0.37, 0.3]];
-    const tire = std([0.05, 0.05, 0.05], 0.9), glass = std([0.08, 0.1, 0.12], 0.1, 0.3);
-    const cars = this.L.cars;
-    cars.forEach(([x, z, rot], i) => {
-      const mat = std(cols[i % cols.length], 0.35, 0.4);
-      const add = (mt, gg) => { gg.rotateY(rot); gg.translate(x, Lt.y, z); B.add(mt, gg); };
-      add(mat, rbox(1.9, 0.8, 4.6, 0.2, 0, 0.75, 0));
-      add(glass, rbox(1.7, 0.65, 2.6, 0.18, 0, 1.4, -0.2));
-      add(mat, box(1.72, 0.06, 2.4, 0, 1.73, -0.2));
-      [[-0.85, 1.4], [0.85, 1.4], [-0.85, -1.45], [0.85, -1.45]].forEach(([wx, wz]) => add(tire, place(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 14), wx, 0.36, wz, 0, 0, Math.PI / 2)));
-
+    // abandoned cars: proper models, panel by panel (two of them get blown apart during the battle)
+    const kinds = ['sedan', 'suv', 'hatch', 'pickup', 'wagon', 'sedan', 'suv'];
+    this.cars = this.L.cars.map(([x, z, rot], i) => {
+      const paintHex = PAINT[(i * 3 + 1) % PAINT.length], car = buildCar(kinds[i % kinds.length], paintHex, i + 1);
+      car.paintHex = paintHex; car.root.position.set(x, Lt.y, z); car.root.rotation.y = rot; this.root.add(car.root);
+      return car;
     });
-    B.build(this.root);
   }
 
   buildMinefield() {
@@ -867,6 +860,10 @@ export class World {
   // ---------------------------------------------------------------
   update(tau, cam, explosions) {
     this.uTau.value = tau;
+    if (this.cars) {
+      if (!this.carBlasts) { this.carBlasts = explosions.filter((e) => e.car != null); for (const e of this.carBlasts) planBlast(this.cars[e.car], e.car * 977 + 5); }
+      for (const e of this.carBlasts) poseBlast(this.cars[e.car], tau - e.t);
+    }
     this.updatePieces(tau);
     // sun shadow follows camera
     const s = this.sun;

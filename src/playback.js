@@ -229,7 +229,7 @@ export class Playback {
     const houses = S.L.houses;
     S.explosions.forEach((e, ei) => {
       const age = tau - e.t;
-      if (age > 40 && e.kind !== 'vehicle' && !e.house) return;
+      if (age > 40 && e.kind !== 'vehicle' && !e.house && e.car == null) return;
       // ---- incoming ordnance ----
       if (tau >= e.launchT && tau < e.t) {
         const u = (tau - e.launchT) / (e.t - e.launchT);
@@ -306,6 +306,7 @@ export class Playback {
       if (e.kind === 'vehicle') { const v = S.L.vehicles[e.vi]; fire = [v.x, heightAt(v.x, v.zStop) + (v.type === 'aav' ? 3 : 4.5), v.zStop, 1]; ev.wrecks.push(v); }
       else if (e.house) { let best = null, bd = 99; for (const h of houses) { const d = Math.hypot(h.x - e.ix, h.z - e.iz); if (d < bd) { bd = d; best = h; } } if (best && bd < 14) fire = [best.x, heightAt(best.x, best.z) + 7, best.z, 1.6]; }
       else if (e.kind === 'crash') fire = [e.ix, 0.6, e.iz, 1.3];
+      else if (e.car != null) fire = [e.ix, e.iy + 0.5, e.iz, 0.75];
       if (fire) {
         const [fx, fy, fz, fs] = fire;
         for (let k = 0; k < 7 * fs; k++) {

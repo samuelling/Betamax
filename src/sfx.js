@@ -15,7 +15,7 @@ export function worldSounds(S, tau, L, body, A, pb) {
   if (!A.ready) return;
   const sh = S.shots, n = S.nShots;
   // shots: muzzle reports, supersonic cracks passing you, and impacts near you
-  const i0 = lb(sh, n, tau - 4.5), i1 = lb(sh, n, tau + 0.1);
+  const i0 = lb(sh, n, tau - 4.5), i1 = lb(sh, n, tau + (A.forward ? 0.6 : 0.1));
   for (let si = i0; si < i1; si++) {
     const o = si * SHOT_F, shooter = sh[o + 8];
     if (shooter === body) continue; // you are this soldier now; your shots are live

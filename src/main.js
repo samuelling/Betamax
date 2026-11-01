@@ -12,8 +12,10 @@ import { Post } from './post.js';
 import { heightAt, inMinefield, ARENA } from './terrain.js';
 import { vehZ, heloPose } from './layout.js';
 import * as TX from './textures.js';
-import { VCRIntro } from './vcr.js';
+import { VCRIntro, drawMenu, MENU_W, MENU_H, PLAY_BOX } from './vcr.js';
 import { Pickups } from './pickups.js';
+import { Home } from './home.js';
+import { pickHouse } from './housetypes.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -133,13 +135,25 @@ function boot() {
   });
   buildCrosshair();
   if (input.touch) $('bPause').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); pauseGame(); }, { passive: false });
+  addEventListener('keydown', (e) => { if (G.home && G.home.act && G.home.act.keys && !e.repeat && e.code !== 'Escape') G.home._typed = true; });
+  renderer.domElement.addEventListener('click', () => { if (G.home && !G.input.locked) G.input.lock(); });
+  if (params.get('home')) { // straight to the last tape (for working on it): ?home=us | ?home=ru
+    const side = params.get('home') === 'ru' ? 1 : 0, want = params.get('house');
+    const a = S.actors.find((q) => q.side === side && q.deathTime > 0 && (!want || pickHouse(side, ident(q.id), q.id).id === want)) || S.actors.find((q) => q.side === side && q.deathTime > 0);
+    G.lives = [a.id]; $('load').style.display = 'none'; if (vcr) vcr.dispose();
+    const go = () => { removeEventListener('pointerdown', go); G.audio.init(); goHome(a.id, params.has('fwd')); };
+    $('load').style.display = ''; $('load').classList.add('vcr'); $('load').innerHTML = '<span class="blink">CLICK TO PLAY THE LAST TAPE</span>';
+    addEventListener('pointerdown', () => { $('load').style.display = 'none'; go(); }, { once: true });
+    G.last = performance.now(); requestAnimationFrame(frame); return;
+  }
   if (vcr) {
     G.vcr = vcr; vcr.ready();
     const l = $('load'); l.innerHTML = '<span class="blink">CLICK TO INSERT TAPE</span>';
     const go = (e) => {
       if (!G.vcr || e.button > 0) return;
       G.audio.init();
-      if (vcr.insert(G.audio)) { l.style.display = 'none'; removeEventListener('pointerdown', go); removeEventListener('keydown', go); }
+      if (vcr.phase === 'insert') { if (vcr.skip()) G.audio.vcrSkip(); return; }
+      if (vcr.insert(G.audio)) l.style.display = 'none';
     };
     addEventListener('pointerdown', go); addEventListener('keydown', go);
     G.state = 'vcr'; hud(false); $('hud').style.visibility = 'hidden';
@@ -157,6 +171,7 @@ function onResize() {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); G.post.setSize(innerWidth, innerHeight, Q.pr);
   if (G.vcr) G.vcr.onResize();
+  if (G.home) G.home.resize();
 }
 
 // ---------------------------------------------------------------- HUD helpers
@@ -213,13 +228,16 @@ function overlay(html, cls = '') {
 function showTitle() {
   G.state = 'title';
   hud(false);
-  overlay(`<div style="height:8vh"></div>
-    <h1>BETAMAX</h1><h2>a battle, in rewind &middot; Mayflower Beach, Dennis</h2>
-    <p>The tape is already at the end. Everything runs backward: bullets fly home, the dead get up, the tide comes in the wrong way.</p>
-    <p>You move forward. Kill someone and you become them, and the tape keeps rewinding. Keep going until you reach the moment your body first arrived on the beach.</p>
-    <button id="go">&#9654; PLAY</button>
-    <p style="font-size:.8em;opacity:.7">${touch ? 'left thumb: move &middot; right thumb: look &middot; FIRE / AIM / DUCK' : 'WASD move &middot; mouse aim &middot; click fire &middot; right-click aim &middot; shift sprint &middot; C crouch &middot; R reload'}<br>reversed bullets still hurt &middot; the edges of the beach are mined</p>`, 'shade');
-  $('go').onclick = () => { G.audio.init(); G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); startTape(); };
+  // the same picture the set was showing, laid over the window the way the camera framed it (cover)
+  overlay(`<div id="tt"><canvas id="ttc" width="${MENU_W}" height="${MENU_H}"></canvas><button id="go" aria-label="Play"></button><div id="ttl"></div></div>`, 'title');
+  const c = $('ttc'), g = c.getContext('2d');
+  drawMenu(g); if (document.fonts) document.fonts.load('64px "VT323"').then(() => drawMenu(g)).catch(() => {});
+  const [bx, by, bw, bh] = PLAY_BOX, b = $('go');
+  Object.assign(b.style, { left: `${bx / MENU_W * 100}%`, top: `${by / MENU_H * 100}%`, width: `${bw / MENU_W * 100}%`, height: `${bh / MENU_H * 100}%` });
+  b.onclick = () => {
+    G.audio.init(); G.audio.play(G.audio.B.clunk, 0.6); G.input.lock();
+    $('ovl').classList.add('out'); setTimeout(startTape, 380);
+  };
 }
 
 function startTape() {
@@ -442,6 +460,7 @@ function addMineBlast(p) {
 
 // ---------------------------------------------------------------- state changes
 function beginPossess(i, friendly = false) {
+  if (G.forward) { feed(`${short(i)} \u2715`); return; } // played forward, a death is just a death
   G.state = 'possess'; G.stateT = 0;
   G.pz = { i, from: camera.position.clone(), fromQ: camera.quaternion.clone(), oldBody: G.body, oldPos: G.player.pos.clone(), oldYaw: G.player.yaw };
   G.audio.play(G.audio.R.whoosh, 0.7); G.audio.play(G.audio.B.thump, 0.9);
@@ -460,6 +479,7 @@ function finishPossess() {
 }
 function beginDeath(cause) {
   if (G.state !== 'play') return;
+  if (G.forward) { G.forward = false; G.state = 'end'; card('SO IT GOES.', 3); setTimeout(() => showEnd(true), 2600); return; }
   G.state = 'dead'; G.stateT = 0;
   G.audio.play(G.audio.B.thump, 1);
   card(cause === 'mine' ? 'SO IT GOES.' : 'SO IT GOES.', 2.2);
@@ -473,17 +493,80 @@ function beginEnding() {
   sub(st.side === 0 ? 'Back to the helicopter. Back to the sky.' : 'Back into the hull. Back out to sea.', 6);
   G.audio.play(G.audio.B.clunk, 0.4);
 }
-function showEnd() {
+function showEnd(forwardDone) {
   G.state = 'end';
-  hud(false);
+  hud(false); $('hud').style.visibility = ''; $('mode').textContent = '■ STOP';
   if (document.pointerLockElement) document.exitPointerLock();
   const rows = G.lives.map((i) => { const d = ident(i); return `${G.S.actors[i].side ? '&#9670;' : '&#9671;'} ${d.rank} ${d.first} ${d.last}, ${d.age} <span>&mdash; ${d.town}</span>`; }).join('<br>');
+  const last = G.endBody != null ? ident(G.endBody) : null;
   overlay(`<div class="ttl">&#9632; STOP</div><div class="ttr">0:00:00</div>
     <h2 style="margin-top:2.5em">You were ${G.lives.length} ${G.lives.length === 1 ? 'person' : 'people'}.</h2>
     <div class="lives">${rows}</div>
-    <p>At the start of the tape every one of them was alive, crossing the flats or riding in over the pines.</p>
-    <button id="again">&#9664;&#9664; REWIND AGAIN</button>`, 'blue');
-  $('again').onclick = () => { G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); startTape(); };
+    <p>${forwardDone ? 'The tape ran out. Everyone on it is where they were always going to be.' : last ? `The last of them was ${last.first} ${last.last}, at home in ${last.town}, the afternoon the phone rang.` : 'At the start of the tape every one of them was alive.'}</p>
+    <button id="again">&#9664;&#9664; REWIND AGAIN</button>${G.endBody != null && !forwardDone ? '<button id="fwd">&#9654; PLAY IT FORWARD</button><p style="font-size:.8em;opacity:.7">bonus: the same life, start to finish, in order</p>' : ''}`, 'blue');
+  $('again').onclick = () => { G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); G.forward = false; startTape(); };
+  if ($('fwd')) $('fwd').onclick = () => { G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); goHome(G.endBody, true); };
+}
+
+// ---------------------------------------------------------------- after the beach: back through the tapes, home
+const MIDDLE = [['THE NIGHT BEFORE', 'the dunes / the hovercraft deck'], ['THE WAR ARRIVES', 'the evacuation / the port'], ['THE FIRST SHOT', '']];
+function tapesBack() {
+  const i = G.body, d = ident(i), side = G.S.actors[i].side;
+  G.state = 'tapes'; hud(false);
+  if (document.pointerLockElement) document.exitPointerLock();
+  let k = 0;
+  const show = () => {
+    if (k >= MIDDLE.length) { goHome(i, false); return; }
+    const [title, where] = MIDDLE[k];
+    overlay(`<div class="ttl">&#9167; EJECT</div><div class="ttr">TAPE ${k + 2} / 5</div>
+      <h2 style="margin-top:3em">${title}</h2><p>${d.rank} ${d.first} ${d.last} &middot; ${side ? 'INVADER' : 'DEFENDER'}</p>
+      <p style="opacity:.6">${where.split(' / ')[side] || ''} &mdash; not yet recorded</p>`, 'blue');
+    G.audio.play(G.audio.B.clunk, 0.7); setTimeout(() => G.audio.play(G.audio.B.click, 0.5), 700);
+    k++; setTimeout(show, 2300);
+  };
+  show();
+}
+function goHome(i, forward) {
+  const a = G.S.actors[i];
+  G.endBody = i; G.homeForward = forward;
+  const hs = pickHouse(a.side, ident(i), i);
+  overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE 5 / 5</div><h2 style="margin-top:3em">${a.side ? 'ДОМА' : 'HOME'}</h2><p>${ident(i).first} ${ident(i).last} &middot; ${a.side ? `${hs.name} &middot; ${hs.nameEn}` : `a ${hs.name}`}, ${ident(i).town}</p>`, 'blue');
+  setTimeout(() => {
+    if (G.audio.musicGain) G.audio.musicGain.gain.setTargetAtTime(0, G.audio.ctx.currentTime, 1.5);
+    if (G.audio.vcrRunGain) G.audio.vcrRunGain.gain.setTargetAtTime(0, G.audio.ctx.currentTime, 1);
+    G.tvRT = G.tvRT || new THREE.WebGLRenderTarget(512, 384, { type: THREE.HalfFloatType }); G.tvTau = 18;
+    G.home = new Home({ renderer, Q, audio: G.audio, side: a.side, ident: ident(i), id: i, low, touch: G.input.touch, house: params.get('house'),
+      tvTexture: G.tvRT.texture, tv: beachTV,
+      onEnd: () => { setTimeout(() => { const f = $('fade'); f.style.transition = 'opacity 2.5s'; f.style.opacity = 1; }, 400);
+        setTimeout(() => { G.home.dispose(); G.home = null; $('fade').style.opacity = 0; $('todo').style.display = 'none';
+          if (forward) beginForward(i); else showEnd(false); }, 3200); } });
+    G.state = 'home'; overlay('', 'hidden'); hud(false); $('hud').style.visibility = ''; $('todo').style.display = '';
+    G.input.lock();
+  }, 1800);
+}
+// the bonus: after the phone call, the same person's morning on the beach, in order
+function beginForward(i) {
+  const a = G.S.actors[i];
+  G.forward = true; G.lives = [i];
+  G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
+  G.tau = a.spawn + 0.05; beginPlayFromBody(i, G.tau); saveCheckpoint();
+  G.state = 'play'; G.stateT = 0; G.flash = 1; overlay('', 'hidden');
+  if (G.audio.musicGain) { G.audio.musicVol = 0.2; G.audio.musicGain.gain.setTargetAtTime(0.2, G.audio.ctx.currentTime, 2); }
+  card('▶ PLAY', 2); sub(identityHTML(i), 5);
+}
+// the beach, playing forward, on their television
+const tvCam = new THREE.PerspectiveCamera(38, 4 / 3, 1, 3000);
+let tvAcc = 0;
+function beachTV(dt) {
+  tvAcc += dt; G.tvTau = Math.min(T_SIM - 1, G.tvTau + dt);
+  if (tvAcc < 1 / 15) return; const step = tvAcc; tvAcc = 0;
+  const tau = G.tvTau, t = tau * 0.05;
+  tvCam.position.set(Math.sin(t) * 140, 70 + Math.sin(t * 1.7) * 10, 120 + Math.cos(t) * 40); tvCam.lookAt(0, 0, 20);
+  ctx.overrides = G.overrides; ctx.liveFx = []; ctx.playerPos.set(0, -500, 0); ctx.camPos = tvCam.position; ctx.bodyId = -1; ctx.hideBody = false; ctx.sound = false; ctx.real = G.real;
+  G.pb.update(tau, tau - step, ctx);
+  G.world.update(tau, tvCam, G.S.explosions);
+  G.player.vm.visible = false;
+  renderer.setRenderTarget(G.tvRT); renderer.render(scene, tvCam); renderer.setRenderTarget(null);
 }
 
 // ---------------------------------------------------------------- per-frame
@@ -496,15 +579,21 @@ function frame(now) {
   if (G.hold) { G.last = now; return; }
   if (G.vcr) {
     const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
-    const d = G.vcr.update(dt), f = $('fade');
-    if (d >= 0) f.style.opacity = Math.max(0, (d - 0.55) / 0.45);
-    if (d >= 1) { // through the glass: the menu, full screen, with the beach behind it
+    const d = G.vcr.update(dt);
+    if (d >= 1) { // through the glass: the picture on the tube is now the page, pixel for pixel
+      showTitle();
       G.vcr.dispose(); G.vcr = null;
-      $('hud').style.visibility = ''; showTitle(); tick(0.0001);
-      f.style.transition = 'opacity .9s'; requestAnimationFrame(() => { f.style.opacity = 0; });
+      $('hud').style.visibility = '';
     }
     return;
   }
+  if (G.home) {
+    const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
+    const inp = G.input.read(dt); inp.leave = !!(G.input.keys.Tab || (G.input.keys.KeyQ && !(G.home.act && G.home.act.keys)));
+    G.home.update(dt, inp); return;
+  }
+  if (G.state === 'tapes' || G.state === 'home') { G.last = now; return; }
+  if (G.state === 'title') { G.last = now; return; }
   tick(Math.min(0.05, (now - G.last) / 1000)); G.last = now;
 }
 // test hook: advance the game deterministically
@@ -592,7 +681,8 @@ function tick(dt, draw = true) {
       const near = Math.min(p.pos.x - ARENA.x0, ARENA.x1 - p.pos.x, p.pos.z - ARENA.z0, ARENA.z1 - p.pos.z);
       $('warn').style.opacity = near < 8 ? (0.6 + 0.4 * Math.sin(G.real * 10)) : 0;
       if (out2 > 1.6) { addMineBlast(p.pos); G.audio.at('boom', p.pos.x, p.pos.y, p.pos.z, listener(), 1.4); p.shake = 2; beginDeath('mine'); break; }
-      if (G.tau <= S.actors[G.body].spawn + 0.02) beginEnding();
+      if (!G.forward && G.tau <= S.actors[G.body].spawn + 0.02) beginEnding();
+      if (G.forward) { tauRate = -1; osd = '\u25B6 PLAY'; rew = 0; if (G.tau >= T_SIM - 0.5) { G.forward = false; showEnd(true); } }
       break;
     }
     case 'possess': {
@@ -633,7 +723,7 @@ function tick(dt, draw = true) {
       const target = endingCam(st);
       camera.position.lerpVectors(G.end.from, target.pos, e);
       camera.quaternion.slerpQuaternions(G.end.fromQ, target.q, e);
-      if (G.tau <= Math.max(0.3, st.spawn - 13)) { G.audio.play(G.audio.B.clunk, 0.7); showEnd(); }
+      if (G.tau <= Math.max(0.3, st.spawn - 13)) { G.audio.play(G.audio.B.clunk, 0.7); tapesBack(); }
       break;
     }
     case 'end': {
@@ -668,6 +758,7 @@ function tick(dt, draw = true) {
   const L = listener();
   if (G.audio.enabled) {
     G.audio.update(G.tau, ctx.sound ? tauRate : 0, dt);
+    G.audio.vcrTape(G.state === 'ff' ? 1.7 : G.state === 'ending' ? 1.35 : G.state === 'paused' ? 1 : 1, G.state === 'ff' || G.state === 'ending' ? 0.7 : G.state === 'paused' ? 0.5 : 0.3);
     G.audio.musicTape(Math.abs(tauRate) > 1.3 ? Math.min(2, Math.abs(tauRate) * 0.6) : 1, Math.min(1, G.shake || 0));
     if (ctx.sound) worldSounds(S, G.tau, L, G.body, G.audio, G.pb);
     machineSounds(S, G.tau, L, G.audio);

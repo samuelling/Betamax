@@ -11,7 +11,7 @@ Inspired by the rewound bombing raid in *Slaughterhouse-Five*.
 ## Play
 Open `index.html` (a single self-contained file), or enable GitHub Pages on `main` / root.
 
-- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground, P / Esc pause (sensitivity settings).
+- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground (and to use things at home; Q or Tab to stop), P / Esc pause (sensitivity settings).
 - **Touch (phone/iPad):** floating left stick, drag right side to look, FIRE (drag to aim while firing), AIM, DUCK, JUMP, RLD, pause. Light aim assist (toggle in pause).
 
 Reversed bullets still hurt. The edges of the beach are mined.
@@ -21,6 +21,12 @@ Reversed bullets still hurt. The edges of the beach are mined.
 - `src/playback.js`: renders the recording at any tape position `tau`. Every effect (tracers, impacts, smoke, explosions, wrecks) is a pure function of `tau`, so rewind, fast-forward and checkpoints all come for free.
 - `src/post.js`: the Betamax signal chain (chroma smear, timebase wobble, search-noise bars, head-switching noise, dropouts) over a high-fidelity render.
 - `src/audio.js`: all sound is synthesized. World sounds play reversed; your gun plays forward.
+
+## The last tape
+
+After the beach the game runs back through the soldier's story (scenes 2–4 are placeholders for now) to an ordinary afternoon at home — the one tape that plays forward. Twelve kinds of home on each side, picked from the soldier's town: Cape Cod cottages, triple-deckers, colonials, farmhouses, beach cottages and a lake cabin around Massachusetts; dachas, log izbas, Khrushchyovka and Stalin-era flats, a Finnish house on the Karelian isthmus and a dacha by the Gulf around St. Petersburg. Wash the dishes, read, play a game, cook, fold laundry, write a letter, feed the cat, water and weed the garden. At some point you'll want to put on a tape. Then the phone rings. Once it's over there's a bonus: play the same life forward.
+
+Garden plants are grown with the plant art from [Shortwood Meadow](https://github.com/samuelling/shortwood-meadow).
 
 ## Weapons
 
@@ -33,6 +39,8 @@ node build.mjs   # writes index.html (single file, three.js inlined)
 ```
 
 ## Sound credits
+
+- **Betamax deck:** the tape insertion, threading and PLAY sounds are edited from "Sony Betamax Tape Insertion & Ejection Sounds" and "Sony Betamax Operating Sounds" by Daniel D. Teoli Jr. (Internet Archive, Public Domain Mark 1.0). The running transport loop is synthesized to the measured spectrum of the same recording.
 
 - **Wilhelm scream** — take 4 of the original 1951 session recording ("Man getting bit by an alligator, and he screams"), from the Sunset Editorial collection donated to USC Cinema; released under CC0 1.0 (public domain) by Craig Smith on Freesound, sound #675810: https://freesound.org/people/craigsmith/sounds/675810/ (licence page saved in `credits/`). Up to three dying soldiers per tape get it (at least 40 s apart), alternating forward and reversed.
 - Everything else is synthesized in the browser and fitted to measurements of real recordings (`tools/sound-tuning/`).
