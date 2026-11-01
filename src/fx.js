@@ -29,7 +29,7 @@ export class Billboards {
           gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform sampler2D uTex; uniform vec3 uFogColor; varying vec2 vUv; varying vec4 vCol; varying float vFog;
         void main(){ vec4 t = texture2D(uTex, vUv);
-          ${additive ? 'gl_FragColor = vec4(vCol.rgb * t.a * vCol.a * (1.0 - vFog), 1.0);' : 'float e = smoothstep(0.26, 0.34, t.a); float shade = mix(0.8, 1.08, step(0.5, vUv.y + (t.a - 0.5) * 0.35)); gl_FragColor = vec4(mix(vCol.rgb * shade, uFogColor, vFog), e * vCol.a * 0.62);'} }`,
+          ${additive ? 'gl_FragColor = vec4(vCol.rgb * t.a * vCol.a * (1.0 - vFog), 1.0);' : 'gl_FragColor = vec4(mix(vCol.rgb, uFogColor, vFog), t.a * vCol.a);'} }`,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });

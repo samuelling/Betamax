@@ -315,16 +315,17 @@ const PALETTE_GLSL = /* glsl */`
                mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z); }
   vec3 camo(vec3 p, float side){
     if (side < 0.5) { // multi-terrain blotches
-      float a = n3(p*4.0);
-      float b = n3(p*5.0 + 13.1);
+      float a = n3(p*7.0) * 0.65 + n3(p*17.0) * 0.35;
+      float b = n3(p*9.0 + 13.1) * 0.6 + n3(p*23.0) * 0.4;
       vec3 c = vec3(0.54,0.49,0.37);
       c = mix(c, vec3(0.40,0.40,0.27), step(0.56, a));
       c = mix(c, vec3(0.42,0.33,0.22), step(0.62, b));
-      c = mix(c, vec3(0.66,0.61,0.47), step(0.72, n3(p*6.0 + 5.0)));
+      c = mix(c, vec3(0.66,0.61,0.47), step(0.72, n3(p*13.0 + 5.0)));
+      c = mix(c, vec3(0.20,0.18,0.13), step(0.79, n3(p*21.0 + 9.0)));
       return c;
     }
-    vec3 q = floor(p * 18.0) / 18.0; // digital, chunky
-    float a = n3(q*4.0);
+    vec3 q = floor(p * 45.0) / 45.0; // digital
+    float a = n3(q*6.0) * 0.7 + n3(q*15.0)*0.3;
     vec3 c = vec3(0.27,0.30,0.28);
     c = mix(c, vec3(0.18,0.21,0.19), step(0.52, a));
     c = mix(c, vec3(0.36,0.38,0.33), step(0.66, n3(q*9.0+3.0)));
@@ -355,7 +356,7 @@ const PALETTE_GLSL = /* glsl */`
 
 export function makeSoldierMaterial(bonesTex) {
   const uni = { uBones: { value: bonesTex } };
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0 });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uBones = uni.uBones;
     sh.vertexShader = sh.vertexShader
