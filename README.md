@@ -17,20 +17,20 @@ Open `index.html` (a single self-contained file), or enable GitHub Pages on `mai
 Reversed bullets still hurt. The edges of the beach are mined.
 
 ## How it works
-- `src/sim.js`: a deterministic forward simulation of the whole battle: about 330 invaders in six waves of AAVs and LCAC hovercraft, about 60 defenders from two helicopter insertions with M250 gunners, two invader gunships (one shot down into the bay), rocket artillery, naval guns, drone swarms, smoke screens, Javelin kills and burning houses. Recorded at 10 Hz.
+- `src/sim.js`: a deterministic forward simulation of the whole battle: about 330 Texan troops in six waves of AAVs and LCAC hovercraft, about 60 Cape Cod defenders from two helicopter insertions with M250 gunners, two Texan gunships (one shot down into the bay), rocket artillery, naval guns, drone swarms, smoke screens, Javelin kills and burning houses. Recorded at 10 Hz.
 - `src/playback.js`: renders the recording at any tape position `tau`. Every effect (tracers, impacts, smoke, explosions, wrecks) is a pure function of `tau`, so rewind, fast-forward and checkpoints all come for free.
 - `src/post.js`: the Betamax signal chain (chroma smear, timebase wobble, search-noise bars, head-switching noise, dropouts) over a high-fidelity render.
 - `src/audio.js`: all sound is synthesized. World sounds play reversed; your gun plays forward.
 
 ## The last tape
 
-After the beach the game runs back through the soldier's story (scenes 2–4 are placeholders for now) to an ordinary afternoon at home — the one tape that plays forward. Twelve kinds of home on each side, picked from the soldier's town: Cape Cod cottages, triple-deckers, colonials, farmhouses, beach cottages and a lake cabin around Massachusetts; dachas, log izbas, Khrushchyovka and Stalin-era flats, a Finnish house on the Karelian isthmus and a dacha by the Gulf around St. Petersburg. Wash the dishes, read, play a game, cook, fold laundry, write a letter, feed the cat, water and weed the garden. At some point you'll want to put on a tape. Then the phone rings. Once it's over there's a bonus: play the same life forward.
+After the beach the game runs back through the soldier's story (scenes 2–4 are placeholders for now) to an ordinary afternoon at home — the one tape that plays forward. It's a civil war: one side is from Cape Cod, the other came up from Texas. Twelve kinds of home on each side, picked from the soldier's town — on the Cape, shingled cottages, a sea captain's house, saltboxes, a cranberry farmhouse, beach cottages and a cabin on a kettle pond; in Texas, a brick ranch in the Houston suburbs, a limestone house in the Hill Country, a farmhouse on the plains, a dogtrot in the piney woods, a Gulf cottage in Galveston, a stucco courtyard house in El Paso, a double-wide among the pumpjacks and a house on Lake Travis. The homes are drawn plainly, without the tape look: sun through the windows, curtains breathing, clouds crossing the sun, birds on the lawn. Wash the dishes, read, play a game, cook, fold laundry, write a letter, feed the cat, water and weed the garden. At some point you'll want to put on a tape. Then the phone rings. Once it's over there's a bonus: play the same life forward.
 
 Garden plants are grown with the plant art from [Shortwood Meadow](https://github.com/samuelling/shortwood-meadow).
 
 ## Weapons
 
-Every body carries a real modern weapon and drops it where it falls; in rewind it lifts back into their hands. Defenders: SIG M7, SIG M250, HK416 A5, HK M110A1 CSASS, Benelli M1014, HK MP7A2, with a SIG M18 sidearm. Invaders: IWI Tavor X95, IWI Negev NG7, HK416 A5, MP7A2, M1014, CSASS, with a Glock 17. Taking a body gives you its gun; you can swap it for anything lying in the sand, and you always keep the sidearm.
+Every body carries a real modern weapon and drops it where it falls; in rewind it lifts back into their hands. Defenders: SIG M7, SIG M250, HK416 A5, HK M110A1 CSASS, Benelli M1014, HK MP7A2, with a SIG M18 sidearm. Texans: IWI Tavor X95, IWI Negev NG7, HK416 A5, MP7A2, M1014, CSASS, with a Glock 17. Taking a body gives you its gun; you can swap it for anything lying in the sand, and you always keep the sidearm.
 
 ## Build
 ```

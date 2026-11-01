@@ -1,4 +1,4 @@
-// The houses: a Cape Cod cottage (the defenders) and a wooden dacha on the edge of St. Petersburg (the invaders).
+// The houses: one side's homes on Cape Cod, the other side's across Texas.
 // Same floor plan, different lives. Metres; the house spans x -6..6, z -4.5..4.5; the back yard runs to z = 22.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
@@ -92,6 +92,12 @@ const TX = {
   woodRoof: () => tex(256, 256, (g, w, h, r) => { g.fillStyle = '#6a6258'; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 20) { let x = (y / 20 % 2) * 10; while (x < w) { const v = 80 + r() * 40; g.fillStyle = `rgb(${v},${v * 0.95},${v * 0.88})`; g.fillRect(x, y, 18, 19); x += 20; } } speck(g, w, h, r, 2000, 0.2); }, 8, 4),
   slate: () => tex(256, 256, (g, w, h, r) => { g.fillStyle = '#2a2a30'; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 24) { let x = (y / 24 % 2) * 16; while (x < w) { const v = 50 + r() * 25; g.fillStyle = `rgb(${v},${v},${v + 8})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 30, y); g.lineTo(x + 30, y + 18); g.arc(x + 15, y + 18, 15, 0, Math.PI); g.fill(); x += 32; } } }, 6, 3),
   logWall: () => tex(256, 256, (g, w, h) => { for (let y = 0; y < h; y += 32) { const gr = g.createLinearGradient(0, y, 0, y + 32); gr.addColorStop(0, '#5a3a20'); gr.addColorStop(0.3, '#c8965a'); gr.addColorStop(0.7, '#b8864a'); gr.addColorStop(1, '#5a3a20'); g.fillStyle = gr; g.fillRect(0, y, w, 32); } }, 3, 3),
+  stone: (hex) => tex(256, 256, (g, w, h, r) => { const c = new THREE.Color(hex); g.fillStyle = '#b8ac94'; g.fillRect(0, 0, w, h);   // Hill Country limestone, roughly coursed
+    for (let y = 0; y < h; y += 32) { let x = -r() * 40; while (x < w) { const L = 40 + r() * 50, k = 0.85 + r() * 0.25; g.fillStyle = `rgb(${c.r * 255 * k | 0},${c.g * 255 * k | 0},${c.b * 255 * k * 0.97 | 0})`; g.fillRect(x + 2, y + 2, L - 4, 28); x += L; } }
+    speck(g, w, h, r, 5000, 0.12); speck(g, w, h, r, 2000, 0.1, '255,250,235'); }, 3, 2),
+  saltillo: () => tex(256, 256, (g, w, h, r) => { g.fillStyle = '#c8b8a0'; g.fillRect(0, 0, w, h); for (let y = 0; y < h; y += 64) for (let x = 0; x < w; x += 64) { const k = 0.85 + r() * 0.25; g.fillStyle = `rgb(${196 * k | 0},${112 * k | 0},${68 * k | 0})`; g.fillRect(x + 3, y + 3, 58, 58); for (let i = 0; i < 6; i++) { g.fillStyle = `rgba(120,50,20,${r() * 0.2})`; g.beginPath(); g.arc(x + 6 + r() * 52, y + 6 + r() * 52, 3 + r() * 9, 0, TAU); g.fill(); } } speck(g, w, h, r, 3000, 0.12); }, 4, 4),
+  talavera: () => tex(256, 256, (g, w, h) => { for (let y = 0; y < h; y += 32) for (let x = 0; x < w; x += 32) { g.fillStyle = '#f4f0e4'; g.fillRect(x, y, 32, 32); g.fillStyle = (x + y) / 32 % 2 ? '#2a4a9a' : '#e8a020'; g.beginPath(); for (let k = 0; k < 4; k++) { const a = k * TAU / 4; g.ellipse(x + 16 + Math.cos(a) * 7, y + 16 + Math.sin(a) * 7, 5, 3, a, 0, TAU); } g.fill(); g.fillStyle = '#2a4a9a'; g.beginPath(); g.arc(x + 16, y + 16, 3, 0, TAU); g.fill(); g.fillStyle = 'rgba(0,0,0,.15)'; g.fillRect(x, y + 31, 32, 1); g.fillRect(x + 31, y, 1, 32); } }, 6, 2),
+  serape: () => tex(512, 256, (g, w, h, r) => { const cols = ['#a8442a', '#e8d8b0', '#2a3a4a', '#c8902a', '#e8d8b0', '#6a2a2a', '#3a6a7a']; let x = 0, k = 0; while (x < w) { const L = 8 + Math.floor(r() * 4) * 8; g.fillStyle = cols[k++ % cols.length]; g.fillRect(x, 0, L, h); x += L; } for (let y = 0; y < h; y += 3) { g.fillStyle = 'rgba(0,0,0,.06)'; g.fillRect(0, y, w, 1); } speck(g, w, h, r, 3000, 0.1); }),
   lawn: () => tex(512, 512, (g, w, h, r) => { g.fillStyle = '#4f6e2f'; g.fillRect(0, 0, w, h); for (let i = 0; i < 26000; i++) { const v = r(); g.fillStyle = v < 0.5 ? `rgba(40,70,20,${r() * 0.5})` : `rgba(140,170,70,${r() * 0.35})`; g.fillRect(r() * w, r() * h, 1, 2 + r() * 4); } }, 14, 14),
   soil: () => tex(256, 256, (g, w, h, r) => { g.fillStyle = '#4a3624'; g.fillRect(0, 0, w, h); speck(g, w, h, r, 9000, 0.4); speck(g, w, h, r, 3000, 0.15, '200,170,130'); }, 3, 3),
   pavers: () => tex(256, 256, (g, w, h, r) => { g.fillStyle = '#5a5a52'; g.fillRect(0, 0, w, h); const rect = (x, y, a, b) => { const v = 120 + r() * 40; g.fillStyle = `rgb(${v * 0.8},${v * 0.85},${v * 0.9})`; g.fillRect(x + 3, y + 3, a - 6, b - 6); }; rect(0, 0, 128, 96); rect(128, 0, 128, 128); rect(0, 96, 96, 160); rect(96, 128, 160, 128); rect(96, 96, 32, 32); speck(g, w, h, r, 3000, 0.15); }, 2, 2),
@@ -117,16 +123,16 @@ function boxUV(geo, scale = 1) {
 // ------------------------------------------------------------------ the sheet: textures and colours for one house type
 export function cultureSheet(c, Hs) {
   const E = Hs.ext, I = Hs.int, us = c === 'us';
-  const extTex = { shingles: () => TX.shingles(E.color), clapboard: () => TX.clapboard(E.color), vinyl: () => TX.vinyl(E.color), brick: () => TX.brick(E.color), planks: () => TX.planks(E.color), logs: () => TX.logs(E.color), stucco: () => TX.stucco(E.color), panel: () => TX.panel(E.color, E.stripe) }[E.kind]();
+  const extTex = { stone: () => TX.stone(E.color), shingles: () => TX.shingles(E.color), clapboard: () => TX.clapboard(E.color), vinyl: () => TX.vinyl(E.color), brick: () => TX.brick(E.color), planks: () => TX.planks(E.color), logs: () => TX.logs(E.color), stucco: () => TX.stucco(E.color), panel: () => TX.panel(E.color, E.stripe) }[E.kind]();
   const roof = { asphalt: () => TX.roofAsphalt(), metal: () => TX.roofMetal(E.roofColor), wood: () => TX.woodRoof(), slate: () => TX.slate(), flat: () => TX.roofAsphalt() }[E.roof]();
-  const floor = { oak: TX.oak, painted: TX.paintedBoards, pine: TX.pine, parquet: TX.parquet, carpet: TX.carpetFloor, lino: TX.lino }[I.floor]();
+  const floor = { oak: TX.oak, painted: TX.paintedBoards, pine: TX.pine, parquet: TX.parquet, carpet: TX.carpetFloor, lino: TX.lino, saltillo: TX.saltillo }[I.floor]();
   const wall = I.wall === 'paper' ? TX.wallpaper() : I.wall === 'paper2' ? TX.paper2() : TX.paint(I.wall);
-  const kitchen = I.kitchen === 'beadboard' ? TX.beadboard() : I.kitchen === 'logs' ? TX.logWall() : TX.tile(us ? '#f4f2ec' : '#dfe8ea', us ? '#c8c4bc' : '#a8b4b8');
-  const rug = { braided: TX.braided, persian: TX.persian, runner: TX.runner, none: null }[I.rug];
+  const kitchen = I.kitchen === 'beadboard' ? TX.beadboard() : I.kitchen === 'logs' ? TX.logWall() : I.kitchen === 'talavera' ? TX.talavera() : TX.tile(us ? '#f4f2ec' : '#efe8dc', us ? '#c8c4bc' : '#bcb2a2');
+  const rug = { braided: TX.braided, persian: TX.persian, runner: TX.runner, serape: TX.serape, none: null }[I.rug];
   return {
     c, H: Hs, floor, wall, wall2: TX.paint(I.wall2), kitchenWall: kitchen, ext: extTex, roof, roofMetal: E.roof === 'metal' || E.roof === 'flat',
     trim: us ? '#f4f1e8' : '#efe8d8', extTrim: E.trim, couch: TX.plaid(I.couch[0], I.couch[1]), rug: rug ? rug() : null, rugKind: I.rug, counter: I.counter, cabinet: I.cabinet, table: I.table,
-    phone: us ? '#d8cdb0' : '#b8302a', fence: '#8a8472', carpet: I.wallRug ? TX.carpet() : null, oilcloth: I.oilcloth ? TX.oilcloth() : null,
+    phone: us ? '#d8cdb0' : '#5a7a6a', fence: '#8a8472', carpet: I.wallRug ? TX.carpet() : null, oilcloth: I.oilcloth ? TX.oilcloth() : null,
   };
 }
 
@@ -183,7 +189,7 @@ export function buildHouse(C, renderer) {
   const wallMat = std({ map: C.wall, roughness: 0.92 }), wall2 = std({ map: C.wall2, roughness: 0.92 }), kitch = std({ map: C.kitchenWall, roughness: 0.6 });
   const extMat = std({ map: C.ext, roughness: 0.95 });
   // floor & ceiling
-  const fl = mk(g, boxUV(B(12, 0.1, 9), 0.5), std({ map: C.floor, roughness: 0.55 }), 0, -0.05, 0); fl.castShadow = false;
+  const fl = mk(g, boxUV(B(12, 0.1, 9), 0.5), std({ map: C.floor, roughness: 0.55 }), 0, -0.04, 0); fl.castShadow = false;
   mk(g, B(12.3, 0.12, 9.3), col(us ? '#f6f3ec' : '#efe9dc', 0.95), 0, H + 0.06, 0);
   // exterior walls: front z=-4.5 (outward -1), back z=+4.5 (+1), west x=-6 (-1), east x=+6 (+1)
   const W = (y0, y1) => [y0, y1];
@@ -299,6 +305,8 @@ export function buildHouse(C, renderer) {
   }
   if (E.kind === 'brick' || E.kind === 'stucco' || E.kind === 'panel') { /* no porch light */ } else mk(g, CY(0.07, 0.09, 0.22, 10), std({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.6 }), -3.0, 2.0, 4.62);
   A.cols = cols;
+  A.windows = [];
+  for (const [list, axis, at, out] of [[front, 'x', -4.5, -1], [back, 'x', 4.5, 1], [west, 'z', -6, -1], [east, 'z', 6, 1]]) for (const [a, b, y0, y1] of list) if (y0 > 0) A.windows.push({ axis, at, a, b, y0, y1, out });
   return { g, A };
 }
 
@@ -309,7 +317,7 @@ export function furnish(C, g, cols, renderer) {
   const block = (x0, z0, x1, z1) => cols.push([x0, z0, x1, z1]);
   // ---------------- living room (x -6..1.5, z -4.5..0)
   // rug
-  if (C.rug) { const k = C.rugKind; const rug = mk(g, k === 'braided' ? new T.CircleGeometry(1.6, 48) : k === 'runner' ? new T.PlaneGeometry(1.1, 4.2) : new T.PlaneGeometry(2.4, 1.7), std({ map: C.rug, roughness: 1 }), -2.6, 0.012, -2.3, 0, -Math.PI / 2); rug.castShadow = false; if (k === 'braided') rug.scale.set(1.25, 0.85, 1); }
+  if (C.rug) { const k = C.rugKind; const rug = mk(g, k === 'braided' ? new T.CircleGeometry(1.6, 48) : k === 'runner' ? new T.PlaneGeometry(1.1, 4.2) : new T.PlaneGeometry(2.4, 1.7), std({ map: C.rug, roughness: 1 }), -2.6, 0.02, -2.3, 0, -Math.PI / 2); rug.castShadow = false; if (k === 'braided') rug.scale.set(1.25, 0.85, 1); }
   // couch facing the TV (TV on the west wall)
   const couch = new T.Group(); couch.position.set(-1.2, 0, -2.3); couch.rotation.y = Math.PI / 2; g.add(couch);
   const fab = std({ map: C.couch, roughness: 0.95 });
@@ -317,7 +325,6 @@ export function furnish(C, g, cols, renderer) {
   for (const s of [-1, 1]) mk(couch, RB(0.2, 0.62, 0.9, 0.08), fab, s * 1.05, 0.38, 0);
   for (const s of [-0.5, 0.5]) mk(couch, RB(0.95, 0.14, 0.7, 0.06), fab, s, 0.57, -0.05);
   mk(couch, RB(0.42, 0.3, 0.12, 0.05), col(us ? '#c8a24a' : '#e0d6c0', 0.95), 0.62, 0.72, 0.22, 0.3, -0.2);
-  if (!us) mk(couch, RB(0.7, 0.02, 0.5, 0.01), col('#f4f0e6', 1), 0, 1.0, 0.36, 0, -0.2);   // lace on the back
   block(-1.7, -3.4, -0.75, -1.2); A.couchSeat = new T.Vector3(-1.25, 0, -2.0); A.couchLook = new T.Vector3(-5.9, 0.9, -2.1);
   // coffee table
   mk(g, RB(0.6, 0.05, 1.1, 0.01), wood, -2.6, 0.42, -2.3); for (const [dx, dz] of [[-0.25, -0.5], [0.25, -0.5], [-0.25, 0.5], [0.25, 0.5]]) mk(g, B(0.05, 0.4, 0.05), wood, -2.6 + dx, 0.2, -2.3 + dz);
@@ -325,7 +332,6 @@ export function furnish(C, g, cols, renderer) {
   // TV stand + CRT + the deck on top (as in the opening)
   const tv = new T.Group(); tv.position.set(-5.55, 0, -2.3); tv.rotation.y = Math.PI / 2; g.add(tv);
   mk(tv, RB(1.2, 0.5, 0.5, 0.02), us ? wood : col('#5a3a24', 0.5), 0, 0.25, 0);
-  if (!us) mk(tv, B(0.7, 0.004, 0.42), col('#f4f0e6', 1), 0, 0.502, 0);
   mk(tv, RB(0.78, 0.58, 0.5, 0.04), col(us ? '#5e4a36' : '#2a2a2a', 0.5), 0, 0.8, 0);
   mk(tv, B(0.6, 0.46, 0.02), col('#151413', 0.4), -0.04, 0.81, 0.25);
   const scr = mk(tv, new T.PlaneGeometry(0.52, 0.39), new T.MeshBasicMaterial({ color: 0x0a0c0b }), -0.05, 0.81, 0.262); scr.castShadow = false;
@@ -493,6 +499,13 @@ const EXTRA = {
   goldenball: [{ ...LOOKS.rudbeckia, flStyle: 'helenium', flCol: '#f4c21a', flEye: '#e0a010', flIn: 2.6 }, [70, 30]],
   strawberry: [{ ...LOOKS.anemone, leaf: 'trifoliate', leafCol: '#3f6a34', flCol: '#fbfaf6', flIn: 1.0, flN: 8, moundH: 0.4 }, [8, 14]],
   basil: [{ ...LOOKS.salvia, leaf: 'ovate', leafCol: '#4a8a3a', flCol: '#f2f0ea', flIn: [0.8, 3] }, [16, 14]],
+  bluebonnet: [{ ...LOOKS.lupinus, flCol: '#2a46c8', leafCol: '#5a7a48', flIn: [4, 10] }, [14, 12]],               // the state flower
+  paintbrush: [{ ...LOOKS.liatris, flCol: '#e8502a', leafCol: '#6a7a4a', leaf: 'lance', leafIn: [0.8, 3] }, [14, 9]],
+  mexhat: [{ ...LOOKS.rudbeckia, flStyle: 'gaillardia', flCol: '#b8281a', flCol2: '#f2c22a', flEye: '#3a2a12', flIn: 2.2, leaf: 'fern', leafCol: '#6a8458' }, [24, 14]],
+  lantana: [{ ...LOOKS.hydrangea, flStyle: 'agastache', flCol: '#f0902a', flIn: [1.6, 2.4], flN: 50, leaf: 'serrate', leafCol: '#3f6a34' }, [30, 36]],
+  salviaG: [{ ...LOOKS.salvia, flCol: '#d82a3a', leafCol: '#5a7a4a' }, [26, 26]],                                      // autumn sage
+  okra: [{ ...LOOKS.hibiscus, flCol: '#f4ecb8', flEye: '#7a1a2a', leafCol: '#4a7a3a' }, [50, 24]],
+  pepper: [{ ...LOOKS.salvia, flN: 12, flCol: '#f2f0ea', leaf: 'ovate', leafCol: '#2f5a26' }, [20, 16]],
   calendula: [{ ...LOOKS.coreopsis, flStyle: 'helenium', flCol: '#f08a1a', flEye: '#c86a10', flIn: 2.0, flN: 40 }, [16, 14]],
 };
 for (const [k, [L, S]] of Object.entries(EXTRA)) { LOOKS[k] = L; SIZES[k] = S; }
@@ -528,40 +541,40 @@ export function buildYard(C, renderer, colliders, low = false) {
   const row = (B_, k, n, along = 'x', sc = 1) => { for (let i = 0; i < n; i++) { const t = (i + 0.5) / n; plants.push({ k, x: along === 'x' ? B_.x - B_.w / 2 + t * B_.w : B_.x, z: along === 'x' ? B_.z : B_.z - B_.d / 2 + t * B_.d, s: sc * (0.85 + r() * 0.25), seed: Math.floor(r() * 1e6), y: B_.y }); } };
   const tomatoRow = (x0, z, n, dx, y) => { for (let k = 0; k < n; k++) A.tomatoes.push({ x: x0 + k * dx, z, y }); };
   const usMix = Yd.mix || ['echinacea', 'rudbeckia', 'nepeta', 'hemerocallis', 'leucanthemum', 'phloxJ', 'salvia', 'coreopsis', 'monardaF'];
-  const ruMix = Yd.mix || ['peony', 'phloxR', 'phloxJ', 'lupinus', 'delphinium', 'leucanthemum', 'aquilegia', 'calendula'];
+  const ruMix = Yd.mix || ['gaillardia', 'bluebonnet', 'echinacea', 'rudbeckia', 'salviaG', 'lantana', 'mexhat', 'paintbrush'];   // Texas
   const L = Yd.layout, xtrees = [];
   if (L === 'cottage') {
     const border = bed(0, 20.6, 22, 2.2, false); scatter(border, us ? usMix : ruMix, 46);
-    const side = bed(-10.6, 13, 2.2, 10, false); scatter(side, us ? ['roseKO', 'hydrangea', 'nepeta', 'hemerocallis', 'echinacea'] : ['lilac', 'peony', 'lupinus', 'phloxR'], 14);
-    for (const [x, z] of [[-10.2, 19.6], [10.2, 19.6]]) plants.push({ k: us ? 'hydrangea' : 'lilac', x, z, s: 1.05, seed: Math.floor(r() * 1e6), y: 0.03 });
-    const veg = bed(4.8, 12.8, 4.2, 1.6, true); row({ ...veg, z: veg.z + 0.35 }, us ? 'basil' : 'dill', 6, 'x', 0.9); tomatoRow(veg.x - 1.4, veg.z - 0.3, 4, 0.93, veg.y);
+    const side = bed(-10.6, 13, 2.2, 10, false); scatter(side, us ? ['roseKO', 'hydrangea', 'nepeta', 'hemerocallis', 'echinacea'] : ['roseKO', 'lantana', 'salviaG', 'perovskia'], 14);
+    for (const [x, z] of [[-10.2, 19.6], [10.2, 19.6]]) plants.push({ k: us ? 'hydrangea' : 'lantana', x, z, s: 1.05, seed: Math.floor(r() * 1e6), y: 0.03 });
+    const veg = bed(4.8, 12.8, 4.2, 1.6, true); row({ ...veg, z: veg.z + 0.35 }, us ? 'basil' : 'pepper', 6, 'x', 0.9); tomatoRow(veg.x - 1.4, veg.z - 0.3, 4, 0.93, veg.y);
   } else if (L === 'small') {
     const border = bed(0, 21.0, 22, 1.4, false); scatter(border, us ? ['hemerocallis', 'rudbeckia', 'echinacea', 'hydrangea', 'nepeta'] : ruMix, 26);
-    const veg = bed(3.5, 9.6, 3.6, 1.2, true); tomatoRow(veg.x - 1.2, veg.z, 4, 0.8, veg.y); row({ ...veg, z: veg.z + 0.35 }, 'basil', 5, 'x', 0.8);
-    const side = bed(-10.8, 14, 1.6, 8, false); scatter(side, us ? ['hydrangea', 'roseKO', 'hemerocallis'] : ['lilac', 'peony'], 8);
+    const veg = bed(3.5, 9.6, 3.6, 1.2, true); tomatoRow(veg.x - 1.2, veg.z, 4, 0.8, veg.y); row({ ...veg, z: veg.z + 0.35 }, us ? 'basil' : 'pepper', 5, 'x', 0.8);
+    const side = bed(-10.8, 14, 1.6, 8, false); scatter(side, us ? ['hydrangea', 'roseKO', 'hemerocallis'] : ['lantana', 'roseKO', 'salviaG'], 8);
     for (const [x, z, k] of [[-1.0, 6.0, 'geranium'], [-0.2, 6.4, 'coreopsis'], [0.6, 6.1, 'salvia']]) { mk(g, CY(0.22, 0.16, 0.34, 16), col('#b8643a', 0.85), x, 0.17, z); plants.push({ k, x, z, s: 0.55, seed: Math.floor(r() * 1e6), y: 0.33 }); }
   } else if (L === 'farm' || L === 'village') {
     const veg = bed(-6.5, 15.5, 8, 9, false); A.potatoes = veg;
-    for (let rw = 0; rw < 6; rw++) row({ ...veg, z: veg.z - 3.8 + rw * 1.2, d: 0.5 }, rw < 4 ? 'potato' : (us ? 'basil' : 'dill'), 9, 'x', 0.9);
+    for (let rw = 0; rw < 6; rw++) row({ ...veg, z: veg.z - 3.8 + rw * 1.2, d: 0.5 }, rw < 4 ? (us ? 'potato' : (rw < 2 ? 'okra' : 'pepper')) : (us ? 'basil' : 'pepper'), 9, 'x', 0.9);
     tomatoRow(-1.2, 12, 4, 0, 0.03); for (let k = 0; k < 4; k++) A.tomatoes[A.tomatoes.length - 4 + k].z = 11 + k * 1.1;
     const tb = bed(-0.8, 12.6, 1.2, 5, false);
     const fb = bed(3, 6.6, 6, 1.4, false); scatter(fb, us ? usMix : ruMix, 20);
-    const sb = bed(4.5, 13, 3.6, 1.2, true); row({ ...sb, z: sb.z - 0.25 }, 'strawberry', 8, 'x'); row({ ...sb, z: sb.z + 0.3 }, 'strawberry', 8, 'x');
-    const fen = bed(2, 21.2, 19, 1.0, false); scatter(fen, us ? ['solidago', 'achillea', 'leucanthemum', 'asclepias'] : ['fireweed', 'fireweed', 'solidago', 'achillea', 'alchemilla'], 26, 1.05);
+    const sb = bed(4.5, 13, 3.6, 1.2, true); row({ ...sb, z: sb.z - 0.25 }, us ? 'strawberry' : 'pepper', 8, 'x'); row({ ...sb, z: sb.z + 0.3 }, us ? 'strawberry' : 'pepper', 8, 'x');
+    const fen = bed(2, 21.2, 19, 1.0, false); scatter(fen, us ? ['solidago', 'achillea', 'leucanthemum', 'asclepias'] : ['gaillardia', 'bluebonnet', 'schizachyrium', 'mexhat', 'asclepias', 'paintbrush'], 26, 1.05);
   } else if (L === 'dunes' || L === 'gulf') {
-    const d1 = bed(-6, 20.6, 11, 2.0, false); scatter(d1, us ? ['roseKO', 'calamagrostis', 'panicum', 'achillea'] : ['lupinus', 'leucanthemum', 'roseKO', 'achillea', 'fireweed'], 22);
-    const d2 = bed(6, 20.6, 10, 2.0, false); scatter(d2, us ? ['roseKO', 'hydrangea', 'calamagrostis', 'hemerocallis'] : (Yd.mix || ['lupinus', 'leucanthemum', 'achillea']), 20);
-    const veg = bed(4.5, 11, 4, 1.4, true); tomatoRow(veg.x - 1.3, veg.z - 0.25, 4, 0.86, veg.y); if (!us) { row({ ...veg, z: veg.z + 0.35 }, 'strawberry', 9, 'x'); }
-    const side = bed(-10.6, 12, 1.8, 8, false); scatter(side, us ? ['roseKO', 'calamagrostis'] : ['lupinus', 'roseKO'], 8);
+    const d1 = bed(-6, 20.6, 11, 2.0, false); scatter(d1, us ? ['roseKO', 'calamagrostis', 'panicum', 'achillea'] : ['gaillardia', 'schizachyrium', 'lantana', 'achillea'], 22);
+    const d2 = bed(6, 20.6, 10, 2.0, false); scatter(d2, us ? ['roseKO', 'hydrangea', 'calamagrostis', 'hemerocallis'] : (Yd.mix || ['gaillardia', 'lantana', 'hibiscus']), 20);
+    const veg = bed(4.5, 11, 4, 1.4, true); tomatoRow(veg.x - 1.3, veg.z - 0.25, 4, 0.86, veg.y); if (!us) { row({ ...veg, z: veg.z + 0.35 }, 'pepper', 9, 'x'); }
+    const side = bed(-10.6, 12, 1.8, 8, false); scatter(side, us ? ['roseKO', 'calamagrostis'] : ['lantana', 'hibiscus'], 8);
   } else if (L === 'orchard') {
-    for (let i = 0; i < 3; i++) for (let k = 0; k < 2; k++) { const x = -7 + i * 4.3, z = 12.5 + k * 5; xtrees.push(['apple', x, z, 0.95 + r() * 0.2]); take(x, z, 2.6, 2.6); }
-    const sb = bed(5.5, 8.6, 4.5, 1.2, true); row({ ...sb, z: sb.z - 0.25 }, 'strawberry', 9, 'x'); row({ ...sb, z: sb.z + 0.3 }, 'strawberry', 9, 'x');
+    for (let i = 0; i < 3; i++) for (let k = 0; k < 2; k++) { const x = -7 + i * 4.3, z = 12.5 + k * 5; xtrees.push([Yd.fruit || 'apple', x, z, 0.95 + r() * 0.2]); take(x, z, 2.6, 2.6); }
+    const sb = bed(5.5, 8.6, 4.5, 1.2, true); row({ ...sb, z: sb.z - 0.25 }, us ? 'strawberry' : 'pepper', 9, 'x'); row({ ...sb, z: sb.z + 0.3 }, us ? 'strawberry' : 'basil', 9, 'x');
     const fb = bed(1.0, 6.3, 6, 1.2, false); scatter(fb, us ? usMix : ruMix, 18);
     const tb = bed(10.4, 15, 1.4, 6, false); tomatoRow(10.4, 12.8, 4, 0, 0.03); for (let k = 0; k < 4; k++) A.tomatoes[k].z = 12.8 + k * 1.4;
   } else if (L === 'lake') {
-    const b1 = bed(-6, 20.8, 9, 1.6, false); scatter(b1, us ? ['leucanthemum', 'rudbeckia', 'achillea', 'asclepias'] : (Yd.mix || ['lupinus', 'leucanthemum', 'fireweed']), 18);
-    const b2 = bed(6, 20.8, 9, 1.6, false); scatter(b2, us ? ['echinacea', 'nepeta', 'hemerocallis'] : ['lupinus', 'alchemilla', 'achillea'], 16);
-    const veg = bed(4.0, 10.5, 4, 1.4, true); tomatoRow(veg.x - 1.3, veg.z - 0.25, 4, 0.86, veg.y); row({ ...veg, z: veg.z + 0.35 }, us ? 'basil' : 'strawberry', 7, 'x');
+    const b1 = bed(-6, 20.8, 9, 1.6, false); scatter(b1, us ? ['leucanthemum', 'rudbeckia', 'achillea', 'asclepias'] : (Yd.mix || ['gaillardia', 'bluebonnet', 'mexhat']), 18);
+    const b2 = bed(6, 20.8, 9, 1.6, false); scatter(b2, us ? ['echinacea', 'nepeta', 'hemerocallis'] : ['salviaG', 'lantana', 'echinacea'], 16);
+    const veg = bed(4.0, 10.5, 4, 1.4, true); tomatoRow(veg.x - 1.3, veg.z - 0.25, 4, 0.86, veg.y); row({ ...veg, z: veg.z + 0.35 }, us ? 'basil' : 'pepper', 7, 'x');
   } else if (L === 'courtyard') {
     const p1 = bed(-1, 6.0, 8, 1.4, false); scatter(p1, Yd.mix || ['peony', 'phloxR', 'calendula', 'leucanthemum', 'lilac'], 16);
     const p2 = bed(6.5, 6.0, 6, 1.4, false); scatter(p2, ['goldenball', 'peony', 'lupinus', 'calendula'], 12);
@@ -602,7 +615,7 @@ export function buildYard(C, renderer, colliders, low = false) {
   for (let k = 0; k < 4; k++) { const b = A.beds[k % A.beds.length]; const d = mk(g, new T.CircleGeometry(Math.min(0.6, b.d / 2), 24), std({ color: 0xb89a74, roughness: 1, transparent: true, opacity: 0.55, depthWrite: false }), b.x + (r() - 0.5) * Math.max(0, b.w - 1.2), b.y + 0.035, b.z + (r() - 0.5) * Math.max(0, b.d - 1.2), 0, -Math.PI / 2); d.castShadow = false; A.dry.push(d); }
   // water: a rain barrel by the house, the can beside it
   A.barrel = new T.Vector3(-0.9, 0, 4.95);
-  mk(g, CY(0.32, 0.3, 0.85, 20), us ? col('#3a4a3a', 0.6) : col('#5a6a7a', 0.4, 0.6), A.barrel.x, 0.425, A.barrel.z);
+  mk(g, CY(0.32, 0.3, 0.85, 20), us ? col('#3a4a3a', 0.6) : col('#2a4a6a', 0.5), A.barrel.x, 0.425, A.barrel.z);
   mk(g, CY(0.3, 0.3, 0.01, 20), std({ color: 0x2a3a3a, roughness: 0.05 }), A.barrel.x, 0.83, A.barrel.z);
   colliders.push([A.barrel.x - 0.35, A.barrel.z - 0.35, A.barrel.x + 0.35, A.barrel.z + 0.35]);
   const can = new T.Group(); can.position.set(A.barrel.x + 0.5, 0, A.barrel.z + 0.1); g.add(can); A.can = can; canMesh(can, us);
@@ -637,8 +650,8 @@ function fence(g, kind, colliders, r) {
   if (kind === 'none') return;
   const P = { stockade: { h: 1.8, w: 0.15, gap: 0.16, col: '#8f8778', tip: 1 }, picket: { h: 1.0, w: 0.08, gap: 0.14, col: '#f4f2ea', tip: 1 }, shtaketnik: { h: 1.45, w: 0.09, gap: 0.14, col: '#8a8472', tip: 1 },
     split: { rails: [0.45, 0.95], post: 1.1, col: '#8a7a62' }, chain: { mesh: 1.4, col: '#a8acaa' }, iron: { h: 1.3, w: 0.025, gap: 0.12, col: '#1a1a1a', tip: 0 }, wattle: { wattle: 1.1, col: '#6a5a3a' },
-    profiled: { sheet: 2.0, col: '#7a3a2a' }, low: { h: 0.6, w: 0.03, gap: 0.2, col: '#3a6a3a', tip: 0 } }[kind] || { h: 1.4, w: 0.09, gap: 0.14, col: '#8a8472', tip: 1 };
-  const m = col(P.col, 0.85, kind === 'iron' || kind === 'chain' || kind === 'profiled' ? 0.5 : 0);
+    profiled: { sheet: 2.0, col: '#7a3a2a' }, cedar: { h: 1.8, w: 0.14, gap: 0.145, col: '#9a6e4a', tip: 0 }, adobe: { sheet: 1.6, col: '#d8bc98' }, wire: { wire: [0.35, 0.6, 0.85, 1.1], post: 1.25, col: '#5a5a52' }, low: { h: 0.6, w: 0.03, gap: 0.2, col: '#3a6a3a', tip: 0 } }[kind] || { h: 1.4, w: 0.09, gap: 0.14, col: '#8a8472', tip: 1 };
+  const m = kind === 'adobe' ? std({ map: TX.stucco(P.col), roughness: 0.95 }) : col(P.col, 0.85, kind === 'iron' || kind === 'chain' || kind === 'profiled' || kind === 'wire' ? 0.5 : 0);
   const run = (x0, z0, x1, z1) => {
     const L = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(z1 - z0, x1 - x0), geos = [], cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const put = (geo, x, y, z) => { geo.rotateY(-ang); geo.translate(x, y, z); geos.push(geo); };
@@ -648,7 +661,8 @@ function fence(g, kind, colliders, r) {
     if (P.rails) { for (let i = 0; i <= Math.ceil(L / 2.4); i++) { const t = i / Math.ceil(L / 2.4); put(B(0.14, P.post, 0.14), x0 + (x1 - x0) * t, P.post / 2, z0 + (z1 - z0) * t); } for (const y of P.rails) put(B(L, 0.1, 0.08), cx, y, cz); }
     if (P.mesh) { for (let i = 0; i <= Math.ceil(L / 2.5); i++) { const t = i / Math.ceil(L / 2.5); put(CY(0.03, 0.03, P.mesh, 8), x0 + (x1 - x0) * t, P.mesh / 2, z0 + (z1 - z0) * t); } put(CY(0.02, 0.02, L, 6).rotateZ(Math.PI / 2), cx, P.mesh, cz); }
     if (P.wattle) { for (let i = 0; i <= Math.ceil(L / 0.5); i++) { const t = i / Math.ceil(L / 0.5); put(CY(0.025, 0.025, P.wattle + 0.15, 6), x0 + (x1 - x0) * t, (P.wattle + 0.15) / 2, z0 + (z1 - z0) * t); } for (let k = 0; k < 9; k++) put(B(L, 0.05, 0.05), cx, 0.15 + k * 0.11, cz); }
-    if (P.sheet) { put(B(L, P.sheet, 0.03), cx, P.sheet / 2, cz); }
+    if (P.sheet) { put(B(L, P.sheet, kind === 'adobe' ? 0.3 : 0.03), cx, P.sheet / 2, cz); }
+    if (P.wire) { const n = Math.ceil(L / 3); for (let i = 0; i <= n; i++) { const t = i / n; put(i % 4 ? B(0.04, P.post, 0.04) : CY(0.07, 0.08, P.post + 0.1, 8), x0 + (x1 - x0) * t, P.post / 2, z0 + (z1 - z0) * t); } for (const y of P.wire) put(CY(0.005, 0.005, L, 3).rotateZ(Math.PI / 2), cx, y, cz); }
     const geo = mergeGeometries(geos.map((q) => (q.index ? q.toNonIndexed() : q)).map((q) => { for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'uv'].includes(k)) q.deleteAttribute(k); if (!q.attributes.uv) q.setAttribute('uv', new T.Float32BufferAttribute(new Float32Array(q.attributes.position.count * 2), 2)); return q; }));
     mk(g, geo, m);
     if (P.mesh) { const net = mk(g, new T.PlaneGeometry(L, P.mesh), std({ map: chainTex(), transparent: true, alphaTest: 0.3, side: T.DoubleSide, roughness: 0.5, metalness: 0.5 }), cx, P.mesh / 2, cz, -ang); net.material.map.repeat.set(L / 0.6, P.mesh / 0.6); net.castShadow = false; }
@@ -662,7 +676,7 @@ function chainTex() { if (_chain) return _chain; _chain = tex(64, 64, (g) => { g
 // ------------------------------------------------------------------ yard things
 function extra(g, kind, C, colliders, A, take, free, r) {
   const us = C.c === 'us', E = C.H.ext;
-  const SZ = { shed: [3, 2.4], barn: [6, 5], banya: [3.3, 3.2], garage: [3.4, 6], greenhouse: [3.2, 4.2], beehives: [1.2, 3.6], swing: [3.2, 1.6], playground: [5, 4.5], well: [1.6, 1.6], clothesline: [5.5, 0.6], picnic: [2, 1.8], grill: [0.8, 0.8], adirondack: [2.6, 1.3], birdbath: [0.9, 0.9], bench: [1.8, 0.7], mangal: [1.1, 0.6], dock: [2, 2], boulders: [1, 1] }[kind];
+  const SZ = { shed: [3, 2.4], barn: [6, 5], banya: [3.3, 3.2], garage: [3.4, 6], greenhouse: [3.2, 4.2], beehives: [1.2, 3.6], swing: [3.2, 1.6], playground: [5, 4.5], well: [1.6, 1.6], clothesline: [5.5, 0.6], picnic: [2, 1.8], grill: [0.8, 0.8], adirondack: [2.6, 1.3], birdbath: [0.9, 0.9], bench: [1.8, 0.7], mangal: [1.1, 0.6], dock: [2, 2], boulders: [1, 1], windmill: [2.6, 2.6], trough: [2.6, 1.3], smoker: [1.9, 0.9], cactus: [2.4, 2.4] }[kind];
   if (!SZ) return;
   if (kind === 'dock') { // out on the water, past the end of the lawn
     const d = new T.Group(); d.position.set(3, 0, 26); g.add(d); const w = col('#8a7a62', 0.9);
@@ -672,7 +686,7 @@ function extra(g, kind, C, colliders, A, take, free, r) {
   }
   if (kind === 'boulders') { for (let k = 0; k < 6; k++) { const x = -10 + r() * 20, z = 6 + r() * 15; if (!free(x, z, 1.2, 1.2)) continue; const b = mk(g, new T.IcosahedronGeometry(0.4 + r() * 0.5, 1), col('#8a8884', 0.95), x, 0.1, z, r() * 6); b.scale.set(1.3, 0.7, 1); take(x, z, 1.2, 1.2); colliders.push([x - 0.5, z - 0.5, x + 0.5, z + 0.5]); } return; }
   const cands = { shed: [[9, 17.5]], barn: [[7.8, 17.5]], banya: [[9, 17.5], [9, 9.5], [-9, 17.5]], garage: [[9.8, 11]], greenhouse: [[8.5, 10.5], [8.6, 16.8], [-8.5, 10.5]], beehives: [[9.6, 10], [-10.6, 16]], swing: [[-6, 18.5], [-1.5, 16.5], [6, 17]], playground: [[3, 15.5], [-6, 16]],
-    well: [[1.5, 16.5], [-2, 17.5], [6, 16.5]], clothesline: [[-1.5, 17.2], [2, 14.8], [-6, 9.2]], picnic: [[-3, 10.2], [1, 9.5], [-6, 18]], grill: [[-0.6, 7.6], [1.2, 7.4]], adirondack: [[3.4, 9], [-7, 12.5], [0, 15]], birdbath: [[1, 15], [-2.5, 14.5], [7, 14.5]], bench: [[0.5, 8.8], [-8, 9], [6, 19]], mangal: [[-1, 9.5], [2, 9]] }[kind];
+    well: [[1.5, 16.5], [-2, 17.5], [6, 16.5]], clothesline: [[-1.5, 17.2], [2, 14.8], [-6, 9.2]], picnic: [[-3, 10.2], [1, 9.5], [-6, 18]], grill: [[-0.6, 7.6], [1.2, 7.4]], adirondack: [[3.4, 9], [-7, 12.5], [0, 15]], birdbath: [[1, 15], [-2.5, 14.5], [7, 14.5]], bench: [[0.5, 8.8], [-8, 9], [6, 19]], mangal: [[-1, 9.5], [2, 9]], windmill: [[8.6, 18.2], [-8.4, 18.4], [8.4, 10]], trough: [[-6, 17.2], [5, 18.6], [-2, 19.4]], smoker: [[1.4, 7.6], [-0.6, 7.8], [3.2, 8]], cactus: [[7.4, 8.6], [-8.4, 10.4], [1, 18.6]] }[kind];
   const at = cands.find(([x, z]) => free(x, z, SZ[0], SZ[1])) || cands[0];
   const [x, z] = at; take(x, z, SZ[0], SZ[1]);
   const o = new T.Group(); o.position.set(x, 0, z); g.add(o);
@@ -705,22 +719,63 @@ function extra(g, kind, C, colliders, A, take, free, r) {
   if (kind === 'adirondack') for (const [dx, ry] of [[-0.7, -0.4], [0.7, 0.3]]) { const a = new T.Group(); a.position.set(dx, 0, 0); a.rotation.y = ry; o.add(a); const ac = col(us ? '#e8e4d8' : '#3a6a4a', 0.7); mk(a, B(0.7, 0.04, 0.6), ac, 0, 0.36, 0, 0, -0.1); mk(a, B(0.7, 0.8, 0.04), ac, 0, 0.75, 0.32, 0, 0.35); for (const s of [-1, 1]) mk(a, B(0.12, 0.04, 0.8), ac, s * 0.4, 0.6, 0); }
   if (kind === 'birdbath') { mk(o, CY(0.08, 0.12, 0.8, 12), col('#a8a49a', 0.9), 0, 0.4, 0); mk(o, CY(0.36, 0.2, 0.1, 24), col('#a8a49a', 0.9), 0, 0.85, 0); mk(o, CY(0.32, 0.32, 0.01, 24), std({ color: 0x8aa8b8, roughness: 0.05 }), 0, 0.9, 0); }
   if (kind === 'bench') { mk(o, B(1.6, 0.05, 0.36), col(us ? '#8a6a4a' : '#5a7a5a', 0.9), 0, 0.45, 0); mk(o, B(1.6, 0.3, 0.04), col(us ? '#8a6a4a' : '#5a7a5a', 0.9), 0, 0.7, 0.18, 0, -0.15); for (const s of [-0.7, 0.7]) mk(o, B(0.06, 0.45, 0.3), dark, s, 0.22, 0); }
+  if (kind === 'windmill') { // a steel farm windmill over a stock tank; the wheel turns in the breeze
+    const st = col('#9a9c98', 0.45, 0.7), Hh = 8.5;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const leg = mk(o, CY(0.04, 0.05, Hh + 0.2, 6), st, sx * 0.62, Hh / 2, sz * 0.62); leg.rotation.set(-sz * 0.075, 0, sx * 0.075); }
+    for (let k = 1; k < 6; k++) { const y = k * Hh / 6, w = 1.24 * (1 - y / Hh) + 0.3; for (const [a, b, ry] of [[0, w / 2, 0], [0, -w / 2, 0], [w / 2, 0, Math.PI / 2], [-w / 2, 0, Math.PI / 2]]) mk(o, B(w, 0.04, 0.04), st, a, y, b, ry); }
+    mk(o, B(0.7, 0.05, 0.7), col('#6a5a4a', 0.9), 0, Hh, 0);
+    const head = new T.Group(); head.position.set(0, Hh + 0.35, 0); o.add(head); mk(head, B(0.3, 0.3, 0.6), st, 0, 0, 0);
+    const wheel = new T.Group(); wheel.position.set(0, 0, -0.4); head.add(wheel);
+    const bm = col('#b8bab4', 0.4, 0.75); for (let k = 0; k < 18; k++) { const a = k / 18 * TAU, bl = mk(wheel, B(0.2, 0.9, 0.01), bm, Math.cos(a) * 0.85, Math.sin(a) * 0.85, 0, 0.35, 0, a - Math.PI / 2); bl.castShadow = true; }
+    mk(wheel, new T.TorusGeometry(1.25, 0.015, 4, 36), bm); mk(wheel, new T.TorusGeometry(0.42, 0.015, 4, 24), bm); mk(wheel, CY(0.1, 0.1, 0.15, 12), st, 0, 0, 0, 0, Math.PI / 2);
+    mk(head, CY(0.02, 0.02, 1.6, 6), st, 0, 0, 0.9, 0, Math.PI / 2); const tail = mk(head, B(0.02, 0.7, 1.0), col('#d8d4c8', 0.5, 0.4), 0, 0.1, 1.8);
+    mk(o, CY(0.035, 0.035, Hh, 6), st, 0, Hh / 2, 0);
+    mk(o, CY(1.0, 1.0, 0.6, 28, true), col('#a8aca8', 0.35, 0.8), 1.6, 0.3, 0.6).material.side = T.DoubleSide; mk(o, CY(0.97, 0.97, 0.02, 28), std({ color: 0x3a4a44, roughness: 0.05 }), 1.6, 0.5, 0.6);
+    (g.userData.anim || (g.userData.anim = [])).push((t, gust) => { wheel.rotation.z -= 0.016 * (1.5 + gust * 4); head.rotation.y = Math.sin(t * 0.05) * 0.25; });
+    block(1.5, 1.5); colliders.push([x + 0.6, z - 0.4, x + 2.6, z + 1.6]); }
+  if (kind === 'trough') { const gm = col('#a8aca8', 0.35, 0.8); const tk = mk(o, CY(0.9, 0.9, 0.62, 28, true), gm, 0, 0.31, 0); tk.material.side = T.DoubleSide; tk.scale.set(1.35, 1, 0.65); const wt = mk(o, CY(0.88, 0.88, 0.02, 28), std({ color: 0x3a5a54, roughness: 0.04 }), 0, 0.52, 0); wt.scale.set(1.35, 1, 0.65); block(2.5, 1.2); }
+  if (kind === 'smoker') { // an offset barrel smoker on legs, a thread of smoke
+    const bk = col('#1e1e1e', 0.6, 0.5); mk(o, CY(0.32, 0.32, 1.2, 20), bk, 0, 0.85, 0, 0, 0, Math.PI / 2); mk(o, B(0.5, 0.5, 0.5), bk, 0.82, 0.72, 0); mk(o, CY(0.07, 0.07, 0.8, 10), bk, -0.55, 1.45, 0);
+    for (const sx of [-0.5, 0.5]) for (const sz of [-0.22, 0.22]) mk(o, CY(0.025, 0.025, 0.7, 6), bk, sx, 0.35, sz); mk(o, CY(0.2, 0.2, 0.08, 16), bk, -0.8, 0.12, 0.5); block(1.8, 0.8);
+    const puffs = []; const pm = new T.MeshBasicMaterial({ color: 0xcfcac2, transparent: true, opacity: 0.25, depthWrite: false });
+    for (let k = 0; k < 10; k++) { const p = mk(o, new T.SphereGeometry(0.12, 8, 6), pm.clone(), -0.55, 1.9, 0); p.castShadow = false; p.receiveShadow = false; puffs.push(p); }
+    (g.userData.anim || (g.userData.anim = [])).push((t) => { puffs.forEach((p, k) => { const u = (t * 0.18 + k / puffs.length) % 1; p.position.set(-0.55 + u * 0.9 + Math.sin(t + k) * 0.05, 1.85 + u * 2.4, Math.sin(k * 2.1 + t * 0.4) * 0.2 * u); p.scale.setScalar(0.6 + u * 3); p.material.opacity = 0.22 * (1 - u); }); }); }
+  if (kind === 'cactus') { // prickly pear, an agave and a yucca in a bed of gravel
+    const gv = mk(o, new T.CircleGeometry(1.2, 24), col('#c8b898', 1), 0, 0.012, 0, 0, -Math.PI / 2); gv.castShadow = false;
+    const pad = col('#5a7a3a', 0.6), pear = (px, pz, n) => { const grow = (p, d) => { if (d > 2) return; for (let k = 0; k < (d ? 2 : 3); k++) { const q = mk(o, new T.SphereGeometry(0.16, 12, 8), pad, 0, 0, 0); q.scale.set(1, 1.25, 0.28); const a = (k - (d ? 0.5 : 1)) * 0.7 + (r() - 0.5) * 0.4; q.position.set(p.x + Math.sin(a) * 0.18, p.y + 0.3, p.z + (r() - 0.5) * 0.08); q.rotation.set(0, r() * 3, -a); if (r() < 0.4) mk(o, new T.SphereGeometry(0.035, 8, 6), col('#a8203a', 0.5), q.position.x, q.position.y + 0.2, q.position.z); grow(q.position.clone(), d + 1); } }; grow(new T.Vector3(px, -0.05, pz), 0); };
+    pear(-0.4, 0.2);
+    const ag = new T.Group(); ag.position.set(0.5, 0, -0.3); o.add(ag); const am = col('#7a9a8a', 0.55); for (let k = 0; k < 16; k++) { const a = k / 16 * TAU + r() * 0.2, lf = mk(ag, new T.ConeGeometry(0.07, 0.75, 4), am, Math.cos(a) * 0.18, 0.32, Math.sin(a) * 0.18); lf.rotation.set(Math.sin(a) * (0.6 + (k % 3) * 0.25), 0, -Math.cos(a) * (0.6 + (k % 3) * 0.25)); lf.scale.set(1, 1, 0.35); }
+    const yu = new T.Group(); yu.position.set(0.2, 0, 0.75); o.add(yu); mk(yu, CY(0.06, 0.08, 0.5, 8), col('#6a5a44', 0.9), 0, 0.25, 0); for (let k = 0; k < 26; k++) { const a = r() * TAU, tilt = 0.2 + r() * 0.9, lf = mk(yu, new T.ConeGeometry(0.02, 0.6, 3), col('#4a6a4a', 0.6), Math.cos(a) * 0.05, 0.55, Math.sin(a) * 0.05); lf.rotation.set(Math.sin(a) * tilt, 0, -Math.cos(a) * tilt); }
+    block(1.6, 1.6); }
   if (kind === 'mangal') { mk(o, B(0.9, 0.18, 0.3), dark, 0, 0.7, 0); for (const sx of [-0.4, 0.4]) for (const sz of [-0.12, 0.12]) mk(o, CY(0.012, 0.012, 0.62, 6), dark, sx, 0.31, sz); for (let k = 0; k < 5; k++) mk(o, CY(0.004, 0.004, 0.6, 4).rotateX(Math.PI / 2), col('#c8c8c8', 0.3, 0.9), -0.3 + k * 0.15, 0.8, 0); }
 }
 
 // ------------------------------------------------------------------ beyond the fence
 function backdrop(g, Yd, C, r, DET, low) {
-  const kinds = Yd.backTrees || (C.c === 'us' ? ['pine', 'maple', 'oak'] : ['birch', 'birch', 'pine']);
+  const kinds = Yd.backTrees || (C.c === 'us' ? ['pine', 'maple', 'oak'] : ['liveoak', 'mesquite', 'pecan']);
   const treeLine = (n, zMin, zMax, xs) => { for (let k = 0; k < n; k++) { const side = k % 3, u = r(), x = side === 0 ? -34 + u * 68 : (side === 1 ? -16 - r() * 16 : 16 + r() * 16), z = side === 0 ? zMin + r() * (zMax - zMin) : -10 + u * 40; const kind = kinds[Math.floor(r() * kinds.length)]; const t = tree(kind, 1.1 + r() * 0.8, r, DET * 0.6); t.position.set(x, 0, z); g.add(t); } };
   const B_ = Yd.back;
   if (B_ === 'trees') treeLine(low ? 26 : 46, 25, 43);
   if (B_ === 'houses') { for (const [x, z, w] of [[-20, 6, 8], [21, 10, 9], [3, 31, 10], [-12, 32, 8], [17, 31, 8]]) { const n = new T.Group(); n.position.set(x, 0, z); g.add(n); mk(n, B(w, 5.5, 6), std({ map: C.ext, roughness: 0.95 }), 0, 2.75, 0); for (const s of [-1, 1]) mk(n, B(w + 0.4, 0.1, 3.8), std({ map: C.roof, roughness: 0.8 }), 0, 6.5, s * 1.6, 0, s * 0.6); for (const wx of [-w / 4, w / 4]) for (const wy of [1.6, 4.0]) mk(n, B(1, 1.2, 0.05), col('#2e3a44', 0.2), wx, wy, z > 20 ? -3.03 : 3.03); } treeLine(low ? 12 : 20, 36, 46); }
-  if (B_ === 'field') { const f = mk(g, new T.PlaneGeometry(200, 60), col('#b8a050', 1), 0, 0.02, 54, 0, -Math.PI / 2); f.castShadow = false; for (let k = 0; k < 12; k++) { const t = tree(kinds[k % kinds.length], 1.4 + r(), r, DET * 0.5); t.position.set(-80 + k * 15 + r() * 6, 0, 80 + r() * 8); g.add(t); } for (let k = 0; k < 6; k++) mk(g, CY(0.6, 0.6, 1.2, 16).rotateZ(Math.PI / 2), col('#c8b060', 1), -30 + r() * 60, 0.6, 32 + r() * 18); treeLine(low ? 10 : 16, 24, 28); }
+  if (B_ === 'field') { const f = mk(g, new T.PlaneGeometry(200, 60), col(Yd.field || '#b8a050', 1), 0, 0.02, 54, 0, -Math.PI / 2); f.castShadow = false; for (let k = 0; k < 12; k++) { const t = tree(kinds[k % kinds.length], 1.4 + r(), r, DET * 0.5); t.position.set(-80 + k * 15 + r() * 6, 0, 80 + r() * 8); g.add(t); } for (let k = 0; k < 6; k++) mk(g, CY(0.6, 0.6, 1.2, 16).rotateZ(Math.PI / 2), col('#c8b060', 1), -30 + r() * 60, 0.6, 32 + r() * 18); treeLine(low ? 10 : 16, 24, 28); }
   if (B_ === 'sea' || B_ === 'lake') {
-    const water = mk(g, new T.PlaneGeometry(600, 300), std({ color: B_ === 'sea' ? 0x3a6a8a : 0x3a5a5a, roughness: 0.08, metalness: 0.2 }), 0, -0.05, 26 + 150, 0, -Math.PI / 2); water.castShadow = false; water.receiveShadow = false;
+    const water = g.userData.water = mk(g, new T.PlaneGeometry(600, 300, 1, 1), std({ color: Yd.sea || (B_ === 'sea' ? 0x3a6a8a : 0x3a5a5a), roughness: 0.08, metalness: 0.2 }), 0, -0.05, 26 + 150, 0, -Math.PI / 2); water.castShadow = false; water.receiveShadow = false;
     const shore = mk(g, new T.PlaneGeometry(600, 4), std({ map: TX.sand(), roughness: 1 }), 0, 0.005, 24, 0, -Math.PI / 2); shore.castShadow = false;
     if (B_ === 'lake') for (let k = 0; k < 30; k++) { const t = tree(kinds[k % kinds.length], 1.6 + r(), r, DET * 0.45); t.position.set(-120 + k * 8 + r() * 4, 0, 120 + r() * 10); g.add(t); }
     treeLine(low ? 10 : 16, -2, 0);
+  }
+  if (B_ === 'plains') { // flat to the horizon: dry grass, mesquite, a line of power poles — and in oil country, pumpjacks nodding
+    const f = mk(g, new T.PlaneGeometry(400, 200), std({ map: TX.dirt(), color: new T.Color('#e8d4a8').multiplyScalar(1.35), roughness: 1 }), 0, 0.015, 122, 0, -Math.PI / 2); f.castShadow = false; f.material.map.repeat.set(160, 80);
+    for (let k = 0; k < (low ? 14 : 26); k++) { const t = tree(kinds[k % kinds.length], 0.8 + r() * 0.7, r, DET * 0.45); t.position.set(-90 + r() * 180, 0, 30 + r() * 70); g.add(t); }
+    for (let k = 0; k < 10; k++) { const x = -110 + k * 25; mk(g, CY(0.12, 0.15, 9, 8), col('#6a5a4a', 0.9), x, 4.5, 60); mk(g, B(2.4, 0.12, 0.12), col('#6a5a4a', 0.9), x, 8.5, 60); }
+    mk(g, CY(0.01, 0.01, 260, 3).rotateZ(Math.PI / 2), col('#2a2a2a', 0.6), 0, 8.4, 60);
+    if (Yd.pumps) for (const [x, z, ry] of [[-26, 46, 0.4], [18, 58, -0.3], [44, 80, 0.9]]) {
+      const pj = new T.Group(); pj.position.set(x, 0, z); pj.rotation.y = ry; g.add(pj); const pm = col('#4a4a48', 0.5, 0.6), hm = col('#c8a030', 0.5, 0.4);
+      mk(pj, B(5, 0.4, 1.4), col('#8a8a84', 0.9), 0, 0.2, 0); for (const sz of [-0.4, 0.4]) mk(pj, B(0.15, 3.4, 0.15), pm, 0, 1.9, sz, 0, 0, 0.12);
+      const beam = new T.Group(); beam.position.set(0, 3.6, 0); pj.add(beam); mk(beam, B(4.8, 0.3, 0.3), pm, 0, 0, 0); const horse = mk(beam, B(0.5, 1.4, 0.5), hm, -2.5, -0.4, 0);
+      mk(pj, CY(0.04, 0.04, 2.6, 6), pm, -2.6, 1.6, 0); mk(pj, B(0.6, 0.6, 1.2), pm, 1.8, 0.8, 0);
+      const ph = r() * TAU; (g.userData.anim || (g.userData.anim = [])).push((t) => { beam.rotation.z = Math.sin(t * 0.9 + ph) * 0.28; });
+    }
   }
   if (B_ === 'blocks') { // the other blocks around the courtyard
     const fac = std({ map: TX.facade(C.H.ext.color, C.H.ext.kind === 'stucco' ? 'stucco' : 'panel', C.H.ext.stripe), roughness: 0.9 });
@@ -749,24 +804,40 @@ function canMesh(can, us) {
 const leafCache = {};
 function leafCard(kind) {
   if (leafCache[kind]) return leafCache[kind];
-  const pal = { birch: ['#6a9a3a', '#88b048', '#4a7a2a'], maple: ['#4a7a2a', '#3a6a24', '#6a9a3a'], oak: ['#3f6a2a', '#5a7a2e', '#2f5a24'], apple: ['#4a7a34', '#5a8a3a', '#3a6a2a'], pine: ['#2a4a2a', '#34543a', '#1e3a24'] }[kind];
+  const pal = { birch: ['#6a9a3a', '#88b048', '#4a7a2a'], maple: ['#4a7a2a', '#3a6a24', '#6a9a3a'], oak: ['#3f6a2a', '#5a7a2e', '#2f5a24'], apple: ['#4a7a34', '#5a8a3a', '#3a6a2a'], pine: ['#2a4a2a', '#34543a', '#1e3a24'], liveoak: ['#2f4a24', '#3a5a2a', '#46622e'], mesquite: ['#7a9a4a', '#8aa85a', '#6a8a3a'], pecan: ['#4a7a2a', '#5a8a34', '#3a6a24'], crape: ['#3f6a2a', '#d85a9a', '#e47ab0'], peach: ['#4a7a34', '#5a8a3a', '#3a6a2a'] }[kind];
   const t = crossTex(128, 128, (g, w, h) => {
     const rr = rngOf(kind.length * 17);
     for (let k = 0; k < (kind === 'pine' ? 120 : 34); k++) { g.fillStyle = pal[Math.floor(rr() * 3)]; g.save(); g.translate(16 + rr() * 96, 16 + rr() * 96); g.rotate(rr() * TAU);
-      if (kind === 'pine') g.fillRect(-1, -14, 2, 28); else { g.beginPath(); g.ellipse(0, 0, kind === 'birch' ? 6 : 9, kind === 'birch' ? 9 : 13, 0, 0, TAU); g.fill(); } g.restore(); }
+      if (kind === 'pine') g.fillRect(-1, -14, 2, 28); else { g.beginPath(); const [ea, eb] = kind === 'birch' ? [6, 9] : kind === 'mesquite' ? [3, 8] : kind === 'liveoak' ? [6, 8] : [9, 13]; g.ellipse(0, 0, ea, eb, 0, 0, TAU); g.fill(); } g.restore(); }
   });
   return (leafCache[kind] = sway(std({ map: t, alphaTest: 0.45, side: T.DoubleSide, roughness: 0.85 }), 0.35));
 }
+function palm(s, r) { // a Texas sabal / Washingtonia: a tall rough trunk and a head of fronds that sway
+  const g = new T.Group(), H = 6.5 * s, tm = std({ map: TX.bark(), roughness: 0.95 });
+  const lean = (r() - 0.5) * 0.3; for (let k = 0; k < 6; k++) mk(g, CY(0.19 * s, 0.22 * s, H / 6 + 0.05, 10), tm, Math.sin(lean) * k * H / 6 * 0.3, H / 12 + k * H / 6, 0, 0, 0, -lean * 0.3 * (k / 6));
+  const top = new T.Vector3(Math.sin(lean) * H * 0.3, H, 0);
+  const ft = crossTex(64, 256, (c, w, h) => { c.strokeStyle = '#5a6a2a'; c.lineWidth = 3; c.beginPath(); c.moveTo(w / 2, h); c.lineTo(w / 2, 0); c.stroke(); for (let y = 8; y < h; y += 6) { const L = (w / 2 - 2) * Math.sin(Math.PI * y / h); c.strokeStyle = y % 12 ? '#4a6e2a' : '#5a7a34'; c.lineWidth = 3; c.beginPath(); c.moveTo(w / 2, y); c.lineTo(w / 2 - L, y - 10); c.moveTo(w / 2, y); c.lineTo(w / 2 + L, y - 10); c.stroke(); } });
+  const fm = sway(std({ map: ft, alphaTest: 0.4, side: T.DoubleSide, roughness: 0.8 }), 0.6);
+  for (let k = 0; k < 14; k++) { const a = k / 14 * TAU + r() * 0.2, geo = new T.PlaneGeometry(0.8 * s, 3.2 * s, 1, 8); const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const v = p.getY(i) / (3.2 * s) + 0.5; p.setZ(i, -v * v * 1.3 * s); } geo.translate(0, 1.6 * s, 0); geo.computeVertexNormals();
+    const f = new T.Mesh(geo, fm); f.position.copy(top); f.rotation.set(-0.6 - (k % 3) * 0.35, a, 0, 'YXZ'); f.castShadow = true; g.add(f); }
+  mk(g, new T.SphereGeometry(0.35 * s, 10, 8), col('#6a5a3a', 0.9), top.x, top.y - 0.15, top.z);
+  return g;
+}
 function tree(kind, s, r, det = 1) {
+  if (kind === 'palm') return palm(s, r);
   const g = new T.Group();
-  const trunkH = (kind === 'pine' ? 9 : kind === 'birch' ? 7 : kind === 'apple' ? 1.6 : 3.2) * s, trunkR = (kind === 'apple' ? 0.13 : kind === 'birch' ? 0.12 : 0.22) * s;
+  const trunkH = ({ pine: 9, birch: 7, apple: 1.6, peach: 1.4, liveoak: 2.0, mesquite: 1.3, crape: 1.8, pecan: 5.0 }[kind] || 3.2) * s, trunkR = ({ apple: 0.13, peach: 0.11, birch: 0.12, liveoak: 0.38, mesquite: 0.14, crape: 0.08, pecan: 0.3 }[kind] || 0.22) * s;
   const tm = std({ map: kind === 'birch' ? TX.birch() : TX.bark(), roughness: 0.95 });
   mk(g, CY(trunkR * 0.6, trunkR, trunkH, 10), tm, 0, trunkH / 2, 0);
   const crowns = kind === 'pine' ? [[0, trunkH * 0.65, 0, 1.6 * s, 4.5 * s], [0, trunkH * 0.92, 0, 1.1 * s, 2.5 * s]]
     : kind === 'birch' ? [[0, trunkH * 0.85, 0, 1.9 * s, 3.6 * s], [0.6 * s, trunkH * 0.65, 0.3 * s, 1.4 * s, 2.2 * s]]
-    : kind === 'apple' ? [[0, trunkH + 1.0 * s, 0, 2.0 * s, 1.5 * s]]
+    : kind === 'apple' || kind === 'peach' ? [[0, trunkH + 1.0 * s, 0, 2.0 * s, 1.5 * s]]
+    : kind === 'liveoak' ? [[0, trunkH + 1.3 * s, 0, 4.4 * s, 1.5 * s], [2.2 * s, trunkH + 0.7 * s, 1.2 * s, 3.0 * s, 1.2 * s], [-2.3 * s, trunkH + 0.8 * s, -1.1 * s, 3.0 * s, 1.2 * s]]
+    : kind === 'mesquite' ? [[0.4 * s, trunkH + 1.0 * s, 0, 2.8 * s, 1.0 * s], [-1.2 * s, trunkH + 0.6 * s, 0.6 * s, 2.0 * s, 0.9 * s]]
+    : kind === 'crape' ? [[0, trunkH + 1.0 * s, 0, 1.5 * s, 1.6 * s]]
+    : kind === 'pecan' ? [[0, trunkH + 2.6 * s, 0, 3.6 * s, 3.0 * s], [1.4 * s, trunkH + 1.6 * s, 0.8 * s, 2.4 * s, 2.0 * s]]
     : [[0, trunkH + 2.0 * s, 0, 3.0 * s, 2.6 * s], [1.2 * s, trunkH + 1.4 * s, 0.6 * s, 2.0 * s, 1.8 * s]];
-  if (kind !== 'pine') for (let k = 0; k < 4; k++) { const a = r() * TAU, bl = (kind === 'apple' ? 1.0 : 1.6) * s, br = mk(g, CY(trunkR * 0.2, trunkR * 0.4, bl, 6), tm, Math.cos(a) * bl * 0.25, trunkH - 0.1 + bl * 0.4, Math.sin(a) * bl * 0.25); br.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6); }
+  if (kind !== 'pine') for (let k = 0; k < (kind === 'liveoak' || kind === 'mesquite' || kind === 'crape' ? 7 : 4); k++) { const a = r() * TAU, bl = (kind === 'apple' || kind === 'peach' ? 1.0 : kind === 'liveoak' ? 3.2 : kind === 'mesquite' ? 2.0 : 1.6) * s, br = mk(g, CY(trunkR * 0.2, trunkR * 0.4, bl, 6), tm, Math.cos(a) * bl * 0.25, trunkH - 0.1 + bl * 0.4, Math.sin(a) * bl * 0.25); br.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6); }
   const N = Math.round((kind === 'pine' ? 220 : 380) * det), geo = crossGeo(2, false);
   const inst = new T.InstancedMesh(geo, leafCard(kind), N * crowns.length);
   const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), sc = new T.Vector3(), p = new T.Vector3();
@@ -775,10 +846,10 @@ function tree(kind, s, r, det = 1) {
     let u, v, w; do { u = r() * 2 - 1; v = r() * 2 - 1; w = r() * 2 - 1; } while (u * u + v * v + w * w > 1);
     if (kind === 'pine') { const tt = (v + 1) / 2; u *= 1 - tt; w *= 1 - tt; }
     p.set(cx + u * rx, cy + v * ry * 0.5, cz + w * rx); e.set((r() - 0.5) * 0.8, r() * TAU, (r() - 0.5) * 0.8); q.setFromEuler(e);
-    const z = (kind === 'birch' ? 0.7 : 0.95) * s * (0.8 + r() * 0.5); sc.set(z, z, z); m4.compose(p, q, sc); inst.setMatrixAt(n++, m4);
+    const z = (kind === 'birch' || kind === 'mesquite' ? 0.7 : 0.95) * s * (0.8 + r() * 0.5); sc.set(z, z, z); m4.compose(p, q, sc); inst.setMatrixAt(n++, m4);
   }
   inst.count = n; inst.castShadow = true; inst.receiveShadow = true; g.add(inst);
-  if (kind === 'apple') for (let k = 0; k < 14; k++) { const a = r() * TAU, rr = 1.4 * s * Math.sqrt(r()); mk(g, new T.SphereGeometry(0.045, 10, 8), col(r() < 0.5 ? '#c8301a' : '#b8c83a', 0.4), Math.cos(a) * rr, trunkH + 0.4 * s + r() * 1.0 * s, Math.sin(a) * rr); }
+  if (kind === 'apple' || kind === 'peach') for (let k = 0; k < 14; k++) { const a = r() * TAU, rr = 1.4 * s * Math.sqrt(r()); mk(g, new T.SphereGeometry(0.045, 10, 8), col(kind === 'peach' ? (r() < 0.5 ? '#f08a3a' : '#e8603a') : r() < 0.5 ? '#c8301a' : '#b8c83a', 0.4), Math.cos(a) * rr, trunkH + 0.4 * s + r() * 1.0 * s, Math.sin(a) * rr); }
   return g;
 }
 

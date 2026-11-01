@@ -138,7 +138,7 @@ function boot() {
   addEventListener('keydown', (e) => { if (G.home && G.home.act && G.home.act.keys && !e.repeat && e.code !== 'Escape') G.home._typed = true; });
   renderer.domElement.addEventListener('click', () => { if (G.home && !G.input.locked) G.input.lock(); });
   if (params.get('home')) { // straight to the last tape (for working on it): ?home=us | ?home=ru
-    const side = params.get('home') === 'ru' ? 1 : 0, want = params.get('house');
+    const side = ['tx', 'ru'].includes(params.get('home')) ? 1 : 0, want = params.get('house');
     const a = S.actors.find((q) => q.side === side && q.deathTime > 0 && (!want || pickHouse(side, ident(q.id), q.id).id === want)) || S.actors.find((q) => q.side === side && q.deathTime > 0);
     G.lives = [a.id]; $('load').style.display = 'none'; if (vcr) vcr.dispose();
     const go = () => { removeEventListener('pointerdown', go); G.audio.init(); goHome(a.id, params.has('fwd')); };
@@ -201,7 +201,7 @@ function sub(html, dur = 5) {
 }
 function identityHTML(i) {
   const d = ident(i), side = G.S.actors[i].side;
-  return `${d.rank} ${d.first.toUpperCase()} ${d.last.toUpperCase()} &middot; ${d.age}<br><em>${d.town.toUpperCase()} &middot; ${side ? 'INVADER' : 'DEFENDER'}</em><br>&ldquo;${d.life}&rdquo;`;
+  return `${d.rank} ${d.first.toUpperCase()} ${d.last.toUpperCase()} &middot; ${d.age}<br><em>${d.town.toUpperCase()} &middot; ${side ? 'TEXAS' : 'CAPE COD'}</em><br>&ldquo;${d.life}&rdquo;`;
 }
 function feed(text) {
   const f = $('feed'); const d = document.createElement('div'); d.textContent = text; f.prepend(d);
@@ -519,7 +519,7 @@ function tapesBack() {
     if (k >= MIDDLE.length) { goHome(i, false); return; }
     const [title, where] = MIDDLE[k];
     overlay(`<div class="ttl">&#9167; EJECT</div><div class="ttr">TAPE ${k + 2} / 5</div>
-      <h2 style="margin-top:3em">${title}</h2><p>${d.rank} ${d.first} ${d.last} &middot; ${side ? 'INVADER' : 'DEFENDER'}</p>
+      <h2 style="margin-top:3em">${title}</h2><p>${d.rank} ${d.first} ${d.last} &middot; ${side ? 'TEXAS' : 'CAPE COD'}</p>
       <p style="opacity:.6">${where.split(' / ')[side] || ''} &mdash; not yet recorded</p>`, 'blue');
     G.audio.play(G.audio.B.clunk, 0.7); setTimeout(() => G.audio.play(G.audio.B.click, 0.5), 700);
     k++; setTimeout(show, 2300);
@@ -530,7 +530,7 @@ function goHome(i, forward) {
   const a = G.S.actors[i];
   G.endBody = i; G.homeForward = forward;
   const hs = pickHouse(a.side, ident(i), i);
-  overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE 5 / 5</div><h2 style="margin-top:3em">${a.side ? 'ДОМА' : 'HOME'}</h2><p>${ident(i).first} ${ident(i).last} &middot; ${a.side ? `${hs.name} &middot; ${hs.nameEn}` : `a ${hs.name}`}, ${ident(i).town}</p>`, 'blue');
+  overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE 5 / 5</div><h2 style="margin-top:3em">HOME</h2><p>${ident(i).first} ${ident(i).last} &middot; a ${hs.name}, ${ident(i).town}</p>`, 'blue');
   setTimeout(() => {
     if (G.audio.musicGain) G.audio.musicGain.gain.setTargetAtTime(0, G.audio.ctx.currentTime, 1.5);
     if (G.audio.vcrRunGain) G.audio.vcrRunGain.gain.setTargetAtTime(0, G.audio.ctx.currentTime, 1);
@@ -806,7 +806,7 @@ function tick(dt, draw = true) {
   if (G.state === 'studio') { hud(false); }
   if (showHud) {
     const st = S.actors[G.body];
-    $('ident').innerHTML = `<span class="side">${st.side ? 'INVADER' : 'DEFENDER'}</span>${short(G.body)}`;
+    $('ident').innerHTML = `<span class="side">${st.side ? 'TEXAS' : 'CAPE COD'}</span>${short(G.body)}`;
     $('hp').firstChild.style.width = Math.max(0, p.health) + '%';
     $('ammo').innerHTML = `<div class="wn">${p.weaponName}</div>` + (p.reload > 0 ? 'RELOAD' : `${p.ammo}<small> / ${p.mag}</small>`);
     $('lives').textContent = `PERSPECTIVES ${G.lives.length}  ·  HOME IN ${fmtCounter(Math.max(0, G.tau - st.spawn)).slice(2)}`;

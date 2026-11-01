@@ -1,5 +1,6 @@
 // The last tape, and the only one that plays forward: an ordinary afternoon at home. Chores, a garden, a cat in a
 // patch of sun. At some point you're drawn to put on a tape and sit down; then the phone rings.
+import { enhance } from './homelife.js';
 import * as THREE from 'three';
 import { Post } from './post.js';
 import { cultureSheet, buildHouse, furnish, buildYard, mk, col, std, B, RB, CY } from './homebuild.js';
@@ -13,19 +14,10 @@ const ease = (k) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k));
 const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ words
-const CYR = {
-  Ivan: 'Иван', Dmitri: 'Дмитрий', Sergei: 'Сергей', Alexei: 'Алексей', Nikolai: 'Николай', Pavel: 'Павел', Mikhail: 'Михаил', Andrei: 'Андрей', Yuri: 'Юрий', Oleg: 'Олег', Artyom: 'Артём', Kirill: 'Кирилл', Maxim: 'Максим', Roman: 'Роман', Viktor: 'Виктор', Gleb: 'Глеб', Stepan: 'Степан', Ilya: 'Илья', Denis: 'Денис', Grigory: 'Григорий',
-  Anna: 'Анна', Olga: 'Ольга', Yelena: 'Елена', Marina: 'Марина', Svetlana: 'Светлана', Daria: 'Дарья', Irina: 'Ирина', Natalia: 'Наталья', Vera: 'Вера', Polina: 'Полина',
-  Ivanov: 'Иванов', Smirnov: 'Смирнов', Kuznetsov: 'Кузнецов', Popov: 'Попов', Sokolov: 'Соколов', Lebedev: 'Лебедев', Kozlov: 'Козлов', Novikov: 'Новиков', Morozov: 'Морозов', Volkov: 'Волков', Solovyov: 'Соловьёв', Vasiliev: 'Васильев', Zaitsev: 'Зайцев', Pavlov: 'Павлов', Semyonov: 'Семёнов', Golubev: 'Голубев', Vinogradov: 'Виноградов', Bogdanov: 'Богданов', Vorobyov: 'Воробьёв', Fyodorov: 'Фёдоров', Mikhailov: 'Михайлов', Belyaev: 'Беляев', Tarasov: 'Тарасов', Belov: 'Белов',
-  Gatchina: 'Гатчина', Vsevolozhsk: 'Всеволожск', Kolpino: 'Колпино', Pushkin: 'Пушкин', Kirovsk: 'Кировск', Tosno: 'Тосно', Luga: 'Луга', Vyborg: 'Выборг', Kingisepp: 'Кингисепп', Priozersk: 'Приозерск', Sestroretsk: 'Сестрорецк', Lomonosov: 'Ломоносов', Volkhov: 'Волхов', Tikhvin: 'Тихвин', Pskov: 'Псков', Novgorod: 'Новгород',
-};
-const cyr = (w) => { if (CYR[w]) return CYR[w]; if (w.endsWith('a') && CYR[w.slice(0, -1)]) return CYR[w.slice(0, -1)] + 'а'; return w; };
-
 const TASKS = {
-  us: { dishes: 'Do the dishes', read: 'Finish the book', game: 'Beat my high score', water: 'Water the garden', weed: 'Weed the beds', harvest: 'Pick the tomatoes', cook: 'Make chili', laundry: 'Fold the laundry', type: 'Write to Gram', cat: 'Feed Biscuit' },
-  ru: { dishes: 'Помыть посуду', read: 'Дочитать книгу', game: 'Побить рекорд', water: 'Полить грядки', weed: 'Прополоть грядки', harvest: 'Собрать урожай', cook: 'Сварить борщ', laundry: 'Сложить бельё', type: 'Написать маме', cat: 'Покормить Мурку' },
+  us: { dishes: 'Do the dishes', read: 'Finish the book', game: 'Beat my high score', water: 'Water the garden', weed: 'Weed the beds', harvest: 'Pick the tomatoes', cook: 'Make chowder', laundry: 'Fold the laundry', type: 'Write to Gram', cat: 'Feed Biscuit' },
+  tx: { dishes: 'Dishes', read: 'Finish my book', game: 'Beat my high score', water: 'Water before it gets hot', weed: 'Pull the weeds', harvest: 'Pick tomatoes + peppers', cook: 'Make chili', laundry: 'Fold the laundry', type: 'Write Mamaw', cat: 'Feed Pepper' },
 };
-const TASKS_EN = { dishes: 'Do the dishes', read: 'Finish the book', game: 'Beat the high score', water: 'Water the beds', weed: 'Weed the beds', harvest: 'Pick strawberries and tomatoes', cook: 'Make borscht', laundry: 'Fold the laundry', type: 'Write to Mum', cat: 'Feed Murka' };
 const TEMPLATES = [
   ['gardener', ['water', 'weed', 'harvest']], ['cook', ['harvest', 'cook', 'dishes']], ['reader', ['read', 'dishes', 'cat']], ['gamer', ['game', 'dishes', 'laundry']],
   ['putterer', ['laundry', 'cat', 'water']], ['writer', ['type', 'dishes', 'read']], ['tidy', ['laundry', 'dishes', 'weed']], ['homebody', ['cook', 'cat', 'read']],
@@ -46,15 +38,15 @@ const BOOK = {
     ['In August the flats behind the jetty open up for a mile. You can walk out to where the', 'channel bends and stand on sand that was sea at breakfast. The gulls follow you as if you might be bringing them something. You never are.'],
     ['He kept a notebook of the tides for forty years. When he died we found the last page', 'half filled in, the times written ahead, a week of mornings he had already counted on. I still have it. I check it sometimes. It is never wrong.'],
   ],
-  ru: [
-    ['Утром над рекой стоял туман, и было слышно, как где-то за лесом идёт электричка.', 'Бабушка уже возилась в огороде. Она говорила, что земля любит тех, кто встаёт рано, и не прощает тех, кто спешит.'],
-    ['Мы собирали клубнику в эмалированный бидон, и самые красные ягоды почему-то всегда', 'оказывались под листьями. Дед курил на крыльце и считал вслух вагоны проходящего товарного. Он никогда не сбивался.'],
-    ['Вечером пили чай из самовара, и в окно стучала сирень. Я тогда думал, что лето', 'не кончится никогда. Теперь я знаю, что оно и не кончается: оно просто уходит туда, где его уже нельзя потрогать.'],
+  tx: [
+    ['The creek behind my grandmother’s place ran only after a storm, and then only for a day or two.', 'We would hear it from the porch at night, a sound like somebody talking low in the next room, and in the morning it would be gone and the rocks would be white again.'],
+    ['She kept a coffee can of pecans by the door and cracked them in her lap while the radio', 'did the cattle prices. The shells went in the flower bed. She said the bluebonnets liked it. I never knew if that was true. They came up every April anyway.'],
+    ['The last summer I stayed there the heat broke in September all at once, the way it does,', 'a norther coming down across the pasture like a door opening. She stood in the yard with her eyes shut and said, there. There it is. I think of that more than anything.'],
   ],
 };
 const LETTER = {
   us: 'Dear Gram,\n\nThe tomatoes came in early this year, too many to give away. The hydrangeas went blue like you said they would if I put the coffee grounds down. The cat sleeps in the window all afternoon.\n\nI think about the beach a lot lately. I don’t know why.\n\nLove,\n',
-  ru: 'Дорогая мама!\n\nУ нас всё хорошо. Клубника в этом году крупная, сирень отцвела. Мурка спит на подоконнике целыми днями. Огурцы в теплице пошли.\n\nПочему-то часто думаю о море. Сама не знаю почему.\n\nЦелую,\n',
+  tx: 'Dear Mamaw,\n\nIt has not rained in three weeks. I water the tomatoes before sunup and they still sulk by four o’clock. The peppers love it. Pepper (the cat, not the peppers) sleeps on the cool tile in the kitchen all day.\n\nI keep thinking about the coast. I don’t know why.\n\nLove you,\n',
 };
 
 // ------------------------------------------------------------------ audio bits (all synthesized, quietly)
@@ -78,6 +70,10 @@ class HomeAudio {
     if (amb.includes('surf')) bed((d, sr2, r) => { let y = 0, y2 = 0; for (let i = 0; i < d.length; i++) { const t = i / sr2, sw = Math.pow(0.5 + 0.5 * Math.sin(TAU * t / 8 - 1), 3); y += 0.08 * ((r() * 2 - 1) - y); y2 += 0.02 * ((r() * 2 - 1) - y2); d[i] = (y * 1.5 * (0.2 + sw) + y2 * 2) * 0.8; } }, 0.6);
     if (amb.includes('traffic')) bed((d, sr2, r) => { let y = 0; for (let i = 0; i < d.length; i++) { const t = i / sr2; y += 0.01 * ((r() * 2 - 1) - y); d[i] = y * 3 * (0.6 + 0.4 * Math.sin(TAU * t / 8)); } }, 0.5);
     if (amb.includes('lake')) bed((d, sr2, r) => { for (let i = 0; i < d.length; i++) d[i] = 0; for (let k = 0; k < 40; k++) { const i0 = Math.floor(r() * d.length); let y = 0; for (let i = 0; i < 6000 && i0 + i < d.length; i++) { y += 0.2 * ((r() * 2 - 1) - y); d[i0 + i] += y * Math.sin(Math.PI * i / 6000) * 0.4; } } }, 0.5);
+    if (amb.includes('cicadas')) bed((d, sr2, r) => { // a tree full of cicadas: a pulsing high buzz that swells and fades
+      let ph = 0, y = 0; for (let i = 0; i < d.length; i++) { const t = i / sr2, sw = Math.pow(0.5 + 0.5 * Math.sin(TAU * t / 8 - 1.2), 2); ph += TAU * (4700 + 300 * Math.sin(t * 0.9)) / sr2; y += 0.6 * ((r() * 2 - 1) - y);
+        d[i] = (Math.sin(ph) * 0.5 + y * 0.5) * (0.55 + 0.45 * Math.pow(0.5 + 0.5 * Math.sin(TAU * 62 * t), 4)) * (0.15 + 0.85 * sw) * 0.09; } }, 0.55);
+    if (amb.includes('wind') && this.wind) this.wind.gain.value = 0.9;
     if (amb.includes('bees')) bed((d, sr2) => { let ph = 0; for (let i = 0; i < d.length; i++) { const t = i / sr2; ph += TAU * (210 + 8 * Math.sin(t * 3)) / sr2; d[i] = (((ph / TAU) % 1) - 0.5) * 0.05 * (0.6 + 0.4 * Math.sin(t * 0.7)); } }, 0.35);
   }
   setInside(k) { if (this.ok) this.outLP.frequency.setTargetAtTime(k ? 1400 : 18000, this.ctx.currentTime, 0.3); }
@@ -116,6 +112,7 @@ class HomeAudio {
     const k = pool[Math.floor(this.r() * pool.length)], r = this.r, P = (r() - 0.5) * 1.6;
     const voice = (d, sr, f0, f1, L, form, amp = 0.3, vib = 0) => { let ph = 0; const n = Math.min(d.length, Math.floor(L * sr)); for (let i = 0; i < n; i++) { const u = i / n, f = f0 + (f1 - f0) * u + Math.sin(i / sr * 30) * vib; ph += TAU * f / sr; let v = 0; for (let h = 1; h < 8; h++) v += Math.sin(ph * h) / h * Math.exp(-Math.pow((f * h - form) / 500, 2)); d[i] += v * amp * Math.sin(Math.PI * u); } };
     if (k === 'mower' || k === 'train') return this.far(k);
+    if (k === 'pumpjack' || k === 'wind') return this.play((d, sr) => { for (let c = 0; c < 2; c++) { const i0 = Math.floor(c * 2.6 * sr); voice(d.subarray(i0), sr, 300 + r() * 60, 240, 0.7, 700, 0.18, 12); } }, 5.5, 0.18, P, this.out);
     if (k === 'gulls') this.play((d, sr) => { let t0 = 0; for (let c = 0; c < 3 + Math.floor(r() * 3); c++) { const i0 = Math.floor(t0 * sr), sub = d.subarray(i0); voice(sub, sr, 1500, 900 + r() * 300, 0.35, 1800, 0.25); t0 += 0.4 + r() * 0.3; } }, 2.5, 0.35, P, this.out);
     if (k === 'dogs') this.play((d, sr) => { let t0 = 0; for (let c = 0; c < 2 + Math.floor(r() * 3); c++) { const i0 = Math.floor(t0 * sr); voice(d.subarray(i0), sr, 420, 300, 0.16, 900, 0.5); t0 += 0.35 + r() * 0.3; } }, 2.0, 0.3, P, this.out);
     if (k === 'cows') this.play((d, sr) => voice(d, sr, 140, 105, 1.6, 600, 0.6), 1.8, 0.35, P, this.out);
@@ -156,22 +153,33 @@ class HomeAudio {
 export class Home {
   constructor(o) {
     this.o = o; const r = o.renderer;
-    this.us = o.side === 0; this.house = (o.house && HOUSES[o.side ? 'ru' : 'us'].find((h) => h.id === o.house)) || pickHouse(o.side, o.ident, o.id); this.C = cultureSheet(this.us ? 'us' : 'ru', this.house);
+    this.us = o.side === 0; this.house = (o.house && HOUSES[o.side ? 'tx' : 'us'].find((h) => h.id === o.house)) || pickHouse(o.side, o.ident, o.id); this.C = cultureSheet(this.us ? 'us' : 'tx', this.house);
     this.ident = o.ident; this.tpl = pickTemplate(o.ident, o.id);
     const s = this.scene = new T.Scene();
     const cam = this.cam = new T.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 400); s.add(cam);
     // sky: late afternoon, sun low in the west-south-west
     const ENV = { afternoon: { d: [-0.62, 0.62, 0.48], c: 0xffe2b8, i: 3.8, h: 0.95, sky: [0x8fb6dc, 0xf3d7a8] }, golden: { d: [-0.85, 0.34, 0.42], c: 0xffc488, i: 3.6, h: 0.8, sky: [0x7a9ac8, 0xf8c890] },
-      morning: { d: [0.7, 0.45, 0.55], c: 0xfff0d8, i: 3.6, h: 0.95, sky: [0x9ac0e8, 0xeae4d4] }, overcast: { d: [-0.4, 0.8, 0.45], c: 0xdde4ec, i: 1.5, h: 1.7, sky: [0xa8b0b8, 0xccd0d2] } }[this.house.env.time] || {};
+      morning: { d: [0.7, 0.45, 0.55], c: 0xfff0d8, i: 3.6, h: 0.95, sky: [0x9ac0e8, 0xeae4d4] }, overcast: { d: [-0.4, 0.8, 0.45], c: 0xdde4ec, i: 1.5, h: 1.7, sky: [0xa8b0b8, 0xccd0d2] },
+      hot: { d: [-0.5, 0.8, 0.36], c: 0xfff2dc, i: 4.4, h: 1.0, sky: [0x6a9ad4, 0xe6e2d6] } }[this.house.env.time] || {};
     this.env = ENV;
     this.sunDir = new T.Vector3(...ENV.d).normalize();
     const [skyTop, skyHor] = ENV.sky;
     const sky = new T.Mesh(new T.SphereGeometry(300, 32, 16), new T.ShaderMaterial({ side: T.BackSide, depthWrite: false, fog: false,
-      uniforms: { uTop: { value: new T.Color(skyTop) }, uHor: { value: new T.Color(skyHor) }, uSun: { value: this.sunDir } },
+      uniforms: { uTop: { value: new T.Color(skyTop) }, uHor: { value: new T.Color(skyHor) }, uSun: { value: this.sunDir }, uT: { value: 0 }, uCloud: { value: this.house.env.time === 'overcast' ? 0.85 : 0.45 } },
       vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: `uniform vec3 uTop, uHor, uSun; varying vec3 vD;
+      fragmentShader: `uniform vec3 uTop, uHor, uSun; uniform float uT, uCloud; varying vec3 vD;
+        float hh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(hh(i), hh(i + vec2(1, 0)), f.x), mix(hh(i + vec2(0, 1)), hh(i + vec2(1, 1)), f.x), f.y); }
+        float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int k = 0; k < 5; k++){ s += a * vn(p); p = p * 2.03 + vec2(11.3, 7.1); a *= 0.5; } return s; }
         void main(){ float h = clamp(vD.y, 0.0, 1.0); vec3 c = mix(uHor, uTop, pow(h, 0.55)); float s = max(dot(vD, uSun), 0.0);
-          c += vec3(1.0, 0.8, 0.5) * (pow(s, 12.0) * 0.5 + pow(s, 600.0) * 4.0); c = mix(c, vec3(0.55, 0.6, 0.5), smoothstep(0.02, -0.06, vD.y));
+          c += vec3(1.0, 0.8, 0.5) * (pow(s, 12.0) * 0.5 + pow(s, 600.0) * 4.0);
+          // fair-weather cumulus drifting on a slow breeze
+          if (vD.y > 0.0) { vec2 q = vD.xz / (vD.y + 0.12) * 0.9 + vec2(uT * 0.006, uT * 0.002);
+            float n = fbm(q), d = smoothstep(1.0 - uCloud * 0.62, 1.0 - uCloud * 0.62 + 0.22, n) * smoothstep(0.0, 0.18, vD.y);
+            float lit = 0.75 + 0.35 * fbm(q + uSun.xz * 0.06) + pow(s, 6.0) * 0.6;
+            vec3 cc = mix(vec3(0.62, 0.64, 0.7), vec3(1.0, 0.96, 0.9), clamp(lit - 0.4, 0.0, 1.0)) * (0.9 + 0.2 * uHor);
+            c = mix(c, cc, d * 0.92); }
+          c = mix(c, vec3(0.55, 0.6, 0.5), smoothstep(0.02, -0.06, vD.y));
           gl_FragColor = vec4(c, 1.0);
           #include <colorspace_fragment>
         }` }));
@@ -184,9 +192,9 @@ export class Home {
     // environment light from the sky
     { const pm = new T.PMREMGenerator(r), es = new T.Scene(); es.add(sky.clone()); s.environment = pm.fromScene(es, 0.04).texture; s.environmentIntensity = 0.35; pm.dispose(); }
     // the place
-    const H = buildHouse(this.C, r); s.add(H.g); this.cols = H.A.cols;
+    const H = buildHouse(this.C, r); s.add(H.g); this.cols = H.A.cols; this.windows = H.A.windows;
     this.A = furnish(this.C, H.g, this.cols, r);
-    const Y = buildYard(this.C, r, this.cols, o.low); s.add(Y.g); this.Y = Y.A;
+    const Y = buildYard(this.C, r, this.cols, o.low); s.add(Y.g); this.Y = Y.A; this.Yg = Y.g;
     this.expo0 = r.toneMappingExposure; r.toneMappingExposure = 1.05;
     this.post = new Post(r, s, cam, o.Q); this.post.setSize(innerWidth, innerHeight, o.Q.pr); this.post.cel.uniforms.uFar.value = 400;
     const pu = this.post.u; for (const k of ['uRew', 'uFF', 'uPause', 'uDesat', 'uDamage', 'uFlash', 'uStuck']) if (pu[k]) pu[k].value = 0; if (pu.uAmt) pu.uAmt.value = 1;
@@ -197,9 +205,10 @@ export class Home {
     this.audio = new HomeAudio(o.audio, this.us, this.house.amb || []);
     this.buildCat(); this.drawNote(); this.buildActivities();
     this.dust = this.makeDust();
+    this.life = enhance(this);
     this.tvMat = new T.MeshBasicMaterial({ color: 0x0a0c0b }); this.A.tvScreen.material = this.tvMat;
     this.msgT = 0;
-    this.say(this.us ? 'An afternoon off.' : 'Выходной.', this.us ? '' : 'A day off.', 4);
+    this.say(this.us ? 'An afternoon off.' : 'Saturday. Going to be a hot one.', '', 4);
   }
   dispose() { this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
   resize() { this.cam.aspect = innerWidth / innerHeight; this.cam.updateProjectionMatrix(); this.post.setSize(innerWidth, innerHeight, this.o.Q.pr); }
@@ -210,11 +219,11 @@ export class Home {
     g.fillStyle = this.us ? '#fbf3a8' : '#f4efe2'; g.fillRect(0, 0, c.width, c.height);
     if (!this.us) { g.strokeStyle = 'rgba(80,110,170,.4)'; for (let y = 40; y < c.height; y += 30) { g.beginPath(); g.moveTo(10, y); g.lineTo(c.width - 10, y); g.stroke(); } }
     g.fillStyle = '#1e2350'; g.font = 'italic 30px "Bradley Hand", "Comic Sans MS", cursive';
-    g.fillText(this.us ? 'Today:' : 'Сегодня:', 18, 44);
+    g.fillText(this.us ? 'Today:' : 'To do:', 18, 44);
     g.font = 'italic 25px "Bradley Hand", "Comic Sans MS", cursive';
-    this.tpl[1].forEach((k, i) => { const y = 96 + i * 60; g.fillStyle = '#1e2350'; g.fillText('☐ ' + TASKS[this.us ? 'us' : 'ru'][k], 18, y); if (this.done.has(k)) { g.strokeStyle = '#1e2350'; g.lineWidth = 3; g.beginPath(); g.moveTo(14, y - 9); g.lineTo(234, y - 7); g.stroke(); } });
+    this.tpl[1].forEach((k, i) => { const y = 96 + i * 60; g.fillStyle = '#1e2350'; g.fillText('☐ ' + TASKS[this.us ? 'us' : 'tx'][k], 18, y); if (this.done.has(k)) { g.strokeStyle = '#1e2350'; g.lineWidth = 3; g.beginPath(); g.moveTo(14, y - 9); g.lineTo(234, y - 7); g.stroke(); } });
     this.A.noteTex.needsUpdate = true;
-    const list = this.tpl[1].map((k) => `${this.done.has(k) ? '<s>' : ''}${TASKS[this.us ? 'us' : 'ru'][k]}${this.us ? '' : ` <small>(${TASKS_EN[k]})</small>`}${this.done.has(k) ? '</s>' : ''}`).join('<br>');
+    const list = this.tpl[1].map((k) => `${this.done.has(k) ? '<s>' : ''}${TASKS[this.us ? 'us' : 'tx'][k]}${this.done.has(k) ? '</s>' : ''}`).join('<br>');
     const el = $('todo'); if (el) el.innerHTML = list;
   }
   finish(k) {
@@ -227,7 +236,7 @@ export class Home {
     if (this.phase !== 'free') return;
     this.phase = 'compelled'; this.compelT = 0;
     if (this.o.audio && this.o.audio.startMusic) { this.o.audio.musicVol = 0.22; this.o.audio.startMusic(); this.o.audio.musicTape(1, 0); }
-    this.say(this.us ? 'You feel like watching something.' : 'Хочется что-нибудь посмотреть.', this.us ? '' : 'You feel like watching something.', 5);
+    this.say('You feel like watching something.', '', 5);
   }
 
   // ---------------- the cat
@@ -264,11 +273,11 @@ export class Home {
   // ---------------- activities
   buildActivities() {
     const A = this.A, Y = this.Y, us = this.us, act = this.acts = [];
-    const L = (en, ru) => (us ? en : ru);
+    const L = (en) => en;
     // dishes
     const plates = [], dirty = col('#d8d0b8', 0.5), clean = col('#f6f4ee', 0.25);
     for (let k = 0; k < 5; k++) { const p = mk(this.scene, CY(0.12, 0.09, 0.02, 24), dirty.clone(), A.stack.x, A.stack.y + 0.012 + k * 0.022, A.stack.z); p.userData.k = k; plates.push(p); }
-    act.push({ id: 'dishes', at: A.sink, reach: 1.6, label: () => L('Wash the dishes', 'Помыть посуду'), pose: { p: new T.Vector3(1.6, 1.58, 3.35), l: new T.Vector3(1.6, 0.78, 4.15) },
+    act.push({ id: 'dishes', at: A.sink, reach: 1.6, label: () => L('Wash the dishes'), pose: { p: new T.Vector3(1.6, 1.58, 3.35), l: new T.Vector3(1.6, 0.78, 4.15) },
       n: 0, busy: -1, enter() { this.parent.audio.water(true); }, exit() { this.parent.audio.water(false); },
       click() { if (this.busy >= 0 || this.n >= plates.length) return; this.busy = 0; this.cur = plates[plates.length - 1 - this.n]; },
       update(dt) {
@@ -279,7 +288,7 @@ export class Home {
         else if (b < 2.1) { const k = ease((b - 1.7) / 0.4); p.position.lerpVectors(new T.Vector3(A.sink.x, 0.85, A.sink.z), new T.Vector3(A.rack.x - 0.17 + this.n * 0.055 * 1.2, 1.0, A.rack.z), k); p.rotation.set(0, 0, k * Math.PI / 2); }
         else { p.material.color.copy(clean.color); this.busy = -1; this.n++; Hm.audio.clink(0.35); if (this.n >= plates.length) Hm.finish('dishes'); }
       },
-      hint: () => L('click: wash a plate', 'клик: помыть тарелку') });
+      hint: () => L('click: wash a plate') });
     // read
     const book = this.book = new T.Group(); book.visible = false; this.cam.add(book);
     const pageL = this.pageTexL = this.pageTex(), pageR = this.pageTexR = this.pageTex();
@@ -289,22 +298,22 @@ export class Home {
     const turn = new T.Group(); book.add(turn); const tp = mk(turn, new T.PlaneGeometry(0.2, 0.28), std({ color: 0xf4efe2, roughness: 0.9, side: T.DoubleSide }), 0.1, 0.002, 0, 0, 0, 0); tp.rotation.x = -Math.PI / 2; turn.visible = false;
     book.position.set(0, -0.2, -0.42); book.rotation.x = 0.95;
     book.traverse((o) => { if (o.isMesh) o.castShadow = false; });
-    act.push({ id: 'read', at: new T.Vector3(A.chairSeat.x, 0.6, A.chairSeat.z), reach: 1.5, label: () => L('Sit and read', 'Почитать'), pose: { p: new T.Vector3(A.chairSeat.x, 1.1, A.chairSeat.z), yaw: A.chairYaw + Math.PI, pitch: -0.45 },
+    act.push({ id: 'read', at: new T.Vector3(A.chairSeat.x, 0.6, A.chairSeat.z), reach: 1.5, label: () => L('Sit and read'), pose: { p: new T.Vector3(A.chairSeat.x, 1.1, A.chairSeat.z), yaw: A.chairYaw + Math.PI, pitch: -0.45 },
       spread: 0, flip: -1, enter() { book.visible = true; this.parent.drawSpread(this.spread); }, exit() { book.visible = false; },
       click() { if (this.flip >= 0) return; this.flip = 0; turn.visible = true; this.parent.audio.swish(0.35, 0.35, 2500); },
       update(dt) { if (this.flip < 0) return; this.flip += dt; turn.rotation.z = ease(this.flip / 0.55) * Math.PI; if (this.flip > 0.55) { this.flip = -1; turn.visible = false; this.spread++; if (this.spread >= BOOK.us.length) { this.spread = 0; this.parent.finish('read'); } this.parent.drawSpread(this.spread); } },
-      hint: () => L('click: turn the page', 'клик: перевернуть страницу') });
+      hint: () => L('click: turn the page') });
     // video game on the living-room TV
     const gc = document.createElement('canvas'); gc.width = 256; gc.height = 192; const gt = new T.CanvasTexture(gc); gt.colorSpace = T.SRGBColorSpace; gt.magFilter = T.NearestFilter;
     this.gameTex = gt; this.gameMat = new T.MeshBasicMaterial({ map: gt, toneMapped: false });
-    act.push({ id: 'game', at: A.consolePos, reach: 1.6, label: () => L('Play a game', 'Поиграть'), pose: { p: new T.Vector3(-4.1, 0.95, -2.3), l: new T.Vector3(-5.3, 0.82, -2.3) }, free: true,
+    act.push({ id: 'game', at: A.consolePos, reach: 1.6, label: () => L('Play a game'), pose: { p: new T.Vector3(-4.1, 0.95, -2.3), l: new T.Vector3(-5.3, 0.82, -2.3) }, free: true,
       enter() { const H = this.parent; H.A.tvScreen.material = H.gameMat; this.g = us ? breakout(gc) : blocks(gc); },
       exit() { const H = this.parent; H.A.tvScreen.material = H.tvMat; },
       update(dt, I) { const H = this.parent; const ev = this.g.step(dt, I); gt.needsUpdate = true; if (ev.beep) H.audio.beep(ev.beep, 0.05, 0.2); if (ev.win) H.finish('game'); },
-      hint: () => (us ? 'A / D move · click launch · Q stop' : 'A / D · клик: повернуть · S вниз · Q выйти') });
+      hint: () => (us ? 'A / D move · click launch · Q stop' : 'A / D move · click rotate · S drop · Q stop') });
     // laundry
     const folds = [];
-    act.push({ id: 'laundry', at: A.foldTable, reach: 1.6, label: () => L('Fold the laundry', 'Сложить бельё'), pose: { p: new T.Vector3(-4.75, 1.55, 0.8), l: new T.Vector3(-5.45, 0.82, 0.8) },
+    act.push({ id: 'laundry', at: A.foldTable, reach: 1.6, label: () => L('Fold the laundry'), pose: { p: new T.Vector3(-4.75, 1.55, 0.8), l: new T.Vector3(-5.45, 0.82, 0.8) },
       n: 0, busy: -1,
       click() { if (this.busy >= 0 || this.n >= 6) return; this.busy = 0; const c = mk(this.parent.scene, new T.PlaneGeometry(0.6, 0.6), std({ color: new T.Color(['#e8e4d8', '#5a7a9a', '#c84a3a', '#f4f0e6', '#3a5a3a', '#e8c84a'][this.n]), roughness: 1, side: T.DoubleSide }), A.basket.x, A.basket.y + 0.1, A.basket.z); c.rotation.x = -Math.PI / 2; this.cur = c; folds.push(c); this.parent.audio.swish(0.25, 0.4, 1200); },
       update(dt) {
@@ -312,19 +321,19 @@ export class Home {
         if (b < 0.5) { c.position.lerpVectors(new T.Vector3(A.basket.x, A.basket.y + 0.4, A.basket.z), tgt, ease(b / 0.5)); c.position.y += Math.sin(b / 0.5 * Math.PI) * 0.3; c.rotation.z = b * 2; }
         else if (b < 1.4) { const k = ease((b - 0.5) / 0.9); c.scale.set(1 - 0.55 * Math.min(1, k * 2), 1 - 0.5 * Math.max(0, k * 2 - 1), 1); c.rotation.z = 0; if (Math.random() < dt * 4) this.parent.audio.swish(0.12, 0.2, 900); }
         else { this.busy = -1; this.n++; if (this.n >= 6) this.parent.finish('laundry'); }
-      }, hint: () => L('click: fold', 'клик: сложить') });
+      }, hint: () => L('click: fold') });
     // typing
-    act.push({ id: 'type', at: A.typewriter.position, reach: 1.6, label: () => L('Write a letter', 'Написать письмо'), pose: { p: new T.Vector3(4.2, 1.18, -3.15), l: new T.Vector3(4.2, 0.92, -3.9) },
+    act.push({ id: 'type', at: A.typewriter.position, reach: 1.6, label: () => L('Write a letter'), pose: { p: new T.Vector3(4.2, 1.18, -3.15), l: new T.Vector3(4.2, 0.92, -3.9) },
       n: 0, keys: true,
-      key() { const H = this.parent, txt = LETTER[us ? 'us' : 'ru'] + (us ? this.parent.ident.first : this.parent.ruFirst()); if (this.n >= txt.length) return; const k = Math.min(txt.length, this.n + 3); const ch = txt.slice(this.n, k); this.n = k; H.drawLetter(txt.slice(0, this.n)); H.audio.click(0.4, 1400 + Math.random() * 400); if (ch.includes('\n')) H.audio.bell(0.25); if (this.n >= txt.length) H.finish('type'); },
-      click() { this.key(); }, update() {}, free: true, hint: () => L('type (any key) · Tab to stop', 'печатать (любая клавиша) · Tab — закончить') });
+      key() { const H = this.parent, txt = LETTER[us ? 'us' : 'tx'] + this.parent.ident.first; if (this.n >= txt.length) return; const k = Math.min(txt.length, this.n + 3); const ch = txt.slice(this.n, k); this.n = k; H.drawLetter(txt.slice(0, this.n)); H.audio.click(0.4, 1400 + Math.random() * 400); if (ch.includes('\n')) H.audio.bell(0.25); if (this.n >= txt.length) H.finish('type'); },
+      click() { this.key(); }, update() {}, free: true, hint: () => L('type (any key) · Tab to stop') });
     // cooking
     const veg = new T.Group(); veg.position.copy(A.board); this.scene.add(veg);
-    const vegCol = us ? ['#c8301a', '#e8d8a8', '#5a8a2a'] : ['#7a1a3a', '#f0a030', '#e8e0c0'];
+    const vegCol = us ? ['#e8d8a8', '#f2ecd8', '#8ab05a'] : ['#c8301a', '#f2ecd8', '#3a7a2a'];
     const whole = []; for (let k = 0; k < 3; k++) { const v = mk(veg, new T.SphereGeometry(0.045, 14, 10), col(vegCol[k], 0.5), -0.12 + k * 0.1, 0.04, 0.04); v.scale.set(1, 0.9, k === 2 && !us ? 1.8 : 1); whole.push(v); }
     const knife = new T.Group(); knife.position.set(0.12, 0.02, -0.06); veg.add(knife); mk(knife, B(0.02, 0.06, 0.2), std({ color: 0xd8dcde, metalness: 0.9, roughness: 0.2 }), 0, 0.03, 0); mk(knife, RB(0.025, 0.03, 0.11, 0.01), col('#2a1a12', 0.6), 0, 0.03, 0.15);
     const slices = [];
-    act.push({ id: 'cook', at: A.stove, reach: 1.7, label: () => L('Make dinner', 'Сварить борщ'), pose: { p: new T.Vector3(4.55, 1.6, 3.3), l: new T.Vector3(4.55, 0.9, 4.05) },
+    act.push({ id: 'cook', at: A.stove, reach: 1.7, label: () => L('Make dinner'), pose: { p: new T.Vector3(4.55, 1.6, 3.3), l: new T.Vector3(4.55, 0.9, 4.05) },
       stage: 0, n: 0, chop: -1, stir: 0,
       click() {
         const H = this.parent;
@@ -334,28 +343,28 @@ export class Home {
       update(dt, I) {
         const H = this.parent;
         if (this.chop >= 0) { this.chop += dt; knife.position.y = 0.02 + Math.abs(Math.sin(this.chop * 14)) * 0.05 * (1 - this.chop / 0.25); if (this.chop > 0.25) this.chop = -1; }
-        if (this.stage === 2) { this.toss += dt; const k = ease(this.toss / 0.6); slices.forEach((s, i) => { const from = s.userData.from || (s.userData.from = s.position.clone()); s.position.lerpVectors(from, new T.Vector3(-0.85, 0.12, -0.0), k); s.position.y += Math.sin(k * Math.PI) * 0.2; if (k >= 1) s.visible = false; }); if (k >= 1) { this.stage = 3; H.A.soup.material.color.set(us ? 0x8a3a1a : 0x9a1a4a); } }
+        if (this.stage === 2) { this.toss += dt; const k = ease(this.toss / 0.6); slices.forEach((s, i) => { const from = s.userData.from || (s.userData.from = s.position.clone()); s.position.lerpVectors(from, new T.Vector3(-0.85, 0.12, -0.0), k); s.position.y += Math.sin(k * Math.PI) * 0.2; if (k >= 1) s.visible = false; }); if (k >= 1) { this.stage = 3; H.A.soup.material.color.set(us ? 0xe8dcc0 : 0x7a2a12); } }
         if (this.stage === 3) { if (I.held) { this.stir += dt; H.A.pot.rotation.y += dt * 3; } if (this.stir > 3.5) { this.stage = 4; H.finish('cook'); } }
         if (this.stage >= 2) H.steam = Math.min(1, (H.steam || 0) + dt * 0.3);
       },
-      hint() { return [L('click: chop', 'клик: нарезать'), L('click: into the pot', 'клик: в кастрюлю'), '', L('hold click: stir', 'держать клик: мешать'), L('simmering', 'варится')][this.stage]; } });
+      hint() { return [L('click: chop'), L('click: into the pot'), '', L('hold click: stir'), L('simmering')][this.stage]; } });
     // garden: water, weed, harvest — done walking about, not from a fixed pose
-    act.push({ id: 'can', at: Y.can.position, reach: 1.4, label: () => (this.held === 'can' ? null : L('Pick up the watering can', 'Взять лейку')), instant: true, click: () => this.hold('can') });
-    act.push({ id: 'bag', at: A.foodBag, reach: 1.3, label: () => (this.held === 'bag' || this.done.has('cat') ? null : L('Get the cat food', 'Взять корм')), instant: true, click: () => this.hold('bag') });
-    act.push({ id: 'bowl', at: A.bowl, reach: 1.4, label: () => (this.held === 'bag' && !A.kibble.visible ? L('Fill the bowl', 'Насыпать корм') : null), instant: true,
+    act.push({ id: 'can', at: Y.can.position, reach: 1.4, label: () => (this.held === 'can' ? null : L('Pick up the watering can')), instant: true, click: () => this.hold('can') });
+    act.push({ id: 'bag', at: A.foodBag, reach: 1.3, label: () => (this.held === 'bag' || this.done.has('cat') ? null : L('Get the cat food')), instant: true, click: () => this.hold('bag') });
+    act.push({ id: 'bowl', at: A.bowl, reach: 1.4, label: () => (this.held === 'bag' && !A.kibble.visible ? L('Fill the bowl') : null), instant: true,
       click: () => { A.kibble.visible = true; this.audio.swish(0.4, 0.6, 2200); this.hold(null); this.catState = 'toBowl'; } });
-    act.push({ id: 'pet', get at() { return new T.Vector3().copy(this.parent.cat.position).setY(0.2); }, reach: 1.3, label: () => (this.catState === 'sleep' ? L('Pet the cat', 'Погладить кошку') : null), instant: true,
+    act.push({ id: 'pet', get at() { return new T.Vector3().copy(this.parent.cat.position).setY(0.2); }, reach: 1.3, label: () => (this.catState === 'sleep' ? L('Pet the cat') : null), instant: true,
       click: () => { this.audio.purr(true); clearTimeout(this._purr); this._purr = setTimeout(() => this.audio.purr(false), 4000); } });
     // the tape and the ending
-    act.push({ id: 'takeTape', at: A.tapePos, reach: 1.6, label: () => (this.phase === 'compelled' && !this.held ? L('Take the tape', 'Взять кассету') : null), instant: true, click: () => { this.hold('tape'); A.theTape.visible = false; this.audio.click(0.3, 900); } });
-    act.push({ id: 'insert', at: A.vcrPos, reach: 1.6, label: () => (this.held === 'tape' ? L('Put the tape in', 'Вставить кассету') : null), instant: true, click: () => this.insertTape() });
-    act.push({ id: 'couch', at: new T.Vector3(A.couchSeat.x, 0.5, A.couchSeat.z), reach: 1.6, label: () => (this.phase === 'playing' ? L('Sit down', 'Сесть') : null), instant: true, click: () => this.sitDown() });
-    act.push({ id: 'phone', at: A.phonePos, reach: 2.4, label: () => (this.phase === 'ringing' ? L('Answer the phone', 'Взять трубку') : null), instant: true, click: () => this.answer() });
+    act.push({ id: 'takeTape', at: A.tapePos, reach: 1.6, label: () => (this.phase === 'compelled' && !this.held ? L('Take the tape') : null), instant: true, click: () => { this.hold('tape'); A.theTape.visible = false; this.audio.click(0.3, 900); } });
+    act.push({ id: 'insert', at: A.vcrPos, reach: 1.6, label: () => (this.held === 'tape' ? L('Put the tape in') : null), instant: true, click: () => this.insertTape() });
+    act.push({ id: 'couch', at: new T.Vector3(A.couchSeat.x, 0.5, A.couchSeat.z), reach: 1.6, label: () => (this.phase === 'playing' ? L('Sit down') : null), instant: true, click: () => this.sitDown() });
+    act.push({ id: 'phone', at: A.phonePos, reach: 2.4, label: () => (this.phase === 'ringing' ? L('Answer the phone') : null), instant: true, click: () => this.answer() });
     act.forEach((a) => (a.parent = this));
   }
   pageTex() { const c = document.createElement('canvas'); c.width = 256; c.height = 358; const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.userData = { c }; return t; }
   drawSpread(i) {
-    const pages = BOOK[this.us ? 'us' : 'ru'][i];
+    const pages = BOOK[this.us ? 'us' : 'tx'][i];
     [this.pageTexL, this.pageTexR].forEach((t, k) => {
       const c = t.userData.c, g = c.getContext('2d'); g.fillStyle = '#f4efe2'; g.fillRect(0, 0, c.width, c.height);
       g.fillStyle = 'rgba(0,0,0,.07)'; g.fillRect(k ? 0 : c.width - 12, 0, 12, c.height);
@@ -374,7 +383,6 @@ export class Home {
     for (const ch of txt) { if (ch === '\n') { x = 16; y += 14; continue; } if (x > c.width - 20) { x = 16; y += 14; } g.fillText(ch, x, y); x += 6.6; }
     this.A.paperTex.needsUpdate = true;
   }
-  ruFirst() { return cyr(this.ident.first); }
   hold(what) {
     const prev = this.held; this.held = what;
     if (this.heldObj) { this.cam.remove(this.heldObj); this.heldObj = null; }
@@ -397,7 +405,7 @@ export class Home {
     const f = this.ident.first, l = this.ident.last, town = this.ident.town;
     this.lines = this.us
       ? [[0.8, `“Hello — is this ${f} ${l}?”`, ''], [4.2, '“This is Staff Sergeant Morales, with your unit.”', ''], [8.0, '“The governor’s activated the Guard. You report to Joint Base Cape Cod, oh-six-hundred tomorrow.”', ''], [14.5, '“…Hello? Are you still there?”', '']]
-      : [[0.8, `«Алло. ${cyr(f)} ${cyr(l)}?»`, `“Hello. ${f} ${l}?”`], [4.2, `«Это военкомат, ${cyr(town)}.»`, `“This is the military commissariat, ${town}.”`], [8.0, '«Вам повестка. Завтра в шесть утра, с вещами.»', '“You’ve been called up. Tomorrow, six in the morning. Bring your things.”'], [14.5, '«Алло? Вы меня слышите?»', '“Hello? Can you hear me?”']];
+      : [[0.8, `“Hey — ${f} ${l}?”`, ''], [4.2, '“This is Sergeant First Class Garza, Texas Military Department.”', ''], [8.0, '“The governor’s called up the Guard. Muster at Camp Mabry, oh-six-hundred tomorrow. Bring your gear.”', ''], [14.5, '“…You still there?”', '']];
     this.lineI = 0;
   }
 
@@ -470,7 +478,7 @@ export class Home {
       if (!best) best = this.gardenTarget(fwd);
     }
     const pk = $('pick');
-    if (best) { pk.innerHTML = `${this.o.touch ? 'TAP' : '[E]'} &nbsp;${best.label()}`; pk.style.opacity = 1; } else if (this.act && this.act.hint) { pk.innerHTML = `<small>${this.act.hint()}${this.act.free ? '' : ` · ${this.us ? 'walk away to stop' : 'отойти — закончить'}`}</small>`; pk.style.opacity = 0.8; } else pk.style.opacity = 0;
+    if (best) { pk.innerHTML = `${this.o.touch ? 'TAP' : '[E]'} &nbsp;${best.label()}`; pk.style.opacity = 1; } else if (this.act && this.act.hint) { pk.innerHTML = `<small>${this.act.hint()}${this.act.free ? '' : ` · walk away to stop`}</small>`; pk.style.opacity = 0.8; } else pk.style.opacity = 0;
     if (best && click) {
       if (best.instant) best.click(); else if (best.garden) best.garden(); else this.enter(best);
     }
@@ -484,6 +492,7 @@ export class Home {
     if (this.A.pend) this.A.pend.rotation.z = Math.sin(this.t * Math.PI) * 0.12;
     this.dust.rotation.y = Math.sin(this.t * 0.05) * 0.02; this.dust.position.y = Math.sin(this.t * 0.3) * 0.05;
     if (this.steam) this.steamFx(dt);
+    if (this.life) this.life.update(dt);
     // the ending
     this.ending(dt);
     // fallback: after a long while the pull comes anyway
@@ -511,8 +520,8 @@ export class Home {
     const cam = this.cam, Y = this.Y, us = this.us;
     const near = (obj, reach) => { const p = obj.getWorldPosition ? obj.getWorldPosition(new T.Vector3()) : obj; const d = new T.Vector3().subVectors(p, cam.position), L = d.length(); if (L > reach) return null; const ang = Math.acos(clamp(d.normalize().dot(fwd), -1, 1)); return ang < 0.32 ? ang + L * 0.1 : null; };
     let best = null, bs = 1e9;
-    for (const w of Y.weeds) { if (!w.visible || w.userData.pulled) continue; const s = near(w, 2.3); if (s != null && s < bs) { bs = s; best = { label: () => (us ? 'Pull the weed' : 'Выдернуть сорняк'), garden: () => this.pull(w) }; } }
-    for (const f of Y.fruit) { if (!f.visible || f.userData.picked) continue; const s = near(f, 2.0); if (s != null && s < bs) { bs = s; best = { label: () => (us ? 'Pick it' : 'Сорвать'), garden: () => this.pick(f) }; } }
+    for (const w of Y.weeds) { if (!w.visible || w.userData.pulled) continue; const s = near(w, 2.3); if (s != null && s < bs) { bs = s; best = { label: () => 'Pull the weed', garden: () => this.pull(w) }; } }
+    for (const f of Y.fruit) { if (!f.visible || f.userData.picked) continue; const s = near(f, 2.0); if (s != null && s < bs) { bs = s; best = { label: () => 'Pick it', garden: () => this.pick(f) }; } }
     return best;
   }
   pull(w) {
@@ -616,7 +625,7 @@ function blocks(c) {
     g.fillStyle = '#060608'; g.fillRect(0, 0, W, Hh); g.strokeStyle = '#3a3a4a'; g.strokeRect(ox - 1, oy - 1, CW * sz + 2, CH * sz + 2);
     for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) if (grid[y][x] >= 0) { g.fillStyle = cols[grid[y][x]]; g.fillRect(ox + x * sz, oy + y * sz, sz - 1, sz - 1); }
     g.fillStyle = cols[cur.k]; for (const [u, v] of cur.b) if (cy + v >= 0) g.fillRect(ox + (cx + u) * sz, oy + (cy + v) * sz, sz - 1, sz - 1);
-    g.fillStyle = '#e8e8e8'; g.font = '11px monospace'; g.fillText('ЛИНИИ ' + lines, 6, 16); g.fillText('РЕКОРД 3', W - 70, 16);
+    g.fillStyle = '#e8e8e8'; g.font = '11px monospace'; g.fillText('LINES ' + lines, 6, 16); g.fillText('HI 3', W - 60, 16);
     return ev;
   } };
 }

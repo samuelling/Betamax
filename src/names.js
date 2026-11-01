@@ -2,15 +2,15 @@ import { mulberry32 } from './rng.js';
 
 const DEF_FIRST = ['Danny', 'Ruth', 'Marcus', 'Theo', 'Joanna', 'Eli', 'Owen', 'Teresa', 'Luis', 'Maggie', 'Cal', 'Nate', 'Rosa', 'Will', 'Frankie', 'Sam', 'Ike', 'June', 'Pete', 'Dee', 'Kofi', 'Hank', 'Mae', 'Tommy', 'Ana', 'Gus', 'Wes', 'Lena'];
 const DEF_LAST = ['Hale', 'Costa', 'Nickerson', 'Doane', 'Snow', 'Atwood', 'Pina', 'Mayo', 'Rich', 'Sears', 'Okafor', 'Ryder', 'Kelley', 'Freeman', 'Souza', 'Burke', 'Nguyen', 'Crowell', 'Baker', 'Lopes', 'Higgins', 'Walsh', 'Brennan', 'Eldredge'];
-const DEF_TOWN = ['Wellfleet', 'Truro', 'Chatham', 'Eastham', 'Brockton', 'Worcester', 'Lowell', 'Falmouth', 'Fall River', 'New Bedford', 'Provincetown', 'Hyannis', 'Dorchester', 'Quincy', 'Orleans', 'Somerville', 'Watertown', 'Pittsfield'];
+const DEF_TOWN = ['Wellfleet', 'Truro', 'Chatham', 'Eastham', 'Orleans', 'Brewster', 'Harwich', 'Dennis', 'Yarmouth', 'Hyannis', 'Barnstable', 'Falmouth', 'Woods Hole', 'Mashpee', 'Sandwich', 'Bourne', 'Provincetown', 'Osterville', 'Cotuit'];
 const DEF_RANK = ['PVT', 'PFC', 'SPC', 'CPL', 'SGT'];
 
-// the invaders are Russian: names, ranks and towns from the north-west, around St. Petersburg
-const INV_FIRST_M = ['Ivan', 'Dmitri', 'Sergei', 'Alexei', 'Nikolai', 'Pavel', 'Mikhail', 'Andrei', 'Yuri', 'Oleg', 'Artyom', 'Kirill', 'Maxim', 'Roman', 'Viktor', 'Gleb', 'Stepan', 'Ilya', 'Denis', 'Grigory'];
-const INV_FIRST_F = ['Anna', 'Olga', 'Yelena', 'Marina', 'Svetlana', 'Daria', 'Irina', 'Natalia', 'Vera', 'Polina'];
-const INV_LAST = ['Ivanov', 'Smirnov', 'Kuznetsov', 'Popov', 'Sokolov', 'Lebedev', 'Kozlov', 'Novikov', 'Morozov', 'Volkov', 'Solovyov', 'Vasiliev', 'Zaitsev', 'Pavlov', 'Semyonov', 'Golubev', 'Vinogradov', 'Bogdanov', 'Vorobyov', 'Fyodorov', 'Mikhailov', 'Belyaev', 'Tarasov', 'Belov'];
-const INV_TOWN = ['Gatchina', 'Vsevolozhsk', 'Kolpino', 'Pushkin', 'Kirovsk', 'Tosno', 'Luga', 'Vyborg', 'Kingisepp', 'Priozersk', 'Sestroretsk', 'Lomonosov', 'Volkhov', 'Tikhvin', 'Pskov', 'Novgorod'];
-const INV_RANK = ['RYAD.', 'RYAD.', 'EFR.', 'ML.SGT', 'SGT'];
+// a civil war: the other side came up from Texas — names and towns from across the state
+const INV_FIRST_M = ['Cody', 'Travis', 'Wyatt', 'Colt', 'Jesse', 'Luis', 'Javier', 'Darnell', 'Brandon', 'Kyle', 'Dustin', 'Ty', 'Ray', 'Hector', 'Garrett', 'Caleb', 'Tomas', 'Bo', 'Reggie', 'Mateo'];
+const INV_FIRST_F = ['Shelby', 'Kayla', 'Maria', 'Brittany', 'Tasha', 'Lupe', 'Amber', 'Savannah', 'Jolene', 'Destiny'];
+const INV_LAST = ['Garza', 'Hernandez', 'Pruitt', 'Dawson', 'Trevino', 'McKinney', 'Briscoe', 'Hollis', 'Cantu', 'Whitaker', 'Gonzales', 'Boone', 'Tate', 'Rios', 'Haskins', 'Villarreal', 'Peebles', 'Odom', 'Sandoval', 'Kimbrough', 'Lott', 'Navarro', 'Shelton', 'Washington'];
+const INV_TOWN = ['Lubbock', 'Amarillo', 'Abilene', 'Odessa', 'Midland', 'San Angelo', 'Beaumont', 'Waco', 'Tyler', 'Nacogdoches', 'Lufkin', 'Fredericksburg', 'Kerrville', 'Galveston', 'Corpus Christi', 'Laredo', 'El Paso', 'San Antonio', 'Austin', 'Round Rock', 'Plano', 'Katy', 'Pasadena', 'Conroe', 'Marble Falls', 'Brownsville'];
+const INV_RANK = ['PVT', 'PFC', 'SPC', 'CPL', 'SGT'];
 export const FEMALE = new Set(['Ruth', 'Joanna', 'Teresa', 'Maggie', 'Rosa', 'June', 'Dee', 'Mae', 'Ana', 'Lena', ...INV_FIRST_F]);
 
 const LIVES = [
@@ -23,7 +23,7 @@ const LIVES = [
   'Wanted to be a carpenter, like a father before.',
   'Sang badly and often.',
   'Kept a pressed flower inside the helmet.',
-  'Had never seen the ocean before this week.',
+  'Had never seen this ocean before this week.',
   'Promised to be home for the harvest.',
   'Was afraid of the dark. Still is.',
   'Counted things when nervous. Counting now.',
@@ -42,7 +42,7 @@ const LIVES = [
   'Taught a little brother to ride a bike last spring.',
   'Liked mornings exactly like this one, before.',
   'Had a garden going back home. Tomatoes.',
-  'Wanted to see snow in a city, just once.',
+  'Wanted to see snow, just once.',
   'Fixed radios. Could fix anything with a hum.',
 ];
 
@@ -55,6 +55,6 @@ export function makeIdentity(side, idx) {
     const first = pick(DEF_FIRST);
     return { rank: pick(DEF_RANK), first, last: pick(DEF_LAST), town: pick(DEF_TOWN) + ', MA', age, life, fem: FEMALE.has(first) };
   }
-  const fem = r() < 0.18, first = pick(fem ? INV_FIRST_F : INV_FIRST_M), last = pick(INV_LAST) + (fem ? 'a' : '');
-  return { rank: pick(INV_RANK), first, last, town: pick(INV_TOWN), age, life, fem };
+  const fem = r() < 0.18, first = pick(fem ? INV_FIRST_F : INV_FIRST_M), last = pick(INV_LAST);
+  return { rank: pick(INV_RANK), first, last, town: pick(INV_TOWN) + ', TX', age, life, fem };
 }
