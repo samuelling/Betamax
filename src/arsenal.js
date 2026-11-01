@@ -2,15 +2,15 @@
 // Models are built from simple parts at true scale (metres), -z toward the muzzle, the pistol grip under
 // the right hand at about (0, -0.1, 0.055). Numbers are game-tuned, the hardware is real:
 //   SIG M7 (MCX Spear, 6.8x51)        — defenders' service rifle (existing model)
-//   IWI Tavor X95 (5.56)              — invaders' bullpup (existing model)
+//   IWI Tavor X95 (5.56)              — Texan faction's bullpup (existing model)
 //   SIG M250 (6.8x51, belt-fed)       — defenders' automatic rifleman
-//   IWI Negev NG7 (7.62x51, belt-fed) — invaders' machine gunner
+//   IWI Negev NG7 (7.62x51, belt-fed) — Texan faction's machine gunner
 //   HK416 A5 (5.56)                   — carbine
 //   HK MP7A2 (4.6x30)                 — PDW
 //   Benelli M4 / M1014 (12 ga)        — semi-auto shotgun
 //   HK M110A1 CSASS (7.62x51)         — marksman rifle
 //   SIG M18 (9 mm)                    — defenders' sidearm
-//   Glock 17 Gen 5 (9 mm)             — invaders' sidearm
+//   Glock 17 Gen 5 (9 mm)             — Texan faction's sidearm
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildM7, buildBullpup, WEAPON_MATS as mats, add, rb, cylZ, reticleTex } from './weapons.js';

@@ -208,9 +208,10 @@ export class Home {
     this.life = enhance(this);
     this.tvMat = new T.MeshBasicMaterial({ color: 0x0a0c0b }); this.A.tvScreen.material = this.tvMat;
     this.msgT = 0;
+    for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = 'hidden'; }
     this.say(this.us ? 'An afternoon off.' : 'Saturday. Going to be a hot one.', '', 4);
   }
-  dispose() { this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
+  dispose() { for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = ''; } this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
   resize() { this.cam.aspect = innerWidth / innerHeight; this.cam.updateProjectionMatrix(); this.post.setSize(innerWidth, innerHeight, this.o.Q.pr); }
   say(a, b = '', dur = 4) { const c = $('sub'); c.innerHTML = a + (b ? `<br><em style="opacity:.75">${b}</em>` : ''); c.style.opacity = 1; clearTimeout(this._sayT); this._sayT = setTimeout(() => (c.style.opacity = 0), dur * 1000); }
 
@@ -499,8 +500,8 @@ export class Home {
     if (this.phase === 'free' && this.t > 480) this.compel();
     if (this.phase === 'compelled' || this.phase === 'playing') { this.compelT = (this.compelT || 0) + dt; this.A.vcrLed.material.color.setHSL(0.47, 0.8, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(this.t * 4))); this.A.theTape.material.emissive = new T.Color(0x332a10).multiplyScalar(0.5 + 0.5 * Math.sin(this.t * 3)); }
     // HUD
-    $('mode').textContent = '▶ PLAY';
-    const s = Math.floor(this.tape); $('counter').textContent = `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    // no tape read-out at home: just the room
+    $('mode').textContent = ''; $('counter').textContent = '';
     // render
     if (this.tvLive && this.o.tv) this.o.tv(dt);
     this.post.render(this.t, this.sunDir);
