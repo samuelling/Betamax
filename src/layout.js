@@ -39,6 +39,8 @@ export function buildLayout() {
     let m = -1e9; for (let k = -3; k <= 3; k++) { const j = Math.min(raw.length - 1, Math.max(0, i + k)); m = Math.max(m, raw[j]); }
     p.y = m + 0.35;
   });
+  // the lot end comes down to the asphalt as a gentle ramp (it used to hang 1.4 m in the air)
+  for (let pass = 0; pass < 2; pass++) L.boardwalk.forEach((p, i) => { p.y = Math.min(p.y, raw[i] + 0.12 + i * 0.32); });
   const end = L.boardwalk[L.boardwalk.length - 1];
   L.stairs = { x: bx, z: end.z, top: end.y, bottom: heightAt(bx, end.z + 6) };
   L.stairs.steps = Math.max(4, Math.round((L.stairs.top - L.stairs.bottom) / 0.19));
@@ -180,6 +182,14 @@ export function vehZ(v, t) {
 export function vehRamp(v, t) {
   const u = (t - (v.tArrive + 0.6)) / 1.4;
   return u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+}
+// hovercraft: hull base height (rides higher while under way) and the walkable deck/bow-ramp height at world z
+export function lcacBase(v, t) { return Math.max(heightAt(v.x, vehZ(v, t)), 0) + (t < v.tArrive ? 0.3 : 0.12); }
+export function lcacDeckY(v, t, pz) {
+  const z = vehZ(v, t), top = lcacBase(v, t) + 2.06, lz = pz - z;
+  if (lz > -10.6) return top;
+  const g = Math.max(heightAt(v.x, pz), 0), k = Math.max(0, Math.min(1, (lz + 14.2) / 3.6)) * vehRamp(v, t);
+  return g + (top - g) * k;
 }
 export function vehSpeed(v, t) { return (vehZ(v, t - 0.05) - vehZ(v, t + 0.05)) / 0.1; }
 

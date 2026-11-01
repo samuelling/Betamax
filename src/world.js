@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } from './terrain.js';
-import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose } from './layout.js';
+import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose, lcacBase } from './layout.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 import { buildIFV, buildLCAC, buildUH60, buildGunship, VM } from './vehicles.js';
@@ -98,6 +98,7 @@ export class World {
     this.buildGunships();
     this.buildDecals();
     this.buildTracks();
+    this.stylize();
   }
 
   // AAV tread marks pressed into the wet flats; they exist only where the vehicle has already passed
@@ -171,7 +172,7 @@ export class World {
     this.scene.environmentIntensity = 0.75;
     const fc = skyColorJS(new THREE.Vector3(-SUN_DIR.x, 0.02, -SUN_DIR.z).normalize());
     this.fogColor = new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
-    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.0022);
+    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.0011);
   }
 
   buildLights() {
@@ -187,64 +188,95 @@ export class World {
     this.scene.add(this.hemi);
   }
 
+  // ---------------- low-poly art direction ----------------
+  // every lit surface is faceted (one normal per triangle) and flat-coloured: detail textures are replaced by
+  // their average colour; only textures that carry information (signs, lot paint, decals) are kept
+  stylize() {
+    const avg = new Map();
+    const average = (tex) => {
+      if (avg.has(tex)) return avg.get(tex);
+      let col = null;
+      try {
+        const img = tex.image; const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+        const g = cv.getContext('2d'); g.drawImage(img, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data;
+        col = new THREE.Color().setRGB(d[0] / 255, d[1] / 255, d[2] / 255, THREE.SRGBColorSpace);
+      } catch (e) { /* */ }
+      avg.set(tex, col); return col;
+    };
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m || !(m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) || m.userData.lp) continue;
+        m.userData.lp = true; m.flatShading = true;
+        if (m.normalMap) { m.normalMap = null; }
+        m.roughnessMap = null;
+        if (m.map && !m.transparent && !m.userData.keepMap && !m.alphaTest) {
+          const c = average(m.map); if (c) { m.color.multiply(c); m.map = null; }
+        }
+        m.metalness = Math.min(m.metalness, 0.3);
+        m.needsUpdate = true;
+      }
+    });
+  }
+
   // ---------------- terrain ----------------
   buildTerrain() {
-    const W = 1100, D = 1150, sx = this.q.terrainSeg, sz = Math.round(this.q.terrainSeg * D / W);
-    const g = new THREE.PlaneGeometry(W, D, sx, sz);
-    g.rotateX(-Math.PI / 2);
-    g.translate(0, 0, 130);
-    const pos = g.attributes.position;
-    const col = new Float32Array(pos.count * 3);
-    const wet = new Float32Array(pos.count);
-    const c = new THREE.Color();
+    // low-poly: a fine faceted core where you fight (2 m triangles, so feet stay on the ground) inside a coarse
+    // faceted apron out to the horizon; every triangle gets one flat colour, jittered a little
+    const DRY = [0.86, 0.75, 0.55], WET = [0.66, 0.56, 0.42], WRACK = [0.42, 0.33, 0.22], GRASS = [0.55, 0.62, 0.30], SCRUB = [0.36, 0.45, 0.24], ALGAE = [0.48, 0.52, 0.32], ASPH = [0.24, 0.24, 0.26], DEEP = [0.40, 0.38, 0.30];
     const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-    const DRY = [0.93, 0.86, 0.72], WET = [0.60, 0.54, 0.44], WRACK = [0.32, 0.27, 0.2], GRASS = [0.52, 0.53, 0.33], SCRUB = [0.30, 0.33, 0.21], ALGAE = [0.40, 0.42, 0.30], ASPH = [0.2, 0.2, 0.21];
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), z = pos.getZ(i);
-      const y = heightAt(x, z);
-      pos.setY(i, y);
+    const zone = (x, z, y) => {
       let k;
-      let w = 0;
       if (z > 4) {
-        const low = smoothstep(0.2, -0.15, y);
-        k = mix(WET, mix(WET, [0.5, 0.45, 0.36], 0.6), low);
-        const alg = fbm(x * 0.04 + 9, z * 0.04, 3);
-        k = mix(k, ALGAE, smoothstep(0.58, 0.72, alg) * 0.6);
-        w = smoothstep(4, 14, z);
+        k = mix(WET, [0.6, 0.52, 0.4], smoothstep(0.2, -0.15, y));
+        k = mix(k, ALGAE, smoothstep(0.58, 0.72, fbm(x * 0.04 + 9, z * 0.04, 3)) * 0.7);
       } else {
         k = DRY;
         const wr = Math.exp(-Math.pow((z - 2.5 + (fbm(x * 0.05, 1, 2) - 0.5) * 3) / 1.2, 2)) * smoothstep(0.35, 0.6, fbm(x * 0.15, 3, 2));
         k = mix(k, WRACK, wr * 0.8);
         k = mix(k, WET, smoothstep(0, 6, z) * 0.7);
-        w = smoothstep(0, 6, z) * 0.6;
-        const gm = grassMask(x, z);
-        k = mix(k, GRASS, gm * 0.75);
-        const d = -z, cr = crestD(x);
-        const inland = smoothstep(cr + 6, cr + 26, d);
-        k = mix(k, mix(SCRUB, DRY, smoothstep(0.62, 0.75, fbm(x * 0.03, z * 0.03, 3)) * 0.7), inland);
-        k = mix(k, ASPH, lotMask(x, z));
+        k = mix(k, GRASS, step(0.35, grassMask(x, z)) * 0.85);
+        const d = -z, cr = crestD(x), inland = smoothstep(cr + 6, cr + 26, d);
+        k = mix(k, fbm(x * 0.03, z * 0.03, 3) > 0.6 ? DRY : SCRUB, inland);
+        if (lotMask(x, z) > 0.5) k = ASPH;
       }
-      if (y < -0.4) k = mix(k, [0.38, 0.36, 0.3], smoothstep(-0.4, -2, y));
-      c.setRGB(k[0], k[1], k[2], THREE.SRGBColorSpace);
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-      wet[i] = w;
-    }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.setAttribute('wet', new THREE.BufferAttribute(wet, 1));
-    g.computeVertexNormals();
-    const sand = TX.makeSandTextures();
-    sand.map.repeat.set(220, 230); sand.normal.repeat.set(220, 230);
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
-    mat.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet; varying float vWet;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWet = wet;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWet;')
-        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.97, 0.18, vWet);')
-        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n normal = normalize(mix(normal, normalize(vNormal), vWet*0.65));');
+      if (y < -0.4) k = mix(k, DEEP, smoothstep(-0.4, -2, y));
+      return k;
     };
-    const mesh = new THREE.Mesh(g, mat);
-    mesh.receiveShadow = true;
-    this.root.add(mesh);
+    const step = (e, v) => (v >= e ? 1 : 0);
+    const r = mulberry32(77), c = new THREE.Color();
+    const build = (x0, z0, W, D, nx, nz, hole) => {
+      const pos = [], col = [];
+      const vx = (i) => x0 + (i / nx) * W, vz = (j) => z0 + (j / nz) * D;
+      const H = []; for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) H.push(heightAt(vx(i), vz(j)));
+      const h = (i, j) => H[j * (nx + 1) + i];
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+        const xa = vx(i), xb = vx(i + 1), za = vz(j), zb = vz(j + 1);
+        if (hole && xa >= hole[0] && xb <= hole[1] && za >= hole[2] && zb <= hole[3]) continue;
+        const flip = (i + j) % 2 === 0;
+        const tris = flip ? [[[xa, za, h(i, j)], [xa, zb, h(i, j + 1)], [xb, za, h(i + 1, j)]], [[xb, za, h(i + 1, j)], [xa, zb, h(i, j + 1)], [xb, zb, h(i + 1, j + 1)]]]
+          : [[[xa, za, h(i, j)], [xa, zb, h(i, j + 1)], [xb, zb, h(i + 1, j + 1)]], [[xa, za, h(i, j)], [xb, zb, h(i + 1, j + 1)], [xb, za, h(i + 1, j)]]];
+        for (const t of tris) {
+          const cx = (t[0][0] + t[1][0] + t[2][0]) / 3, cz = (t[0][1] + t[1][1] + t[2][1]) / 3, cy = (t[0][2] + t[1][2] + t[2][2]) / 3;
+          const k = zone(cx, cz, cy), jv = 0.9 + r() * 0.16;
+          c.setRGB(k[0] * jv, k[1] * jv, k[2] * jv, THREE.SRGBColorSpace);
+          for (const v of t) { pos.push(v[0], v[2], v[1]); col.push(c.r, c.g, c.b); }
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      return g;
+    };
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0 });
+    const core = [-176, 176, -214, 186];
+    const cs = this.q.terrainSeg > 300 ? 2 : 3;
+    const gCore = build(core[0], core[2], core[1] - core[0], core[3] - core[2], Math.round((core[1] - core[0]) / cs), Math.round((core[3] - core[2]) / cs), null);
+    const gFar = build(-550, -445, 1100, 1150, 110, 115, core);
+    const mesh = new THREE.Mesh(gCore, mat); mesh.receiveShadow = true;
+    const far = new THREE.Mesh(gFar, mat); far.receiveShadow = true;
+    this.root.add(mesh, far);
     this.terrain = mesh;
   }
 
@@ -262,14 +294,14 @@ export class World {
     const nrm = TX.makeWaterNormal();
     const uni = {
       uTime: this.uTau, uSunDir: { value: SUN_DIR }, uNormal: { value: nrm }, uHeight: { value: ht },
-      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0022 },
+      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0011 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: uni, transparent: true, depthWrite: false,
       vertexShader: `uniform float uTime; varying vec3 vW; varying float vWave;
         void main(){ vec4 w = modelMatrix*vec4(position,1.0);
           float off = smoothstep(${WATERLINE_Z.toFixed(1)}-10.0, ${WATERLINE_Z.toFixed(1)}+80.0, w.z);
-          float wv = sin(w.z*0.21 + uTime*1.1 + sin(w.x*0.013)*2.0)*0.09 + sin(w.z*0.09 - w.x*0.04 + uTime*0.6)*0.14;
+          float wv = sin(w.z*0.21 + uTime*1.1 + sin(w.x*0.013)*2.0)*0.16 + sin(w.z*0.09 - w.x*0.04 + uTime*0.6)*0.22 + sin(w.x*0.17 + w.z*0.05 - uTime*0.8)*0.08;
           w.y += wv*off; vWave = wv*off; vW = w.xyz;
           gl_Position = projectionMatrix*viewMatrix*w; }`,
       fragmentShader: `${SKY_GLSL}
@@ -281,21 +313,19 @@ export class World {
           float depth = vW.y - floorY;
           if (depth < 0.0) discard;
           float off = smoothstep(${WATERLINE_Z.toFixed(1)}-20.0, ${WATERLINE_Z.toFixed(1)}+60.0, vW.z);
-          vec2 uv1 = vW.xz*0.045 + vec2(0.0, uTime*0.02);
-          vec2 uv2 = vW.xz*0.13 + vec2(uTime*0.015, -uTime*0.04);
-          vec3 n1 = texture2D(uNormal, uv1).xyz*2.0-1.0, n2 = texture2D(uNormal, uv2).xyz*2.0-1.0;
-          float str = mix(0.12, 0.45, off);
-          vec3 n = normalize(vec3((n1.x+n2.x)*str, 1.0, (n1.y+n2.y)*str));
+          // low-poly: one normal per facet, straight from the displaced triangle
+          vec3 n = normalize(cross(dFdx(vW), dFdy(vW))); if (n.y < 0.0) n = -n;
+          n = normalize(mix(vec3(0.0, 1.0, 0.0), n, 0.85));
           vec3 V = normalize(cameraPosition - vW);
           vec3 R = reflect(-V, n); R.y = max(R.y, 0.01);
           vec3 refl = skyCol(normalize(R));
           float fres = 0.02 + 0.98*pow(1.0 - max(dot(n, V), 0.0), 5.0);
-          vec3 deep = vec3(0.03,0.09,0.10), shallow = vec3(0.30,0.36,0.30);
-          vec3 col = mix(shallow, deep, smoothstep(0.0, 3.5, depth));
+          vec3 deep = vec3(0.05,0.20,0.24), shallow = vec3(0.30,0.52,0.48);
+          vec3 col = mix(shallow, deep, floor(smoothstep(0.0, 3.5, depth) * 4.0 + 0.5) / 4.0);
           col *= 0.55 + 0.45*max(dot(n, uSunDir), 0.0);
           col = mix(col, refl, fres);
           float s = max(dot(R, uSunDir), 0.0);
-          col += vec3(1.0,0.75,0.5) * (pow(s, 420.0)*30.0 + pow(s, 60.0)*0.4);
+          col += vec3(1.0,0.85,0.65) * step(0.985, s) * 0.8 + vec3(1.0,0.75,0.5) * pow(s, 60.0) * 0.25;
           float foamN = texture2D(uNormal, vW.xz*0.35 + vec2(uTime*0.03, 0.0)).z;
           float edge = smoothstep(0.08, 0.0, depth) * off;
           float brk = smoothstep(0.25, 0.0, abs(depth - 0.55 - vWave*1.5)) * off * smoothstep(0.6, 0.9, foamN);
@@ -310,7 +340,7 @@ export class World {
           gl_FragColor = vec4(col, mix(alpha, 1.0, ff));
         }`,
     });
-    const g = new THREE.PlaneGeometry(1400, 1500, 280, 300);
+    const g = new THREE.PlaneGeometry(1400, 1500, 350, 375).toNonIndexed();
     g.rotateX(-Math.PI / 2); g.translate(0, 0, 690);
     this.water = new THREE.Mesh(g, mat);
     this.water.renderOrder = 1; this.water.frustumCulled = false;
@@ -322,14 +352,15 @@ export class World {
 
   // ---------------- dune grass ----------------
   buildGrass() {
-    const tex = TX.makeGrassTex();
-    const blade = merge([
-      place(new THREE.PlaneGeometry(1.3, 0.95), 0, 0.47, 0),
-      place(new THREE.PlaneGeometry(1.3, 0.95), 0, 0.47, 0, 0, Math.PI / 2, 0),
-      place(new THREE.PlaneGeometry(1.1, 0.8), 0, 0.4, 0, 0, Math.PI / 4, 0),
-    ]);
-    const n = blade.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 });
+    // low-poly beach grass: a tuft of thin three-sided spikes leaning outwards
+    const spikes = []; const rs = mulberry32(5);
+    for (let k = 0; k < 6; k++) {
+      const a = k / 6 * Math.PI * 2 + rs() * 0.5, lean = 0.25 + rs() * 0.3, h = 0.55 + rs() * 0.45;
+      const g = new THREE.ConeGeometry(0.055, h, 3, 1); g.translate(0, h / 2, 0); g.rotateZ(lean); g.rotateY(a); g.translate(Math.cos(a) * 0.08, 0, Math.sin(a) * 0.08);
+      spikes.push(g);
+    }
+    const blade = merge(spikes);
+    const mat = new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.95, color: new THREE.Color().setRGB(0.66, 0.68, 0.36, THREE.SRGBColorSpace) });
     const uT = this.uTau;
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uT;
@@ -353,11 +384,11 @@ export class World {
       if (d > crestD(x) + 18) m = onLot(x, z) || lotMask(x, z) > 0.1 ? 0 : 0.18;
       if (r() > m) continue;
       const y = heightAt(x, z);
-      const s = 0.6 + r() * 0.9;
+      const s = 0.5 + r() * 0.45;
       place(new THREE.BufferGeometry());
       _e.set(0, r() * 6.28, (r() - 0.5) * 0.2); _q.setFromEuler(_e); _p.set(x, y - 0.05, z); _s.set(s, s * (0.8 + r() * 0.5), s);
       _m.compose(_p, _q, _s); im.setMatrixAt(k, _m);
-      col.setRGB(0.85 + r() * 0.3, 0.85 + r() * 0.25, 0.75 + r() * 0.2); im.setColorAt(k, col);
+      const gv = r(); col.setRGB(0.8 + gv * 0.35, 0.82 + gv * 0.25, 0.6 + r() * 0.25); im.setColorAt(k, col);
       k++;
     }
     im.count = k;
@@ -366,7 +397,7 @@ export class World {
   }
 
   buildRocks() {
-    const g = new THREE.IcosahedronGeometry(1, 1);
+    const g = new THREE.IcosahedronGeometry(1, 0);
     const p = g.attributes.position; const r = mulberry32(3);
     for (let i = 0; i < p.count; i++) { const f = 0.8 + r() * 0.35; p.setXYZ(i, p.getX(i) * f, p.getY(i) * f, p.getZ(i) * f); }
     g.computeVertexNormals();
@@ -458,7 +489,7 @@ export class World {
     g.fillStyle = '#f2ead8'; g.font = 'bold 54px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('MAYFLOWER BEACH', 256, 50);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.3), new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.3), Object.assign(new THREE.MeshStandardMaterial({ map: t, roughness: 0.8 }), { userData: { keepMap: true } }));
     sign.position.set(this.shackSign.x, this.shackSign.y, this.shackSign.z);
     this.root.add(sign);
   }
@@ -505,10 +536,10 @@ export class World {
     const trunk = cyl(0.12, 0.2, 4, 6, 0, 2, 0);
     const r = mulberry32(17);
     const blobs = [];
-    for (let k = 0; k < 5; k++) blobs.push(place(new THREE.IcosahedronGeometry(1.4 + r() * 0.8, 1), (r() - 0.5) * 2, 3.6 + r() * 2.2, (r() - 0.5) * 2, 0, 0, 0, 1, 0.65, 1));
+    for (let k = 0; k < 5; k++) blobs.push(place(new THREE.IcosahedronGeometry(1.4 + r() * 0.8, 0), (r() - 0.5) * 2, 3.6 + r() * 2.2, (r() - 0.5) * 2, 0, 0, 0, 1, 0.65, 1));
     const crown = merge(blobs);
     const ti = new THREE.InstancedMesh(trunk, std([0.33, 0.25, 0.2], 0.95), this.L.trees.length);
-    const ci = new THREE.InstancedMesh(crown, std([0.18, 0.25, 0.15], 0.9), this.L.trees.length);
+    const ci = new THREE.InstancedMesh(crown, std([0.26, 0.40, 0.20], 0.9), this.L.trees.length);
     const col = new THREE.Color();
     this.L.trees.forEach((t, i) => {
       _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.4), t.s);
@@ -536,7 +567,7 @@ export class World {
       g.beginPath(); g.moveTo(3 * px, zc * px); g.lineTo((w - 3) * px, zc * px); g.stroke();
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: t, roughness: 0.92 }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), Object.assign(new THREE.MeshStandardMaterial({ map: t, roughness: 0.92 }), { userData: { keepMap: true } }));
     m.position.set((Lt.x0 + Lt.x1) / 2, Lt.y + 0.03, (Lt.z0 + Lt.z1) / 2);
     m.receiveShadow = true; this.root.add(m);
     // abandoned cars
@@ -587,7 +618,7 @@ export class World {
     g.fillStyle = '#111'; g.font = 'bold 30px Arial'; g.textAlign = 'center'; g.fillText('DANGER  MINES', 128, 250);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const signGeo = new THREE.PlaneGeometry(0.8, 0.8);
-    const si = new THREE.InstancedMesh(signGeo, new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, side: THREE.DoubleSide }), this.L.minePosts.length);
+    const si = new THREE.InstancedMesh(signGeo, Object.assign(new THREE.MeshStandardMaterial({ map: t, roughness: 0.8, side: THREE.DoubleSide }), { userData: { keepMap: true } }), this.L.minePosts.length);
     this.L.minePosts.forEach((p, i) => {
       _e.set(0, p.ang, 0.06); _q.setFromEuler(_e); _p.set(p.x, heightAt(p.x, p.z) + 1.15, p.z); _s.set(1, 1, 1);
       _m.compose(_p, _q, _s); si.setMatrixAt(i, _m);
@@ -694,7 +725,7 @@ export class World {
       const z = vehZ(v, tau);
       const moving = tau < v.tArrive;
       const gy = heightAt(v.x, z);
-      const wy = v.type === 'aav' ? Math.max(gy, -0.9) : Math.max(gy, 0) + 0.3 * (moving ? 1 : 0.4);
+      const wy = v.type === 'aav' ? Math.max(gy, -0.9) : lcacBase(v, tau);
       o.grp.position.set(v.x, wy + (moving ? Math.sin(tau * 2.1 + v.jitter * 6) * 0.06 : 0), z);
       const planing = v.type === 'aav' && moving && gy < 0 ? 0.06 : 0;
       o.grp.rotation.set(-planing + (moving ? Math.sin(tau * 1.3 + v.jitter * 4) * 0.015 : 0), 0, 0);

@@ -70,6 +70,24 @@ function boot() {
     G.player.vm.visible = false; tick(0.0001, true);
   };
   G.raw = () => { renderer.render(scene, camera); };
+  // debug: show collision volumes (static + dynamic at the current tape time)
+  G.colliders = (on = true) => {
+    if (G.dbgCol) { scene.remove(G.dbgCol); G.dbgCol = null; }
+    if (!on) return;
+    const O = S.obstacles, grp = new THREE.Group(), mb = new THREE.LineBasicMaterial({ color: 0xff2020, depthTest: false }), mw = new THREE.LineBasicMaterial({ color: 0x20ff40, depthTest: false });
+    const addBox = (o) => {
+      const g = new THREE.EdgesGeometry(new THREE.BoxGeometry(o.hx * 2, o.y1 - o.y0, o.hz * 2));
+      const m = new THREE.LineSegments(g, o.walk ? mw : mb); m.position.set(o.x, (o.y0 + o.y1) / 2, o.z); m.rotation.y = Math.atan2(o.s, o.c); m.renderOrder = 999; grp.add(m);
+    };
+    const addCyl = (o) => {
+      const y0 = heightAt(o.x, o.z), g = new THREE.EdgesGeometry(new THREE.CylinderGeometry(o.r, o.r, o.y1 - y0, 10));
+      const m = new THREE.LineSegments(g, o.walk ? mw : mb); m.position.set(o.x, (o.y1 + y0) / 2, o.z); m.renderOrder = 999; grp.add(m);
+    };
+    for (const o of O.boxes) addBox(o);
+    for (const o of O.circles) addCyl(o);
+    for (const o of O.dynamic(G.tau)) addBox(o);
+    scene.add(grp); G.dbgCol = grp;
+  };
   // debug: free camera in the full world at tape time tau
   G.cam = (tau, x, y, z, tx, ty, tz) => {
     G.state = 'studio'; G.tau = tau; tick(0.0001, false);

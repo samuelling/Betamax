@@ -1,7 +1,7 @@
 // Deterministic forward simulation of the battle. The game only ever plays it backwards.
 import { mulberry32, clamp, lerp } from './rng.js';
 import { heightFast as heightAt, crestD } from './terrain.js';
-import { buildLayout, vehZ, gunshipPose } from './layout.js';
+import { buildLayout, vehZ, gunshipPose, lcacDeckY } from './layout.js';
 import { makeIdentity } from './names.js';
 import { Obstacles } from './obstacles.js';
 
@@ -395,7 +395,7 @@ export function simulate(seed = 7) {
     const vz = vehZ(v, t);
     if (t < a.disembark) {
       a.mode = v.type === 'aav' ? MODE.HIDDEN : MODE.BOAT;
-      a.x = v.x + a.lx; a.z = vz + a.lz; a.y = v.type === 'aav' ? heightAt(v.x, vz) + 0.6 : Math.max(heightAt(v.x, vz), 0) + 1.25;
+      a.x = v.x + a.lx; a.z = vz + a.lz; a.y = v.type === 'aav' ? heightAt(v.x, vz) + 0.6 : lcacDeckY(v, t, a.z);
       a.crouchT = a.crouch = 1; a.yaw = Math.PI; a.speed = 0;
       return;
     }
@@ -404,7 +404,7 @@ export function simulate(seed = 7) {
     if (a.state === 'exit') {
       const p = a.exitPts[a.exitI];
       const done = moveTo(a, p.x, p.z, a.speedRun * 0.8, a.veh);
-      a.y = (v.type === 'lcac' && Math.abs(a.z - v.zStop) < 13) ? Math.max(heightAt(a.x, a.z), 0) + 1.25 * Math.min(1, (a.z - (v.zStop - 13)) / 2) : Math.max(heightAt(a.x, a.z), -0.9);
+      a.y = (v.type === 'lcac' && Math.abs(a.x - v.x) < 4.4 && a.z > v.zStop - 14.2 && a.z < v.zStop + 11) ? lcacDeckY(v, t, a.z) : Math.max(heightAt(a.x, a.z), -0.9);
       advancePhase(a);
       if (done) {
         a.exitI++;

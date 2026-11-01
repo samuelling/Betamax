@@ -109,7 +109,7 @@ export class Post {
     this.rays = new ShaderPass(RAYS); this.composer.addPass(this.rays);
     this.camera = camera; this._v = new THREE.Vector3();
     if (q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.5, 0.55, 0.92);
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.5, 0.94);
       this.composer.addPass(this.bloom);
     }
     this.composer.addPass(new OutputPass());
@@ -128,7 +128,7 @@ export class Post {
       const ru = this.rays.uniforms;
       ru.uSun.value.set(v.x * 0.5 + 0.5, v.y * 0.5 + 0.5);
       const edge = Math.max(0, 1 - Math.max(Math.abs(v.x), Math.abs(v.y)) / 1.6);
-      ru.uAmt.value = facing > 0 ? Math.min(1, facing * 2) * edge * 5 : 0;
+      ru.uAmt.value = facing > 0 ? Math.min(1, facing * 2) * edge * 2 : 0;
       ru.uAspect.value = c.aspect;
     }
     this.composer.render();

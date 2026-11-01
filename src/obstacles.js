@@ -2,7 +2,7 @@
 // (boardwalk deck, beach stairs, side steps, sandbag tops), and moving/wrecked vehicles at any tape time.
 // Pure JS so the simulation (node or browser) and the renderer share exactly the same geometry.
 import { heightFast as heightAt } from './terrain.js';
-import { vehZ, heloPose } from './layout.js';
+import { vehZ, heloPose, lcacDeckY } from './layout.js';
 
 const BW_X = 2, BW_HALF = 1.2;
 
@@ -37,6 +37,11 @@ export class Obstacles {
         if (L.boardwalkGaps.has(i * 2 + (sd > 0 ? 1 : 0))) continue;
         this.boxes.push({ x: BW_X + sd * 1.16, z: mz, c: 1, s: 0, hx: 0.06, hz: 1.02, y0: my - 3, y1: my + 1.0, kind: 'rail', walk: false });
       }
+    }
+    // the boardwalk deck is solid down to the sand: you walk on it, never under or through it
+    for (let i = 0; i < bw.length - 1; i++) {
+      const a = bw[i], b = bw[i + 1], g = Math.min(gy(BW_X, a.z), gy(BW_X, b.z));
+      this.boxes.push({ x: BW_X, z: (a.z + b.z) / 2, c: 1, s: 0, hx: BW_HALF, hz: Math.abs(b.z - a.z) / 2, y0: g - 1, y1: Math.max(a.y, b.y) + 0.03, kind: 'deck', walk: true });
     }
     // beach stairs: each tread is a solid walk-on block (you climb tread by tread, you can't walk underneath),
     // with handrails along both sides
@@ -169,14 +174,14 @@ export class Obstacles {
     }
     // walkable tops (sandbags, rocks, and the hovercraft deck)
     for (const o of this.near(x, z, 1, this._sl || (this._sl = []))) {
-      if (!o.walk) continue;
+      if (!o.walk || o.kind === 'deck') continue;
       if (o.hx !== undefined) { const [lx, lz] = Obstacles.local(o, x, z); if (Math.abs(lx) <= o.hx && Math.abs(lz) <= o.hz) step(o.y1); }
       else if (Math.hypot(x - o.x, z - o.z) < o.r * 0.8) step(o.y1);
     }
-    if (t != null && z > -2) for (const v of L.vehicles) {
+    if (t != null && z > -5) for (const v of L.vehicles) {
       if (v.type !== 'lcac' || Math.abs(x - v.x) > 4.3) continue;
       const vz = vehZ(v, t);
-      if (Math.abs(x - v.x) < 4.3 && z > vz - 11 && z < vz + 11) step(Math.max(heightAt(v.x, vz), 0) + 2.05 + 0.3);
+      if (z > vz - 14.2 && z < vz + 11) step(lcacDeckY(v, t, z));
     }
     return y;
   }
