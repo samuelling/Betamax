@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { J, NJ, NB, bindJoints, boneFrames, buildSoldierGeometry, makeSoldierMaterial } from './rig.js';
 import { posePose, simulateRagdoll } from './anim.js';
 import { MODE, SHOT_F } from './sim.js';
+import { styleOf } from './gait.js';
 
 function lastBefore(arr, t) { // index of last element <= t, or -1
   let lo = 0, hi = arr.length;
@@ -120,7 +121,7 @@ export class Soldiers {
     u = Math.max(0, Math.min(1, u));
     const e = u * u * (3 - 2 * u), knees = Math.min(1, u * 1.5);
     p.u = s.phase / (Math.PI * 2); p.speed = s.speed * (1 - Math.min(1, u * 3)); p.crouch = s.crouch + (1 - s.crouch) * (knees * knees * (3 - 2 * knees));
-    p.pitch = s.pitch * (1 - e) - 0.75 * e; p.idleT = st.deathTime / 1.97 + st.skin * 7; p.mode = 0; p.side = st.side;
+    p.pitch = s.pitch * (1 - e) - 0.75 * e; p.idleT = st.deathTime / 1.97 + st.skin * 7; p.idleSec = st.deathTime; p.st = styleOf(i, st.mg); p.hurt = true; p.mode = 0; p.side = st.side;
     p.recoil = 0; p.reload = -1;
     const k = lastBefore(this.hitT[i], st.deathTime + 1e-3);
     let dx = 0, dz = 0;
@@ -140,7 +141,8 @@ export class Soldiers {
   living(i, s, tau, out) {
     const p = this.pp, st = this.S.actors[i];
     p.u = s.phase / (Math.PI * 2); p.speed = s.speed; p.crouch = s.crouch; p.pitch = s.pitch;
-    p.idleT = tau / 1.97 + st.skin * 7; p.mode = s.mode === MODE.BOAT ? 1 : 0; p.side = st.side;
+    p.idleT = tau / 1.97 + st.skin * 7; p.idleSec = tau; p.st = styleOf(i, st.mg); p.mode = s.mode === MODE.BOAT ? 1 : 0; p.side = st.side;
+    p.hurt = lastBefore(this.hitT[i], tau) >= 0;
     const f = this.fireT[i]; const k = lastBefore(f, tau);
     const ra = k >= 0 ? tau - f[k] : 9;
     p.recoil = ra < 0.12 ? Math.pow(1 - ra / 0.12, 2) : 0;

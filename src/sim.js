@@ -4,6 +4,7 @@ import { heightFast as heightAt, crestD } from './terrain.js';
 import { buildLayout, vehZ, gunshipPose, lcacDeckY } from './layout.js';
 import { makeIdentity } from './names.js';
 import { Obstacles } from './obstacles.js';
+import { styleOf, gaitStride } from './gait.js';
 
 export const DT = 0.05;
 export const HZ = 10; // recording rate (sim runs at 20 Hz)
@@ -325,6 +326,7 @@ export function simulate(seed = 7) {
 
   // steer toward (tx,tz), sliding along obstacles; when stuck, take a detour around them
   function moveTo(a, tx, tz, speed, ignoreVeh = -1) {
+    if (a.hitFlinch > 0 && !a.coward) speed = Math.min(speed, 2.6); // the wounded can't sprint
     if (a.detour && (curT > a.detour.until || Math.hypot(a.detour.x - a.x, a.detour.z - a.z) < 0.6)) a.detour = null;
     const gx = a.detour ? a.detour.x : tx, gz = a.detour ? a.detour.z : tz;
     const dx = gx - a.x, dz = gz - a.z;
@@ -460,7 +462,7 @@ export function simulate(seed = 7) {
   }
 
   // gait cycles per metre depend on speed: walking strides are short, running strides long (matches the mocap)
-  function advancePhase(a) { const stride = 1.45 + 1.5 * clamp((a.speed - 1.4) / 2.8, 0, 1); a.phase += (a.speed * DT / stride) * Math.PI * 2; }
+  function advancePhase(a) { const stride = gaitStride(styleOf(a.id, a.mg), a.speed, a.crouch, a.hitFlinch > 0); a.phase += (a.speed * DT / stride) * Math.PI * 2; }
 
   function combat(a, t) {
     const fighting = (a.side === 1 && a.state === 'cover') || (a.side === 0 && a.state === 'defend');

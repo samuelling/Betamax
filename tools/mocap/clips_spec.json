@@ -1,0 +1,211 @@
+{
+ "walk_relaxed": {
+  "trial": "104_19",
+  "desc": "CasualWalk",
+  "kind": "loco",
+  "window": [
+   1.8,
+   5.2
+  ]
+ },
+ "walk_hurried": {
+  "trial": "132_17",
+  "desc": "Walk Fast",
+  "kind": "loco"
+ },
+ "walk_heavy": {
+  "trial": "137_42",
+  "desc": "Strong Man Walk",
+  "kind": "loco"
+ },
+ "walk_tactical": {
+  "trial": "77_28",
+  "desc": "careful walk",
+  "kind": "loco"
+ },
+ "jog": {
+  "trial": "16_35",
+  "desc": "run/jog",
+  "kind": "loco",
+  "minT": 0.3
+ },
+ "run": {
+  "trial": "09_01",
+  "desc": "run",
+  "kind": "loco",
+  "minT": 0.3
+ },
+ "sprint": {
+  "trial": "127_07",
+  "desc": "Run",
+  "kind": "loco",
+  "minT": 0.3
+ },
+ "crouch_walk": {
+  "trial": "136_09",
+  "desc": "Walk Crouched",
+  "kind": "loco"
+ },
+ "sneak": {
+  "trial": "77_29",
+  "desc": "creeping walk; same take as 139_29 Sneaking",
+  "kind": "loco"
+ },
+ "crouch_run": {
+  "trial": "77_10",
+  "desc": "careful run; same take as 139_10; captured at 60fps",
+  "kind": "loco",
+  "fps_override": 60,
+  "minT": 0.3
+ },
+ "limp": {
+  "trial": "142_12",
+  "desc": "Painfulleftknee",
+  "kind": "loco"
+ },
+ "limp_drag": {
+  "trial": "105_25",
+  "desc": "DragBadLegWalk",
+  "kind": "loco"
+ },
+ "limp_hobble": {
+  "trial": "77_19",
+  "desc": "limping, hurt right leg; captured at 60fps",
+  "kind": "loco",
+  "fps_override": 60
+ },
+ "walk_back": {
+  "trial": "136_25",
+  "desc": "Normal Walk Backwards",
+  "kind": "loco",
+  "backwards": true
+ },
+ "crouch_back": {
+  "trial": "136_11",
+  "desc": "Walk Backwards Crouched",
+  "kind": "loco",
+  "backwards": true
+ },
+ "idle_shift": {
+  "trial": "139_02",
+  "desc": "Shifting Weight; same take as 77_02 standing",
+  "kind": "idle",
+  "window": [
+   0.3,
+   7.6
+  ],
+  "len": [
+   2.5,
+   4.0
+  ]
+ },
+ "idle_ready": {
+  "trial": "77_03",
+  "desc": "ready stance; same take as 139_03",
+  "kind": "idle",
+  "window": [
+   1.8,
+   8.1
+  ],
+  "len": [
+   2.0,
+   4.0
+  ]
+ },
+ "idle_look": {
+  "trial": "40_10",
+  "desc": "wait for bus (leans and peers down/around)",
+  "kind": "idle",
+  "window": [
+   0,
+   6.2
+  ],
+  "len": [
+   2.5,
+   4.0
+  ]
+ },
+ "idle_nervous": {
+  "trial": "79_73",
+  "desc": "scared",
+  "kind": "idle",
+  "window": [
+   0.3,
+   7.3
+  ],
+  "len": [
+   2.5,
+   4.0
+  ]
+ },
+ "idle_cold": {
+  "trial": "79_68",
+  "desc": "cold",
+  "kind": "idle",
+  "window": [
+   0.5,
+   9.6
+  ],
+  "len": [
+   2.5,
+   4.0
+  ]
+ },
+ "stumble": {
+  "trial": "104_13",
+  "desc": "StumbleWalk",
+  "kind": "oneshot",
+  "window": [
+   0.4,
+   2.6
+  ]
+ },
+ "flinch_duck": {
+  "trial": "77_09",
+  "desc": "duck to avoid flying object; same take as 139_09 Ducking",
+  "kind": "oneshot",
+  "window": [
+   1.6,
+   4.6
+  ]
+ },
+ "getup_front": {
+  "trial": "140_01",
+  "desc": "Get Up Face Down",
+  "kind": "oneshot",
+  "window": [
+   1.2,
+   5.0
+  ],
+  "faceAt": "end"
+ },
+ "getup_back": {
+  "trial": "140_08",
+  "desc": "Get Up From Ground Laying on Back",
+  "kind": "oneshot",
+  "window": [
+   1.2,
+   6.0
+  ],
+  "faceAt": "end"
+ },
+ "getup_tactical": {
+  "trial": "77_16",
+  "desc": "laying down, getting up, careful ready pose; same take as 139_16",
+  "kind": "oneshot",
+  "window": [
+   1.2,
+   4.4
+  ],
+  "faceAt": "end"
+ },
+ "fall_back": {
+  "trial": "90_18",
+  "desc": "RugPullFall",
+  "kind": "oneshot",
+  "window": [
+   0.3,
+   2.3
+  ]
+ }
+}

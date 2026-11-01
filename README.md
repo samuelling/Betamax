@@ -32,3 +32,8 @@ node build.mjs   # writes index.html (single file, three.js inlined)
 
 - **Wilhelm scream** — take 4 of the original 1951 session recording ("Man getting bit by an alligator, and he screams"), from the Sunset Editorial collection donated to USC Cinema; released under CC0 1.0 (public domain) by Craig Smith on Freesound, sound #675810: https://freesound.org/people/craigsmith/sounds/675810/ (licence page saved in `credits/`). Up to three dying soldiers per tape get it (at least 40 s apart), alternating forward and reversed.
 - Everything else is synthesized in the browser and fitted to measurements of real recordings (`tools/sound-tuning/`).
+
+## Motion capture
+
+- walk/run/idle: Mixamo, via the three.js Soldier.glb example.
+- All `c_*` clips (walks, sprint, crouch/sneak, limps, idles): CMU Graphics Lab Motion Capture Database, mocap.cs.cmu.edu. "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217." Converter in `tools/mocap/`.

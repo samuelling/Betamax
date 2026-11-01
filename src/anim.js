@@ -2,6 +2,7 @@
 // recoil, flinch, reload, breathing) + precomputed verlet ragdolls for deaths.
 import * as THREE from 'three';
 import { CLIPS } from './mocap.js';
+import { gaitBlend } from './gait.js';
 import { J, NJ } from './rig.js';
 import { heightFast as heightAt } from './terrain.js';
 
@@ -9,11 +10,13 @@ import { heightFast as heightAt } from './terrain.js';
 const MJ = { hips: 0, spine: 1, chest: 2, neck: 3, head: 4, shL: 5, shR: 8, hipL: 11, kneeL: 12, ankleL: 13, toeL: 14, hipR: 15, kneeR: 16, ankleR: 17, toeR: 18 };
 const NM = 19;
 const clip = {};
-for (const k of ['walk', 'run', 'idle']) {
+for (const k of Object.keys(CLIPS)) {
   const c = CLIPS[k]; const d = Float32Array.from(c.data);
   let m = 0; for (let f = 0; f < c.n; f++) m += d[f * NM * 3 + 1]; m /= c.n;
-  clip[k] = { n: c.n, d, hipsMean: m };
+  clip[k] = { n: c.n, d, hipsMean: m, dur: c.dur };
 }
+const DEF_STYLE = { walk: 'walk', run: 'run', crouch: 'c_crouch_walk', limp: 'c_limp', idle: 'idle', idleOff: 0 };
+const TMP = new Float32Array(NM * 3);
 function sampleClip(c, u, out) {
   const f = (((u % 1) + 1) % 1) * c.n; const i0 = Math.floor(f) % c.n, i1 = (i0 + 1) % c.n, t = f - Math.floor(f);
   const a = i0 * NM * 3, b = i1 * NM * 3;
@@ -57,9 +60,15 @@ const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a
 export function posePose(p, out, x, y, z, yaw) {
   const wRun = smooth(2.3, 3.9, p.speed);
   const wMove = smooth(0.12, 0.9, p.speed);
-  sampleClip(clip.walk, p.u, W); sampleClip(clip.run, p.u, R); sampleClip(clip.idle, p.idleT, I);
-  for (let k = 0; k < NM * 3; k++) { const lo = W[k] + (R[k] - W[k]) * wRun; Mx[k] = I[k] + (lo - I[k]) * wMove; }
-  const baseHY = clip.idle.hipsMean + ((clip.walk.hipsMean + (clip.run.hipsMean - clip.walk.hipsMean) * wRun) - clip.idle.hipsMean) * wMove;
+  // this soldier's own gait: a blend of library clips at the shared step phase, over his own idle
+  const st = p.st || DEF_STYLE;
+  const blend = gaitBlend(st, p.speed, p.crouch, !!p.hurt);
+  W.fill(0); let locoHY = 0;
+  for (const [k, w] of blend) { const c = clip[k]; sampleClip(c, p.u, TMP); for (let q = 0; q < NM * 3; q++) W[q] += TMP[q] * w; locoHY += c.hipsMean * w; }
+  const ic = clip[st.idle] || clip.idle;
+  sampleClip(ic, p.idleSec !== undefined ? (p.idleSec + st.idleOff) / ic.dur : p.idleT, I);
+  for (let k = 0; k < NM * 3; k++) Mx[k] = I[k] + (W[k] - I[k]) * wMove;
+  const baseHY = ic.hipsMean + (locoHY - ic.hipsMean) * wMove;
   const boat = p.mode === 1;
   const c = boat ? 1 : p.crouch;
   const kneel = boat ? 1 : smooth(0.55, 0.9, c) * (1 - wMove);
