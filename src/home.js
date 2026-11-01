@@ -238,6 +238,13 @@ export class Home {
     this.phase = 'compelled'; this.compelT = 0;
     if (this.o.audio && this.o.audio.startMusic) { this.o.audio.musicVol = 0.22; this.o.audio.startMusic(); this.o.audio.musicTape(1, 0); }
     this.say('You feel like watching something.', '', 5);
+    // the set comes on by itself to snow and hiss, as if it were waiting for the tape
+    const snow = this.snowMat = new T.ShaderMaterial({ uniforms: { uT: { value: 0 } }, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform float uT; varying vec2 vUv; float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); } void main(){ vec2 c = vUv - 0.5; vec2 g = floor(vUv * vec2(220.0, 160.0)); float n = h(g + floor(uT * 30.0) * 7.31); float roll = smoothstep(0.08, 0.0, abs(fract(vUv.y + uT * 0.13) - 0.5)) * 0.25; float v = n * 0.75 + roll + 0.08; v *= 1.0 - 1.2 * dot(c, c); gl_FragColor = vec4(vec3(v) * vec3(0.92, 0.96, 1.0), 1.0); }' });
+    snow.toneMapped = false; this.A.tvScreen.material = snow;
+    this.snowLight = new T.PointLight(0xc8d8ff, 0.5, 4.5, 1.6); this.snowLight.position.set(-4.9, 0.9, -2.3); this.scene.add(this.snowLight);
+    this.audio.loop('snow', true, (d, sr, r) => { let y = 0; for (let i = 0; i < d.length; i++) { y += 0.55 * ((r() * 2 - 1) - y); d[i] = y * 0.9; } }, 0.07);
+    this.nudgeT = 0;
   }
 
   // ---------------- the cat
@@ -357,7 +364,7 @@ export class Home {
     act.push({ id: 'pet', get at() { return new T.Vector3().copy(this.parent.cat.position).setY(0.2); }, reach: 1.3, label: () => (this.catState === 'sleep' ? L('Pet the cat') : null), instant: true,
       click: () => { this.audio.purr(true); clearTimeout(this._purr); this._purr = setTimeout(() => this.audio.purr(false), 4000); } });
     // the tape and the ending
-    act.push({ id: 'takeTape', at: A.tapePos, reach: 1.6, label: () => (this.phase === 'compelled' && !this.held ? L('Take the tape') : null), instant: true, click: () => { this.hold('tape'); A.theTape.visible = false; this.audio.click(0.3, 900); } });
+    act.push({ id: 'takeTape', at: A.tapePos, get reach() { return this.parent.phase === 'compelled' && this.parent.inside ? 6 : 1.6; }, label: () => (this.phase === 'compelled' && !this.held ? L('Take the tape') : null), instant: true, click: () => { this.hold('tape'); A.theTape.visible = false; this.audio.click(0.3, 900); } });
     act.push({ id: 'insert', at: A.vcrPos, reach: 1.6, label: () => (this.held === 'tape' ? L('Put the tape in') : null), instant: true, click: () => this.insertTape() });
     act.push({ id: 'couch', at: new T.Vector3(A.couchSeat.x, 0.5, A.couchSeat.z), reach: 1.6, label: () => (this.phase === 'playing' ? L('Sit down') : null), instant: true, click: () => this.sitDown() });
     act.push({ id: 'phone', at: A.phonePos, reach: 2.4, label: () => (this.phase === 'ringing' ? L('Answer the phone') : null), instant: true, click: () => this.answer() });
@@ -397,6 +404,7 @@ export class Home {
     this.hold(null); this.phase = 'playing'; this.playT = 0;
     const au = this.o.audio; if (au && au.vcrInsert) { if (au.vcrRunSrc) { try { au.vcrRunSrc.stop(); } catch (e) { /* */ } } au.vcrSkipped = false; au.vcrRunSrc = null; au.vcrInsert(0.85); }
     this.A.vcrLed.material.color.set(0x5affd8);
+    this.audio.loop('snow', false); if (this.snowLight) { this.scene.remove(this.snowLight); this.snowLight = null; } this.A.tvScreen.material = this.tvMat; this.snowMat = null;
     this.say(this.us ? '' : '', '', 0.1);
   }
   sitDown() { this.phase = 'sitting'; this.sitT = 0; this.act = { id: 'couch', pose: { p: new T.Vector3(this.A.couchSeat.x, 1.05, this.A.couchSeat.z), l: this.A.tvPos }, free: true, update() {}, parent: this }; this.actT = 0; this.from = { p: this.cam.position.clone(), q: this.cam.quaternion.clone() }; }
@@ -498,6 +506,8 @@ export class Home {
     this.ending(dt);
     // fallback: after a long while the pull comes anyway
     if (this.phase === 'free' && this.t > 480) this.compel();
+    if (this.snowMat) { this.snowMat.uniforms.uT.value = this.t; if (this.snowLight) this.snowLight.intensity = 0.4 + Math.random() * 0.25; }
+    if (this.phase === 'compelled' && this.held !== 'tape') { this.nudgeT += dt; if (this.nudgeT > 40) { this.nudgeT = 0; this.say(this.inside ? 'The tape’s on the bottom shelf of the bookcase.' : 'The TV’s on inside. Hissing.', '', 4); } }
     if (this.phase === 'compelled' || this.phase === 'playing') { this.compelT = (this.compelT || 0) + dt; this.A.vcrLed.material.color.setHSL(0.47, 0.8, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(this.t * 4))); this.A.theTape.material.emissive = new T.Color(0x332a10).multiplyScalar(0.5 + 0.5 * Math.sin(this.t * 3)); }
     // HUD
     // no tape read-out at home: just the room
