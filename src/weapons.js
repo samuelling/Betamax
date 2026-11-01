@@ -179,7 +179,10 @@ export class Arms {
 // ---------------- reload choreography ----------------
 const ss = (a, b, t) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 // returns duration for a reload kind
-export function reloadDuration(bullpup, tactical) { return bullpup ? (tactical ? 2.7 : 2.9) : (tactical ? 2.6 : 2.05); }
+export function reloadDuration(ud, tactical, missing = 0) {
+  if (ud.tube) return 0.35 + Math.max(1, missing) * 0.42 + (tactical ? 0 : 0.45);
+  return (ud.bullpup ? (tactical ? 2.7 : 2.9) : (tactical ? 2.6 : 2.05)) * (ud.reloadScale || 1);
+}
 
 /**
  * Evaluate the reload at time t (s). Writes into o:
@@ -189,6 +192,21 @@ export function reloadDuration(bullpup, tactical) { return bullpup ? (tactical ?
 export function evalReload(ud, tactical, t, o) {
   const bp = ud.bullpup;
   o.gunOff.set(0, 0, 0); o.gunRot.set(0, 0, 0);
+  if (ud.tube) {
+    // shotgun: tilt the receiver up, thumb shells into the loading port one at a time; rack it if it ran dry
+    const n = Math.max(1, o.missing || 1), end = 0.35 + n * 0.42, D = end + (tactical ? 0 : 0.45);
+    const inW = ss(0, 0.25, t) * (1 - ss(D - 0.3, D, t));
+    o.gunOff.set(-0.05 * inW, 0.03 * inW, 0.02 * inW); o.gunRot.set(0.05 * inW, 0.1 * inW, -0.55 * inW);
+    o.path = [[0, 'support'], [0.2, 'support']];
+    o.events = [];
+    for (let k = 0; k < n; k++) { const t0 = 0.3 + k * 0.42; o.path.push([t0 + 0.12, 'pouch'], [t0 + 0.32, 'well']); o.events.push([t0 + 0.34, 'shell']); }
+    if (!tactical) { o.path.push([end + 0.12, 'charge'], [end + 0.3, 'chargeBack']); o.events.push([end + 0.3, 'rack']); }
+    o.path.push([D, 'support']);
+    o.magState = 'in'; o.seat = 1;
+    o.jolt = tactical ? 0 : Math.exp(-Math.max(0, t - end - 0.3) * 16) * (t > end + 0.3 ? 1 : 0);
+    return o;
+  }
+  const sc = ud.reloadScale || 1; t /= sc;
   if (!bp) {
     // M7: rifle to the workspace, canted inboard, muzzle stays toward the threat
     const inW = ss(0, 0.25, t) * (1 - ss(1.65, 2.0, t + (tactical ? -0.5 : 0)));
@@ -213,6 +231,7 @@ export function evalReload(ud, tactical, t, o) {
     o.events = [[T[0] + 0.05, tactical ? 'magOut' : 'drop'], [T[3], 'magIn'], [T[3] + 0.1, 'tug']].concat(tactical ? [] : [[T[5], 'rack']]);
     o.jolt = tactical ? 0 : Math.exp(-Math.max(0, t - T[5]) * 16) * (t > T[5] ? 1 : 0);
   }
+  if (sc !== 1) { o.path = o.path.map(([tt, n]) => [tt * sc, n]); o.events = o.events.map(([tt, n]) => [tt * sc, n]); }
   return o;
 }
 export function pathPoint(path, t) {
@@ -221,4 +240,4 @@ export function pathPoint(path, t) {
   const k = tb > ta ? ss(ta, tb, t) : 1;
   return [a, b, k];
 }
-export { mats as WEAPON_MATS };
+export { mats as WEAPON_MATS, add, rb, cylZ, reticleTex, m7Magazine, bullpupMagazine };

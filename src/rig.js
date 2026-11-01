@@ -109,6 +109,9 @@ class MeshBuilder {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
     g.setAttribute('skinIdx', new THREE.Float32BufferAttribute(this.si, 4));
     g.setAttribute('skinW', new THREE.Float32BufferAttribute(this.sw, 4));
+    const dom = new Float32Array(this.sw.length / 4);
+    for (let i = 0; i < dom.length; i++) { let b = 0; for (let k = 1; k < 4; k++) if (this.sw[i * 4 + k] > this.sw[i * 4 + b]) b = k; dom[i] = this.si[i * 4 + b]; }
+    g.setAttribute('skinDom', new THREE.Float32BufferAttribute(dom, 1));
     g.setAttribute('matId', new THREE.Float32BufferAttribute(this.mat, 1));
     g.setAttribute('sideMask', new THREE.Float32BufferAttribute(this.sd, 1));
     g.setIndex(this.idx);
@@ -297,14 +300,16 @@ export function buildSoldierGeometry(bindMats) {
 // ---------- instanced GPU-skinning material ----------
 const SKIN_GLSL = /* glsl */`
   uniform sampler2D uBones;
-  attribute vec4 skinIdx; attribute vec4 skinW; attribute float matId; attribute float sideMask;
+  attribute vec4 skinIdx; attribute vec4 skinW; attribute float skinDom; attribute float matId; attribute float sideMask;
   attribute float aInst; attribute float aSide; attribute float aTone;
   varying vec3 vBind; varying float vMat; varying float vSide; varying float vTone;
   mat4 boneM(float b){
     int x = int(b) * 4; int y = int(aInst);
     return mat4(texelFetch(uBones, ivec2(x, y), 0), texelFetch(uBones, ivec2(x + 1, y), 0), texelFetch(uBones, ivec2(x + 2, y), 0), texelFetch(uBones, ivec2(x + 3, y), 0));
   }
-  mat4 skinMat(){ return skinW.x * boneM(skinIdx.x) + skinW.y * boneM(skinIdx.y) + skinW.z * boneM(skinIdx.z) + skinW.w * boneM(skinIdx.w); }
+  // a body blown apart: bone 0's spare matrix slot flags it, and every vertex then rides its one dominant bone
+  // rigidly, so limbs come away clean instead of stretching between the pieces
+  mat4 skinMat(){ if (texelFetch(uBones, ivec2(0, int(aInst)), 0).w > 0.5) { mat4 m = boneM(skinDom); m[0][3] = 0.0; return m; } return skinW.x * boneM(skinIdx.x) + skinW.y * boneM(skinIdx.y) + skinW.z * boneM(skinIdx.z) + skinW.w * boneM(skinIdx.w); }
 `;
 
 const PALETTE_GLSL = /* glsl */`

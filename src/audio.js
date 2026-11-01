@@ -452,6 +452,7 @@ export class Audio {
     this.bakeP = this.bakeAll();
     this.wilhelm = new Map(); this.wilhelmArmed = false; this.wilhelmNext = 0; this.playT = 0;
     this.loadWilhelm();
+    this.makeMusic().catch((e) => console.warn('music', e));
 
     this.eng = {};
     setTimeout(() => this.makeEngines(), 30);
@@ -504,6 +505,141 @@ export class Audio {
       this.W.vwilhelm = { near: [this.entry(x, 0)], mid: [this.entry(mid, 0)], fwd: false };
       this.W.vwilhelmF = { near: this.W.vwilhelm.near, mid: this.W.vwilhelm.mid, fwd: true }; // the odd one plays forward
     } catch (e) { console.warn('wilhelm', e); }
+  }
+
+  // ---------------------------------------------------------------- the score
+  // A slow, plodding string-synth progression in D minor over a pedal D drone that throbs every two seconds.
+  // Each chord is preceded by its own reverb tail played backwards, so it swells up out of nothing and lands
+  // on the downbeat — sound running the wrong way, like everything else here.
+  async makeMusic() {
+    const sr = this.sr, yieldUI = () => new Promise((res) => setTimeout(res, 0));
+    const SEG = 8, CH = [
+      [50, 57, 62, 65], [46, 58, 62, 65], [45, 57, 60, 65], [43, 55, 58, 62],
+      [41, 57, 62, 65], [40, 55, 58, 62], [45, 55, 62, 64], [45, 55, 61, 64],
+    ];
+    const L = SEG * CH.length, n = L * sr, Lc = new Float32Array(n), Rc = new Float32Array(n);
+    const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12), r = mulberry32(777);
+    for (let c = 0; c < CH.length; c++) {
+      const t0 = c * SEG, len = SEG + 2.5, m = Math.floor(len * sr);
+      const bl = new Float32Array(m), br = new Float32Array(m);
+      CH[c].forEach((note, ni) => {
+        const f0 = mtof(note), amp = (ni === 0 ? 0.32 : 0.24) / Math.sqrt(1 + (f0 / 400));
+        for (const det of [-9, -3, 4, 10]) {
+          const f = f0 * Math.pow(2, det / 1200), pan = 0.5 + (det > 0 ? 0.28 : -0.28) * (ni % 2 ? 1 : -0.6);
+          let ph = r(), vib = r() * 6;
+          for (let i = 0; i < m; i++) {
+            const t = i / sr;
+            // two plodding bows per chord: lean in, hold, ease off
+            const q = (t - 4.1) / 0.5;
+            let e = Math.min(1, t / 1.3) * (1 - 0.5 * Math.exp(-q * q)) * (t > 4.1 ? 0.88 + 0.12 * Math.min(1, (t - 4.1) / 1.2) : 1);
+            if (t > SEG - 0.2) e *= Math.exp(-(t - SEG + 0.2) / 0.8);
+            const vb = 1 + 0.0016 * Math.sin(2 * Math.PI * 4.6 * t + vib) * Math.min(1, t / 1.5);
+            ph += f * vb / sr; ph -= Math.floor(ph);
+            const v = (2 * ph - 1) * e * amp;
+            bl[i] += v * (1 - pan); br[i] += v * pan;
+          }
+        }
+      });
+      // darken: two one-pole lowpasses
+      for (const b of [bl, br]) { let y1 = 0, y2 = 0; const a = 1 - Math.exp(-2 * Math.PI * 1500 / sr); for (let i = 0; i < m; i++) { y1 += a * (b[i] - y1); y2 += a * (y1 - y2); b[i] = y2; } }
+      const o = t0 * sr;
+      for (let i = 0; i < m; i++) { const k = (o + i) % n; Lc[k] += bl[i]; Rc[k] += br[i]; }
+      await yieldUI();
+    }
+    // a stereo hall, 5.5 s
+    const irN = Math.floor(5.5 * sr), ir = this.ctx.createBuffer(2, irN, sr);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch), rr = mulberry32(31 + ch); let y = 0;
+      for (let i = 0; i < irN; i++) { const t = i / sr, a = 1 - Math.exp(-2 * Math.PI * (5000 * Math.exp(-t / 1.6) + 400) / sr); y += a * ((rr() * 2 - 1) - y); d[i] = t < 0.025 ? 0 : y * Math.exp(-t / 1.25) * 0.6; }
+    }
+    const convolve = async (l, rch) => {
+      const N2 = n + irN, oc = new OfflineAudioContext(2, N2, sr);
+      const b = oc.createBuffer(2, n, sr); b.getChannelData(0).set(l); b.getChannelData(1).set(rch);
+      const src = oc.createBufferSource(); src.buffer = b; const cv = oc.createConvolver(); cv.normalize = false; cv.buffer = ir;
+      src.connect(cv).connect(oc.destination); src.start();
+      const out = await oc.startRendering(), a = out.getChannelData(0), z = out.getChannelData(1);
+      const wl = new Float32Array(n), wr = new Float32Array(n);
+      for (let i = 0; i < N2; i++) { wl[i % n] += a[i]; wr[i % n] += z[i]; }
+      return [wl, wr];
+    };
+    // the onsets alone, to make the swells from
+    const sl = new Float32Array(n), sR = new Float32Array(n);
+    for (let c = 0; c < CH.length; c++) {
+      const o = c * SEG * sr, m = Math.floor(1.6 * sr);
+      for (let i = 0; i < m; i++) { const g = i > m - 0.4 * sr ? (m - i) / (0.4 * sr) : 1; sl[o + i] = Lc[o + i] * g; sR[o + i] = Rc[o + i] * g; }
+    }
+    const [wl, wr] = await convolve(Lc, Rc), [ql, qr] = await convolve(sl, sR);
+    const outL = new Float32Array(n), outR = new Float32Array(n);
+    for (let i = 0; i < n; i++) { outL[i] = Lc[i] * 0.55 + wl[i] * 0.4; outR[i] = Rc[i] * 0.55 + wr[i] * 0.4; }
+    const SW = Math.floor(4.5 * sr);
+    for (let c = 0; c < CH.length; c++) {
+      const o = c * SEG * sr;
+      for (let j = 0; j < SW; j++) { // backwards tail, ending exactly at the chord
+        const src = (o + j) % n, dst = ((o - j - 1) % n + n) % n;
+        const g = 1.3 * Math.min(1, (SW - j) / (0.5 * sr));
+        outL[dst] += ql[src] * g; outR[dst] += qr[src] * g;
+      }
+    }
+    await yieldUI();
+    // the drone: low D, a fifth and octave above it, throbbing every two seconds; frequencies rounded so they loop clean
+    const lf = (f) => Math.round(f * L) / L;
+    const fD1 = lf(36.71), fD2 = lf(73.42), fA1 = lf(55.0), rd = mulberry32(5);
+    let lp = 0, lp2 = 0; const la = 1 - Math.exp(-2 * Math.PI * 240 / sr);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr, th = 0.5 - 0.5 * Math.cos(2 * Math.PI * t / 2), throb = 0.35 + 0.65 * th * th;
+      const saw = 2 * ((fD2 * t) % 1) - 1;
+      lp += la * (saw - lp); lp2 += la * (lp - lp2);
+      const v = (Math.sin(2 * Math.PI * fD1 * t) * 0.62 + Math.sin(2 * Math.PI * fD2 * t + 0.4 * Math.sin(2 * Math.PI * fD1 * t)) * 0.3 + Math.sin(2 * Math.PI * fA1 * t) * 0.12 + lp2 * 0.5 + (rd() - 0.5) * 0.004) * throb * 1.25;
+      outL[i] += v; outR[i] += v;
+    }
+    let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(outL[i]), Math.abs(outR[i]));
+    const b = this.ctx.createBuffer(2, n, sr), k = 0.9 / (pk || 1);
+    const dl = b.getChannelData(0), dr = b.getChannelData(1);
+    for (let i = 0; i < n; i++) { dl[i] = outL[i] * k; dr[i] = outR[i] * k; }
+    this.music = b;
+    if (this.musicWanted) this.startMusic();
+  }
+  startMusic() {
+    if (!this.ctx) return;
+    this.musicWanted = true;
+    if (!this.music || this.musicSrc) return;
+    const ctx = this.ctx, src = ctx.createBufferSource(); src.buffer = this.music; src.loop = true;
+    if (!this.musicGain) { this.musicGain = ctx.createGain(); this.musicGain.gain.value = 0; this.musicGain.connect(ctx.destination); }
+    const now = ctx.currentTime; this.musicGain.gain.cancelScheduledValues(now); this.musicGain.gain.setValueAtTime(0, now); this.musicGain.gain.linearRampToValueAtTime(this.musicVol ?? 0.3, now + 3);
+    src.connect(this.musicGain); src.start(); this.musicSrc = src;
+  }
+  // the score follows the tape a little: it bends with the transport and dips under heavy fire
+  musicTape(rate, duck = 0) {
+    if (!this.musicSrc) return;
+    const now = this.ctx.currentTime, r = Math.max(0.5, Math.min(2, rate));
+    this.musicSrc.playbackRate.setTargetAtTime(r, now, 0.15);
+    this.musicGain.gain.setTargetAtTime((this.musicVol ?? 0.3) * (1 - 0.5 * duck), now, 0.3);
+  }
+  // the deck taking the tape: a clunk, the threading arm, the drum spinning up
+  vcrMotor() {
+    if (!this.ctx) return;
+    const sr = this.sr, len = 2.2, x = new Float32Array(Math.floor(len * sr)), r = mulberry32(17);
+    let ph = 0, ph2 = 0, lp = 0;
+    for (let i = 0; i < x.length; i++) {
+      const t = i / sr, up = Math.min(1, Math.max(0, (t - 0.25) / 1.1)), f = 18 + 42 * up * up;
+      ph += f / sr; ph2 += 30 * f / sr;
+      const env = Math.min(1, t / 0.2) * Math.max(0, Math.min(1, (len - t) / 0.4));
+      lp += 0.08 * ((r() * 2 - 1) - lp);
+      let v = (Math.sin(2 * Math.PI * ph) * 0.25 + Math.sin(2 * Math.PI * ph2) * 0.05 * up + lp * 0.5) * env;
+      for (const [tc, a] of [[0.42, 0.6], [0.78, 0.45], [1.05, 0.35], [1.45, 0.5]]) if (t > tc) v += (r() * 2 - 1) * a * Math.exp(-(t - tc) / 0.006) + Math.sin(2 * Math.PI * 900 * (t - tc)) * a * 0.3 * Math.exp(-(t - tc) / 0.01);
+      x[i] = v * 0.7;
+    }
+    this.play(this.toBuf(x), 0.8, 0.15);
+  }
+  // the set warming: a soft thump, static, the faint whine of the flyback
+  tvOn() {
+    if (!this.ctx) return;
+    const sr = this.sr, len = 1.4, x = new Float32Array(Math.floor(len * sr)), r = mulberry32(23);
+    for (let i = 0; i < x.length; i++) {
+      const t = i / sr;
+      x[i] = Math.sin(2 * Math.PI * 60 * t) * Math.exp(-t / 0.08) * 0.6 + (r() * 2 - 1) * 0.35 * Math.exp(-t / 0.25) * (r() < 0.3 ? 1 : 0.3) + Math.sin(2 * Math.PI * 15734 * t) * 0.02 * Math.min(1, t / 0.3);
+    }
+    this.play(this.toBuf(x), 0.6, -0.1);
   }
 
   toBuf(x) { const b = this.ctx.createBuffer(1, x.length, this.sr); b.getChannelData(0).set(x); return b; }
@@ -665,6 +801,22 @@ export class Audio {
   }
 
   // the player's own shot: forward, close, with the beach answering back
+  // your own weapon, whatever it is: synthesized from its calibre the first time it's fired
+  gunW(ud) {
+    if (!this.enabled) return;
+    this.B.wpn = this.B.wpn || {};
+    let set = this.B.wpn[ud.id];
+    if (!set) {
+      if (ud.id === 'm7') set = this.B.player; else if (ud.id === 'x95') set = this.B.playerInv;
+      else set = [0, 1, 2].map((k) => this.toBuf(synthRifle(mulberry32(300 + k * 7 + ud.id.length * 31 + ud.id.charCodeAt(0)), this.sr, ud.cal, { suppressed: ud.suppressed })));
+      this.B.wpn[ud.id] = set;
+    }
+    const b = set[Math.floor(Math.random() * set.length)];
+    const src = this.ctx.createBufferSource(); src.buffer = b; src.playbackRate.value = (ud.rate || 1) * (0.98 + Math.random() * 0.04);
+    const g = this.ctx.createGain(); g.gain.value = 0.58 * (ud.gainK || 1);
+    src.connect(g); g.connect(this.master); g.connect(this.verb);
+    src.start();
+  }
   gun(side) {
     if (!this.enabled) return;
     const set = side === 0 ? this.B.player : this.B.playerInv, b = set[Math.floor(Math.random() * set.length)];

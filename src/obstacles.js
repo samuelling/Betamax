@@ -12,16 +12,16 @@ export class Obstacles {
     this.boxes = []; // {x,z,c,s,hx,hz,y0,y1,kind,solid,walk}
     this.circles = []; // {x,z,r,y0,y1}
     const gy = (x, z) => heightAt(x, z);
-    const ob = (x, z, hx, hz, rot, h, kind, walk = false) => {
-      const y0 = gy(x, z) - 0.5; this.boxes.push({ x, z, c: Math.cos(rot), s: Math.sin(rot), hx, hz, y0, y1: gy(x, z) + h, kind, walk });
+    const ob = (x, z, hx, hz, rot, h, kind, walk = false, hi) => {
+      const y0 = gy(x, z) - 0.5; this.boxes.push({ x, z, c: Math.cos(rot), s: Math.sin(rot), hx, hz, y0, y1: gy(x, z) + h, kind, walk, hi });
     };
-    for (const h of L.houses) {
-      ob(h.x, h.z, h.w / 2, h.l / 2, h.rot, h.floors === 2 ? 9.5 : 6, 'house');
+    L.houses.forEach((h, hi) => {
+      ob(h.x, h.z, h.w / 2, h.l / 2, h.rot, h.floors === 2 ? 9.5 : 6, 'house', false, hi);
       if (h.deck) for (let k = -2; k <= 2; k++) {
         const lx = k * h.w * 0.19, lz = h.l / 2 + 2.9;
-        this.circles.push({ x: h.x + lx * Math.cos(h.rot) + lz * Math.sin(h.rot), z: h.z - lx * Math.sin(h.rot) + lz * Math.cos(h.rot), r: 0.12, y1: gy(h.x, h.z) + 3 });
+        this.circles.push({ x: h.x + lx * Math.cos(h.rot) + lz * Math.sin(h.rot), z: h.z - lx * Math.sin(h.rot) + lz * Math.cos(h.rot), r: 0.12, y1: gy(h.x, h.z) + 3, hi });
       }
-    }
+    });
     const S = L.snackShack; ob(S.x, S.z, S.w / 2, S.l / 2, S.rot, 5, 'shack');
     const lg = L.lifeguard; ob(lg.x, lg.z, 0.8, 0.7, 0, 2.6, 'stand');
     for (const [x, z, rot] of L.cars) ob(x, z, 0.98, 2.35, rot, 1.75, 'car');
@@ -125,6 +125,7 @@ export class Obstacles {
       for (const list of [nearL, dyn]) {
         for (const o of list) {
           if (o.vi !== undefined && o.vi === ignoreVeh) continue;
+          if (o.hi !== undefined && this.ruined(o, t)) continue;
           if (o.hx !== undefined && list === dyn) { const rr = o.hx + o.hz + r; if (Math.abs(x - o.x) > rr || Math.abs(z - o.z) > rr) continue; }
           if (o.hx !== undefined) {
             if (y + hgt < o.y0 || y > o.y1 - 0.42) continue; // above it (standing on top) or below
@@ -152,7 +153,7 @@ export class Obstacles {
 
   // height of the walkable surface under (x,z) for someone whose feet are at yPrev (steps up to ~0.45 m)
   surfaceY(x, z, yPrev = 1e9, t = null) {
-    let y = Math.max(heightAt(x, z), -0.9);
+    let y = Math.max(heightAt(x, z) + (t != null && this.D ? this.D.craters.delta(x, z, t) : 0), -0.9);
     const L = this.L, bw = L.boardwalk;
     const ax = Math.abs(x - BW_X);
     const step = (h) => { if (h > y && h <= yPrev + 0.48) y = h; };
@@ -188,7 +189,10 @@ export class Obstacles {
 
   // ground for ragdolls: highest walkable surface (no step limit)
   // resting height for a body part near height y (a corpse under the deck stays under it)
-  restY(x, z, y = 1e9) { return this.surfaceY(x, z, y + 0.35); }
+  restY(x, z, y = 1e9, t = null) { return this.surfaceY(x, z, y + 0.35, t); }
+  // destruction (craters, ruined houses) — set once the battle's explosions are known
+  setDestruction(D) { this.D = D; }
+  ruined(o, t) { return o.hi !== undefined && t != null && this.D && t >= this.D.houses[o.hi].openT; }
 
   // first obstacle hit along a segment (for bullets/LOS). returns t in [0,1] or -1. Ignores low walk-on pieces.
   segment(ax, ay, az, bx, by, bz, t, ignoreVeh = -1, includeLow = false) {
@@ -196,7 +200,7 @@ export class Obstacles {
     const minx = Math.min(ax, bx), maxx = Math.max(ax, bx), minz = Math.min(az, bz), maxz = Math.max(az, bz);
     const cands = [];
     for (let cx = Math.floor(minx / this.cell); cx <= Math.floor(maxx / this.cell); cx++) for (let cz = Math.floor(minz / this.cell); cz <= Math.floor(maxz / this.cell); cz++) {
-      const l = this.grid.get(cx * 10007 + cz); if (l) for (const o of l) if (o.hx !== undefined && (includeLow || !o.walk) && o.kind !== 'rail') cands.push(o);
+      const l = this.grid.get(cx * 10007 + cz); if (l) for (const o of l) if (o.hx !== undefined && (includeLow || !o.walk) && o.kind !== 'rail' && !this.ruined(o, t)) cands.push(o);
     }
     if (t != null) for (const o of this.dynamic(t)) if (o.vi !== ignoreVeh) cands.push(o);
     for (const o of cands) {

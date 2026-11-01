@@ -5,6 +5,7 @@ import { buildLayout, vehZ, gunshipPose, lcacDeckY } from './layout.js';
 import { makeIdentity } from './names.js';
 import { Obstacles } from './obstacles.js';
 import { styleOf, gaitStride } from './gait.js';
+import { computeDestruction } from './destruction.js';
 
 export const DT = 0.05;
 export const HZ = 10; // recording rate (sim runs at 20 Hz)
@@ -157,6 +158,9 @@ export function simulate(seed = 7) {
     ex({ launchT: v.destroyT - 3.2, t: v.destroyT, sx: p.x, sy: 0, sz: p.z, ix: v.x, iy: vy, iz: v.zStop, side: 0, kind: 'vehicle', vi, big: 2, mi: missiles.length - 1 });
   });
   explosions.sort((p, q) => p.t - q.t);
+  // craters and wrecked houses follow from the explosions; the sim walks soldiers through both
+  const D = computeDestruction(L, explosions);
+  O.setDestruction(D);
 
   const simSteps = Math.round(T_SIM / DT) + 1;
   const steps = Math.round(T_SIM * HZ) + 1;
@@ -178,6 +182,7 @@ export function simulate(seed = 7) {
       const te = t + 3.5 + rc() * 2, ang = rc() * Math.PI * 2, off = 1.0 + rc() * 0.5;
       const ix = a.x + Math.sin(ang) * off, iz = a.z + Math.cos(ang) * off;
       explosions.push({ done: false, big: 1.0, side: 1, sy: 6, kind: 'mortar', launchT: te - 16, t: te, sx: (rc() - 0.5) * 140, sz: 360, ix, iy: Math.max(heightAt(ix, iz), 0), iz, opener: true });
+      D.craters.addExplosion(explosions[explosions.length - 1]);
       c.boom = te;
     }
   }
@@ -586,6 +591,7 @@ export function simulate(seed = 7) {
     const ang = start.yaw + Math.PI * (0.6 + ra() * 0.8), off = 1.3 + ra() * 0.6;
     const ix = start.x + Math.sin(ang) * off, iz = start.z + Math.cos(ang) * off;
     explosions.push({ done: true, big: 1.05, side: 1, sy: 6, kind: 'mortar', launchT: dt - 15.5, t: dt, sx: (ra() - 0.5) * 140, sz: 350, ix, iy: Math.max(heightAt(ix, iz), 0), iz, opener: true });
+    D.craters.addExplosion(explosions[explosions.length - 1]);
     explosions.sort((p, q) => p.t - q.t);
     // the bullet that killed him in the sim now goes into the sand instead
     for (let i = 0; i < shots.length; i++) {
@@ -603,7 +609,7 @@ export function simulate(seed = 7) {
     skin: r(),
   }));
 
-  return { L, N, steps, rec, obstacles: O, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: start.id, T_START };
+  return { L, N, steps, rec, obstacles: O, destruction: D, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: start.id, T_START };
 }
 
 function buildRoute(L, x0, r, firstHold) {

@@ -11,7 +11,7 @@ Inspired by the rewound bombing raid in *Slaughterhouse-Five*.
 ## Play
 Open `index.html` (a single self-contained file), or enable GitHub Pages on `main` / root.
 
-- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, P / Esc pause (sensitivity settings).
+- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground, P / Esc pause (sensitivity settings).
 - **Touch (phone/iPad):** floating left stick, drag right side to look, FIRE (drag to aim while firing), AIM, DUCK, JUMP, RLD, pause. Light aim assist (toggle in pause).
 
 Reversed bullets still hurt. The edges of the beach are mined.
@@ -21,6 +21,10 @@ Reversed bullets still hurt. The edges of the beach are mined.
 - `src/playback.js`: renders the recording at any tape position `tau`. Every effect (tracers, impacts, smoke, explosions, wrecks) is a pure function of `tau`, so rewind, fast-forward and checkpoints all come for free.
 - `src/post.js`: the Betamax signal chain (chroma smear, timebase wobble, search-noise bars, head-switching noise, dropouts) over a high-fidelity render.
 - `src/audio.js`: all sound is synthesized. World sounds play reversed; your gun plays forward.
+
+## Weapons
+
+Every body carries a real modern weapon and drops it where it falls; in rewind it lifts back into their hands. Defenders: SIG M7, SIG M250, HK416 A5, HK M110A1 CSASS, Benelli M1014, HK MP7A2, with a SIG M18 sidearm. Invaders: IWI Tavor X95, IWI Negev NG7, HK416 A5, MP7A2, M1014, CSASS, with a Glock 17. Taking a body gives you its gun; you can swap it for anything lying in the sand, and you always keep the sidearm.
 
 ## Build
 ```

@@ -16,7 +16,10 @@ export class Input {
       this.keys[e.code] = true;
       if (e.code === 'KeyC' || e.code === 'ControlLeft') this.crouchToggle = !this.crouchToggle;
       if (e.code === 'Space') { this.jumpBuf = 0.15; e.preventDefault(); }
+      if (e.code === 'Digit1') this.slotReq = 1; if (e.code === 'Digit2') this.slotReq = 2; if (e.code === 'KeyX') this.slotReq = 3;
+      if (e.code === 'KeyF' || e.code === 'KeyE') this.useReq = true;
     });
+    addEventListener('wheel', (e) => { if (document.pointerLockElement === canvas && Math.abs(e.deltaY) > 2) { const n = performance.now(); if (n - (this.wheelT || 0) > 250) { this.slotReq = 3; this.wheelT = n; } } }, { passive: true });
     addEventListener('keyup', (e) => { this.keys[e.code] = false; });
     addEventListener('mousemove', (e) => {
       if (document.pointerLockElement !== canvas) return;
@@ -67,6 +70,7 @@ export class Input {
       const up = (e) => { e.preventDefault(); if (!toggle) { this.t[key] = false; el.classList.remove('on'); } if (key === 'fire') lid = null; };
       el.addEventListener('touchend', up, { passive: false }); el.addEventListener('touchcancel', up, { passive: false });
     };
+    for (const [id, f] of [['#bSwap', () => (this.useReq = true)], ['#bGun', () => (this.slotReq = 3)]]) { const el = root.querySelector(id); if (el) el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); f(); }, { passive: false }); }
     btn('#bFire', 'fire'); btn('#bFire2', 'fire'); btn('#bAds', 'ads', true); btn('#bCrouch', 'crouch', true); btn('#bJump', 'jump'); btn('#bReload', 'reload');
     this.syncTouch = () => { root.querySelector('#bAds').classList.toggle('on', this.t.ads); root.querySelector('#bCrouch').classList.toggle('on', this.t.crouch); };
     root.addEventListener('touchstart', (e) => {
@@ -118,7 +122,9 @@ export class Input {
       reload: k.KeyR || this.t.reload,
       sprint: k.ShiftLeft || k.ShiftRight || this.t.sprint,
       touchLook: this.touch && !this.locked,
+      slot: this.slotReq || 0, use: !!this.useReq,
     };
+    this.slotReq = 0; this.useReq = false;
     this.lx = this.ly = 0; this.t.reload = false;
     return o;
   }

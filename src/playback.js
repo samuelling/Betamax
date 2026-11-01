@@ -137,6 +137,7 @@ export class Playback {
 
     sm.begin(); gl.begin(); tr.begin();
     for (const item of ctx.liveFx) item(sm, gl, tr);
+    this.sol.gibFx(tau, sm);
 
     // ---------------- shots ----------------
     const n = S.nShots;

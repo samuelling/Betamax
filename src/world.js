@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } from './terrain.js';
 import { buildLayout, vehZ, vehRamp, heloPose, gunshipPose, lcacBase } from './layout.js';
+import { pieceState } from './destruction.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 import { buildIFV, buildLCAC, buildUH60, buildGunship, VM } from './vehicles.js';
@@ -87,7 +88,6 @@ export class World {
     this.buildGrass();
     this.buildRocks();
     this.buildBeachStuff();
-    this.buildHouses();
     this.buildTrees();
     this.buildLot();
     this.buildMinefield();
@@ -204,10 +204,27 @@ export class World {
 
   // ---------------- terrain ----------------
   buildTerrain() {
+    // a coarse terrain out to the horizon, plus a fine core over the battlefield that can be cratered
     const W = 1100, D = 1150, sx = this.q.terrainSeg, sz = Math.round(this.q.terrainSeg * D / W);
+    const X0 = -W / 2, Z0 = 130 - D / 2, dx = W / sx, dz = D / sz;
+    const rc = [X0 + Math.round((-165 - X0) / dx) * dx, X0 + Math.round((165 - X0) / dx) * dx, Z0 + Math.round((-160 - Z0) / dz) * dz, Z0 + Math.round((150 - Z0) / dz) * dz];
+    this.coreRect = rc;
     const g = new THREE.PlaneGeometry(W, D, sx, sz);
     g.rotateX(-Math.PI / 2);
     g.translate(0, 0, 130);
+    const step = this.q.terrainSeg > 300 ? 0.8 : 1.25;
+    const gc = new THREE.PlaneGeometry(rc[1] - rc[0], rc[3] - rc[2], Math.round((rc[1] - rc[0]) / step), Math.round((rc[3] - rc[2]) / step));
+    gc.rotateX(-Math.PI / 2); gc.translate((rc[0] + rc[1]) / 2, 0, (rc[2] + rc[3]) / 2);
+    { const p = gc.attributes.position, uv = gc.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) - X0) / W, (Z0 + D - p.getZ(i)) / D); }
+    const mat = this.colorTerrain(g, null);
+    this.colorTerrain(gc, mat);
+    // under the core, the coarse terrain drops away
+    { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); if (x > rc[0] + 0.01 && x < rc[1] - 0.01 && z > rc[2] + 0.01 && z < rc[3] - 0.01) p.setY(i, p.getY(i) - 4); } g.computeVertexNormals(); }
+    const core = new THREE.Mesh(gc, mat); core.receiveShadow = true; this.root.add(core);
+    this.terrainCore = core;
+  }
+
+  colorTerrain(g, matIn) {
     const pos = g.attributes.position;
     const col = new Float32Array(pos.count * 3);
     const wet = new Float32Array(pos.count);
@@ -247,15 +264,39 @@ export class World {
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('wet', new THREE.BufferAttribute(wet, 1));
     g.computeVertexNormals();
+    if (matIn) return matIn;
     const sand = TX.makeSandTextures();
     sand.map.repeat.set(220, 230); sand.normal.repeat.set(220, 230);
     // softer sand grain under cel bands
     sand.map.minFilter = THREE.LinearMipmapLinearFilter;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
+    // craters: looked up from a coarse grid of crater ids, each crater (x, z, radius, time) in a float texture
+    const cu = this.crU = {
+      uCrG: { value: new THREE.DataTexture(new Float32Array(8).fill(-1), 2, 1, THREE.RGBAFormat, THREE.FloatType) },
+      uCr: { value: new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType) },
+      uCrRect: { value: new THREE.Vector4(0, 0, 6, 1) }, uCrNZ: { value: 1 }, uTauT: this.uTau,
+    };
+    cu.uCrG.value.needsUpdate = cu.uCr.value.needsUpdate = true;
+    const CR_GLSL = `uniform sampler2D uCrG, uCr; uniform vec4 uCrRect; uniform float uCrNZ, uTauT; varying float vCrater;
+      float crProf(float d){ if (d > 1.6) return 0.0; float bowl = d < 1.0 ? -0.34 * (1.0 - d*d) * (1.0 - d*d*0.25) : 0.0; float q = (d - 1.02) / 0.22; return bowl + 0.09 * exp(-q*q); }
+      float crH(vec2 p){
+        vec2 q = (p - uCrRect.xy) / uCrRect.z; ivec2 c = ivec2(floor(q));
+        if (c.x < 0 || c.y < 0 || float(c.x) >= uCrRect.w || float(c.y) >= uCrNZ) return 0.0;
+        float h = 0.0;
+        for (int s = 0; s < 2; s++) { vec4 ids = texelFetch(uCrG, ivec2(c.x*2+s, c.y), 0);
+          for (int k = 0; k < 4; k++) { float id = ids[k]; if (id < 0.0) continue; int ii = int(id + 0.5);
+            vec4 cr = texelFetch(uCr, ivec2(ii % 1024, ii / 1024), 0); float age = uTauT - cr.w; if (age <= 0.0) continue;
+            h += crProf(length(p - cr.xy) / cr.z) * cr.z * min(1.0, age / 0.18); } }
+        return max(h, -1.4); }`;
     mat.onBeforeCompile = (sh) => {
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet; varying float vWet;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWet = wet;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWet;')
+      Object.assign(sh.uniforms, cu);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet; varying float vWet;\n' + CR_GLSL)
+        .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+          { float e = 0.35; float hx = crH(position.xz + vec2(e, 0.0)) - crH(position.xz - vec2(e, 0.0)); float hz = crH(position.xz + vec2(0.0, e)) - crH(position.xz - vec2(0.0, e));
+            objectNormal = normalize(objectNormal + vec3(-hx / (2.0*e), 0.0, -hz / (2.0*e))); }`)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWet = wet; vCrater = crH(position.xz); transformed.y += vCrater;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWet; varying float vCrater;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(1.0, 0.58, smoothstep(0.0, -0.6, vCrater)); diffuseColor.rgb *= 1.0 + 0.12 * smoothstep(0.02, 0.1, vCrater);')
         .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.97, 0.18, vWet);')
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n normal = normalize(mix(normal, normalize(vNormal), vWet*0.65));');
     };
@@ -263,6 +304,26 @@ export class World {
     mesh.receiveShadow = true;
     this.root.add(mesh);
     this.terrain = mesh;
+    return mat;
+  }
+
+  // destruction from the battle: crater textures for the terrain, and the houses as breakable pieces
+  setDestruction(D) {
+    const rc = this.coreRect, cell = 6, nx = Math.ceil((rc[1] - rc[0]) / cell), nz = Math.ceil((rc[3] - rc[2]) / cell);
+    const list = D.craters.list, n = Math.max(1, list.length), tw = 1024, th = Math.ceil(n / tw);
+    const cr = new Float32Array(tw * th * 4);
+    list.forEach((c, i) => cr.set([c.x, c.z, c.R, c.t], i * 4));
+    const grid = new Float32Array(nx * 2 * nz * 4).fill(-1);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const x0 = rc[0] + i * cell, z0 = rc[2] + j * cell;
+      const hit = list.filter((c) => { const px = Math.max(x0, Math.min(x0 + cell, c.x)), pz = Math.max(z0, Math.min(z0 + cell, c.z)); return Math.hypot(px - c.x, pz - c.z) < c.R * 1.6; })
+        .sort((a, b) => b.R - a.R).slice(0, 8);
+      hit.forEach((c, k) => { grid[(j * nx * 2 + i * 2) * 4 + k] = c.i; });
+    }
+    const tG = new THREE.DataTexture(grid, nx * 2, nz, THREE.RGBAFormat, THREE.FloatType); tG.needsUpdate = true;
+    const tC = new THREE.DataTexture(cr, tw, th, THREE.RGBAFormat, THREE.FloatType); tC.needsUpdate = true;
+    this.crU.uCrG.value = tG; this.crU.uCr.value = tC; this.crU.uCrRect.value.set(rc[0], rc[2], cell, nx); this.crU.uCrNZ.value = nz;
+    this.buildBreakableHouses(D);
   }
 
   // ---------------- water ----------------
@@ -520,6 +581,110 @@ export class World {
     B.build(this.root);
   }
 
+  // houses as pieces (wall panels with their windows, slabs, roof panels, gables, chimney, deck) merged per material;
+  // each vertex knows its piece, and a float texture holds one matrix per piece, so blown-off pieces fly, tumble
+  // and land — and in rewind lift back into place
+  buildBreakableHouses(D) {
+    const sh = TX.makeShingleTex(); sh.wrapS = sh.wrapT = THREE.RepeatWrapping;
+    const M = {
+      siding: new THREE.MeshStandardMaterial({ map: sh, roughness: 0.95 }), roof: std([0.2, 0.2, 0.22], 0.85), trim: std([0.92, 0.92, 0.88], 0.6),
+      glass: std([0.05, 0.07, 0.09], 0.08, 0.2), brick: std([0.45, 0.22, 0.17], 0.9), deck: std([0.5, 0.42, 0.33], 0.9), floor: std([0.42, 0.36, 0.3], 0.9),
+    };
+    const lists = {}; for (const k of Object.keys(M)) lists[k] = [];
+    const pieces = [];
+    const add = (mat, geo, pid) => { const n = geo.attributes.position.count; geo.setAttribute('piece', new THREE.Float32BufferAttribute(new Float32Array(n).fill(pid), 1)); lists[mat].push(geo); };
+    // world-anchored shingle UVs so the siding runs continuously across panels
+    const sidingUV = (g, h) => {
+      const p = g.attributes.position, nn = g.attributes.normal, uv = g.attributes.uv;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ax = Math.abs(nn.getX(i)), ay = Math.abs(nn.getY(i));
+        if (ay > 0.5) uv.setXY(i, x / 3.6, z / 3.6); else if (ax > 0.5) uv.setXY(i, z / 3.6, y / 3.0); else uv.setXY(i, x / 3.6, y / 3.0);
+      }
+    };
+    for (const H of D.houses) {
+      const h = H.h, y0 = H.y0, fh = (h.floors === 2 ? 6.2 : 3.2) / h.floors;
+      const nWin = Math.floor(h.w / 2.6);
+      for (const pc of H.pieces) {
+        const pid = pieces.length; pieces.push(pc);
+        const local = []; // [mat, geo] in house-local coords
+        if (pc.kind === 'wall') {
+          local.push(['siding', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
+          if (pc.win) for (let k = 0; k < nWin; k++) {
+            const wx = -h.w / 2 + (k + 0.5) * (h.w / nWin);
+            if (wx < pc.x - pc.sx / 2 || wx >= pc.x + pc.sx / 2) continue;
+            const zf = pc.side * (h.l / 2 + 0.02), f = pc.row;
+            local.push(['glass', box(1.1, 1.4, 0.06, wx, 1.7 + f * fh, zf)]);
+            local.push(['trim', box(1.35, 0.12, 0.1, wx, 1.0 + f * fh, pc.side * (h.l / 2 + 0.04))]);
+            local.push(['trim', box(1.35, 0.12, 0.1, wx, 2.42 + f * fh, pc.side * (h.l / 2 + 0.04))]);
+          }
+          if (pc.axis === 'x' && (pc.col === 0 || pc.col === Math.max(2, Math.round(h.w / 2.6)) - 1)) local.push(['trim', box(0.18, pc.sy, 0.18, pc.col === 0 ? -h.w / 2 : h.w / 2, pc.y, pc.side * h.l / 2)]);
+          if (pc.row === h.floors - 1 && pc.axis === 'x') local.push(['trim', box(pc.sx + 0.05, 0.2, 0.3, pc.x, pc.y + pc.sy / 2, pc.z)]);
+        } else if (pc.kind === 'slab') local.push(['floor', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
+        else if (pc.kind === 'roof') local.push(['roof', place(new THREE.BoxGeometry(pc.sx, pc.sy, pc.sz), pc.x, pc.y, pc.z, pc.side * Math.atan2(h.floors === 2 ? 3.4 : 2.8, (h.l + 0.8) / 2), 0, 0)]);
+        else if (pc.kind === 'gable') {
+          const RH = h.floors === 2 ? 3.4 : 2.8, half = h.l / 2;
+          const shp = new THREE.Shape(); shp.moveTo(-half, 0); shp.lineTo(half, 0); shp.lineTo(0, RH); shp.lineTo(-half, 0);
+          const gg = new THREE.ExtrudeGeometry(shp, { depth: 0.2, bevelEnabled: false }); gg.translate(0, 0, -0.1); gg.rotateY(Math.PI / 2); gg.translate(pc.x, pc.y - RH / 3, 0);
+          local.push(['siding', gg]);
+        } else if (pc.kind === 'chimney') local.push(['brick', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
+        else if (pc.kind === 'deck') local.push(['deck', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
+        else if (pc.kind === 'post') local.push(['trim', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
+        for (const [mat, g0] of local) {
+          const g = g0.index ? g0.toNonIndexed() : g0;
+          if (mat === 'siding') sidingUV(g, h);
+          g.rotateY(h.rot); g.translate(h.x, y0, h.z);
+          for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+          add(mat, g, pid);
+        }
+      }
+    }
+    // one matrix per piece (4 texels), identity until it's blown off
+    const NP = pieces.length, data = new Float32Array(NP * 16);
+    for (let i = 0; i < NP; i++) data.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], i * 16);
+    const tex = new THREE.DataTexture(data, 4, NP, THREE.RGBAFormat, THREE.FloatType); tex.needsUpdate = true;
+    const PIECE_GLSL = `uniform sampler2D uPieces; attribute float piece;
+      mat4 pieceM(){ int y = int(piece + 0.5); return mat4(texelFetch(uPieces, ivec2(0, y), 0), texelFetch(uPieces, ivec2(1, y), 0), texelFetch(uPieces, ivec2(2, y), 0), texelFetch(uPieces, ivec2(3, y), 0)); }`;
+    const inject = (m, depth) => {
+      const prev = m.onBeforeCompile;
+      m.onBeforeCompile = (shd, r) => {
+        if (prev) prev(shd, r);
+        shd.uniforms.uPieces = { value: tex };
+        shd.vertexShader = shd.vertexShader.replace('#include <common>', '#include <common>\n' + PIECE_GLSL)
+          .replace('#include <begin_vertex>', 'mat4 pM = pieceM();\nvec3 transformed = (pM * vec4(position, 1.0)).xyz;');
+        if (!depth) shd.vertexShader = shd.vertexShader.replace('#include <beginnormal_vertex>', 'vec3 objectNormal = mat3(pieceM()) * normal;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3( tangent.xyz );\n#endif');
+      };
+      m.customProgramCacheKey = () => 'pieces' + (depth ? 'd' : '');
+    };
+    const depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); inject(depthMat, true);
+    for (const [k, l] of Object.entries(lists)) {
+      if (!l.length) continue;
+      const m = M[k]; inject(m, false);
+      const mesh = new THREE.Mesh(mergeGeometries(l), m);
+      mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.customDepthMaterial = depthMat;
+      this.root.add(mesh);
+    }
+    this.pieces = pieces; this.pieceTex = tex; this.pieceData = data;
+    this.flying = pieces.map((p, i) => [p, i]).filter(([p]) => p.t !== Infinity);
+  }
+  updatePieces(tau) {
+    if (!this.flying) return;
+    const st = this._ps || (this._ps = {}), m = this._pm || (this._pm = new THREE.Matrix4()), q = this._pq || (this._pq = new THREE.Quaternion()), e = this._pe || (this._pe = new THREE.Euler()), a = this._pa || (this._pa = new THREE.Matrix4());
+    let dirty = false;
+    for (const [p, i] of this.flying) {
+      const age = tau - p.t;
+      const key = age <= 0 ? -1 : Math.min(age, p.land + 0.4);
+      if (p._k === key) continue;
+      p._k = key; dirty = true;
+      if (age <= 0) { this.pieceData.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], i * 16); continue; }
+      pieceState(p, age, st);
+      e.set(st.rx, st.ry, st.rz); q.setFromEuler(e);
+      m.makeRotationFromQuaternion(q); m.setPosition(st.x, st.y, st.z);
+      a.makeTranslation(-p.c.x, -p.c.y, -p.c.z); m.multiply(a);
+      this.pieceData.set(m.elements, i * 16);
+    }
+    if (dirty) this.pieceTex.needsUpdate = true;
+  }
+
   buildTrees() {
     const trunk = cyl(0.12, 0.2, 4, 6, 0, 2, 0);
     const r = mulberry32(17);
@@ -702,6 +867,7 @@ export class World {
   // ---------------------------------------------------------------
   update(tau, cam, explosions) {
     this.uTau.value = tau;
+    this.updatePieces(tau);
     // sun shadow follows camera
     const s = this.sun;
     const tx = Math.round(cam.position.x / 4) * 4, tz = Math.round(cam.position.z / 4) * 4;

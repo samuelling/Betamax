@@ -12,6 +12,8 @@ import { Post } from './post.js';
 import { heightAt, inMinefield, ARENA } from './terrain.js';
 import { vehZ, heloPose } from './layout.js';
 import * as TX from './textures.js';
+import { VCRIntro } from './vcr.js';
+import { Pickups } from './pickups.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -35,11 +37,18 @@ const camera = new THREE.PerspectiveCamera(74, innerWidth / innerHeight, 0.03, 6
 scene.add(camera);
 
 let G; // game
+// the opening: a tape at the slot of a deck sitting on an old set. It's drawn once now, while the battle is computed
+const vcr = params.has('nointro') ? null : new VCRIntro(renderer);
+if (vcr) {
+  const l = $('load'); l.classList.add('vcr'); l.textContent = 'LOADING TAPE\u2026';
+  vcr.update(0);
+}
 setTimeout(boot, 30);
 
 function boot() {
   const world = new World(renderer, scene, Q);
   const S = simulate(7);
+  world.setDestruction(S.destruction);
   const sol = new Soldiers(scene, S);
   const smoke = new Billboards(scene, 11000, TX.makeSoftTex(), false, world.fogColor);
   const glow = new Billboards(scene, 5000, TX.makeFlashTex(), true, world.fogColor);
@@ -53,6 +62,7 @@ function boot() {
   const post = new Post(renderer, scene, camera, Q);
   post.setSize(innerWidth, innerHeight, Q.pr);
   G = { world, S, sol, pb, player, input, audio, post };
+  G.pick = new Pickups(scene, S, sol);
   // brass casings + dropped magazines live in forward time
   const brassGeo = new THREE.CylinderGeometry(0.0065, 0.0065, 0.05, 8).rotateZ(Math.PI / 2);
   G.brass = new THREE.InstancedMesh(brassGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.75, 0.56, 0.26, THREE.SRGBColorSpace), metalness: 1, roughness: 0.3 }), 48);
@@ -110,9 +120,9 @@ function boot() {
     for (const pool of [G.pb.smoke, G.pb.glow, G.pb.tr]) pool.mesh.visible = false;
     G.player.vm.visible = false; G.post.render(G.real);
   };
-  G.vmStudio = (side, reloadT, tactical) => {
+  G.vmStudio = (side, reloadT, tactical, wid) => {
     G.state = 'play'; G.world.root.visible = false; scene.fog = null; G.sol.mesh.visible = false;
-    const p = G.player; p.setSide(side); p.health = 1e9; p.pos.set(0, 50, 0); p.vel.set(0, 0, 0); p.yaw = 0; p.pitch = 0;
+    const p = G.player; if (wid) p.setLoadout(side, wid, 'm18'); else p.setSide(side); p.health = 1e9; p.pos.set(0, 50, 0); p.vel.set(0, 0, 0); p.yaw = 0; p.pitch = 0;
     if (reloadT !== undefined) { p.ammo = tactical ? 5 : 0; p.startReload(); p.reloadT = reloadT; }
     G.input.keys = {}; tick(0.0001, false); p.pos.set(0, 50, 0); p.vel.set(0,0,0); tick(0.0001, false); renderer.render(scene, camera);
   };
@@ -123,8 +133,20 @@ function boot() {
   });
   buildCrosshair();
   if (input.touch) $('bPause').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); pauseGame(); }, { passive: false });
-  showTitle();
-  $('load').style.display = 'none';
+  if (vcr) {
+    G.vcr = vcr; vcr.ready();
+    const l = $('load'); l.innerHTML = '<span class="blink">CLICK TO INSERT TAPE</span>';
+    const go = (e) => {
+      if (!G.vcr || e.button > 0) return;
+      G.audio.init();
+      if (vcr.insert(G.audio)) { l.style.display = 'none'; removeEventListener('pointerdown', go); removeEventListener('keydown', go); }
+    };
+    addEventListener('pointerdown', go); addEventListener('keydown', go);
+    G.state = 'vcr'; hud(false); $('hud').style.visibility = 'hidden';
+  } else {
+    showTitle();
+    $('load').style.display = 'none';
+  }
   addEventListener('resize', onResize);
   // let the tape counter etc. show behind the title
   G.last = performance.now();
@@ -134,6 +156,7 @@ function boot() {
 function onResize() {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); G.post.setSize(innerWidth, innerHeight, Q.pr);
+  if (G.vcr) G.vcr.onResize();
 }
 
 // ---------------------------------------------------------------- HUD helpers
@@ -206,7 +229,7 @@ function startTape() {
   G.introK = undefined; G.introA = undefined;
   G.playT = 0; if (G.audio && G.audio.wilhelm) { G.audio.wilhelm.clear(); G.audio.wilhelmArmed = false; G.audio.wilhelmNext = 0; }
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
-  G.player.setSide(0); G.player.health = 100;
+  G.player.setBody(S.actors[S.startId]); G.player.health = 100; G.pick && G.pick.reset();
   G.state = 'intro'; G.stateT = 0; G.tauRate = 1; G.caught = false;
   hud(false);
   $('feed').innerHTML = '';
@@ -218,19 +241,20 @@ function beginPlayFromBody(i, tauNow) {
   const p = G.player;
   p.pos.set(s.x, s.y, s.z); p.vel.set(0, 0, 0);
   p.yaw = s.yaw + Math.PI; p.pitch = Math.max(-0.5, Math.min(0.5, s.pitch)) * 0.5;
-  p.setSide(G.S.actors[i].side); p.health = 100;
+  p.setBody(G.S.actors[i]); p.health = 100;
   G.body = i;
 }
 
 function saveCheckpoint() {
   const p = G.player;
-  G.cp = { tau: G.tau, body: G.body, pos: p.pos.clone(), yaw: p.yaw, pitch: p.pitch, lives: G.lives.length };
+  G.cp = { tau: G.tau, body: G.body, pos: p.pos.clone(), yaw: p.yaw, pitch: p.pitch, lives: G.lives.length, slots: JSON.parse(JSON.stringify(p.slots)), taken: new Set(G.pick.taken), left: G.pick.left.map((l) => ({ ...l })) };
 }
 function restoreCheckpoint() {
   const c = G.cp, p = G.player;
   G.tau = c.tau; G.body = c.body; G.lives.length = c.lives;
   p.pos.copy(c.pos); p.vel.set(0, 0, 0); p.yaw = c.yaw; p.pitch = c.pitch; p.health = 100;
-  p.setSide(G.S.actors[c.body].side);
+  p.setLoadout(G.S.actors[c.body].side, null, null, c.slots);
+  for (const l of G.pick.left) G.pick.free('l' + l.k); G.pick.taken = new Set(c.taken); G.pick.left = c.left.map((l) => ({ ...l }));
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
 }
 
@@ -293,7 +317,13 @@ function playerFire(muzzle, inp) {
   _o.copy(camera.position);
   camera.getWorldDirection(_d);
   const moving = Math.hypot(p.vel.x, p.vel.z) / 5;
-  const spread = (0.022 * (1 - p.ads) + 0.0025 * p.ads + moving * 0.012 + p.recoil * 0.2);
+  const ud = p.gun.userData;
+  // your own shot is the one sound on the tape that runs forward
+  G.audio.gunW(ud);
+  const dir0 = _d.clone();
+  for (let pel = 0; pel < (ud.pellets || 1); pel++) {
+  _d.copy(dir0);
+  const spread = (0.022 * (1 - p.ads) + 0.0025 * p.ads + moving * 0.012 + p.recoil * 0.2) * (ud.spread || 1) + (ud.pellets > 1 ? 0.045 : 0);
   _d.x += (Math.random() - 0.5) * spread; _d.y += (Math.random() - 0.5) * spread; _d.z += (Math.random() - 0.5) * spread; _d.normalize();
   const tT = rayTerrain(_o, _d);
   const hb = G.S.obstacles.segment(_o.x, _o.y, _o.z, _o.x + _d.x * 300, _o.y + _d.y * 300, _o.z + _d.z * 300, G.tau, -1, true);
@@ -311,22 +341,22 @@ function playerFire(muzzle, inp) {
   }
   const tEnv = Math.min(tT, tV);
   const end = new THREE.Vector3();
-  // your own shot is the one sound on the tape that runs forward
-  G.audio.gun(p.side);
   if (who >= 0 && best < tEnv) {
     end.copy(_o).addScaledVector(_d, best);
     // friendly fire: anyone can be shot, and anyone you kill becomes you
     const friendly = G.S.actors[who].side === side;
     addTracer(muzzle, end);
     addImpact(end, 3);
-    G.enemyHp[who] -= head ? 200 : 42;
-    if (G.enemyHp[who] <= 0) { hitMarker(true); beginPossess(who, friendly); }
+    const fall = ud.pellets > 1 ? Math.max(0.25, 1 - best / 40) : 1; // buckshot thins out with range
+    G.enemyHp[who] -= (head ? ud.head : ud.dmg) * fall;
+    if (G.enemyHp[who] <= 0 && G.state === 'play') { hitMarker(true); beginPossess(who, friendly); return; }
     else hitMarker(false);
   } else {
     const t = Math.min(tEnv, 300);
     end.copy(_o).addScaledVector(_d, t);
-    addTracer(muzzle, end);
+    if (pel < 3) addTracer(muzzle, end);
     if (t < 300) addImpact(end, end.y <= 0.01 && heightAt(end.x, end.z) < 0 ? 2 : tV < tT ? 4 : 1);
+  }
   }
 }
 
@@ -343,6 +373,8 @@ function handlePlayerEvents() {
     } else if (e === 'magOut') A.play(A.B.magOut, 0.45);
     else if (e === 'magIn') A.play(A.B.magIn, 0.7);
     else if (e === 'tug') A.play(A.B.tug, 0.35);
+    else if (e === 'shell') A.play(A.B.magIn, 0.45, 0, 1.4);
+    else if (e === 'draw') A.play(A.B.tug, 0.4, 0, 1.2);
     else if (e === 'bolt') { A.play(A.B.bolt, 0.8); p.shake = Math.max(p.shake, 0.1); }
     else if (e === 'rack') A.play(A.B.rack, 0.8);
   }
@@ -462,6 +494,17 @@ let fpsAvg = 60;
 function frame(now) {
   requestAnimationFrame(frame);
   if (G.hold) { G.last = now; return; }
+  if (G.vcr) {
+    const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
+    const d = G.vcr.update(dt), f = $('fade');
+    if (d >= 0) f.style.opacity = Math.max(0, (d - 0.55) / 0.45);
+    if (d >= 1) { // through the glass: the menu, full screen, with the beach behind it
+      G.vcr.dispose(); G.vcr = null;
+      $('hud').style.visibility = ''; showTitle(); tick(0.0001);
+      f.style.transition = 'opacity .9s'; requestAnimationFrame(() => { f.style.opacity = 0; });
+    }
+    return;
+  }
   tick(Math.min(0.05, (now - G.last) / 1000)); G.last = now;
 }
 // test hook: advance the game deterministically
@@ -531,6 +574,14 @@ function tick(dt, draw = true) {
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
       const out = p.update(dt, inp, S.obstacles, G.tau);
       if (p.jumped) G.input.consumeJump();
+      // weapons: 1 / 2 / wheel to switch, F or E to swap with a gun on the ground
+      if (inp.slot === 1) p.switchTo('primary'); else if (inp.slot === 2) p.switchTo('sidearm'); else if (inp.slot === 3) p.switchTo(p.cur === 'primary' ? 'sidearm' : 'primary');
+      { camera.getWorldDirection(tmpV); const n = G.pick.update(G.tau, p.pos, tmpV, G.body);
+        const pk = $('pick');
+        if (n) { pk.innerHTML = `${G.input.touch ? 'SWAP' : '[F]'} &nbsp;${n.name} <small>${n.cal}</small>`; pk.style.opacity = 1; } else pk.style.opacity = 0;
+        if (G.input.touch) $('bSwap').style.display = n ? 'flex' : 'none';
+        if (n && inp.use && p.swapT < 0) { const old = p.slots.primary.id, id = G.pick.take(p, old); if (id) { p.pickUp(id); G.audio.play(G.audio.B.tug, 0.6); G.audio.play(G.audio.B.rack, 0.4); feed(`picked up ${n.name}`); } }
+      }
       const mz = p.tryFire(inp);
       if (mz) { playerFire(mz, inp); ejectBrass(); }
       handlePlayerEvents();
@@ -617,6 +668,7 @@ function tick(dt, draw = true) {
   const L = listener();
   if (G.audio.enabled) {
     G.audio.update(G.tau, ctx.sound ? tauRate : 0, dt);
+    G.audio.musicTape(Math.abs(tauRate) > 1.3 ? Math.min(2, Math.abs(tauRate) * 0.6) : 1, Math.min(1, G.shake || 0));
     if (ctx.sound) worldSounds(S, G.tau, L, G.body, G.audio, G.pb);
     machineSounds(S, G.tau, L, G.audio);
   }
@@ -665,7 +717,7 @@ function tick(dt, draw = true) {
     const st = S.actors[G.body];
     $('ident').innerHTML = `<span class="side">${st.side ? 'INVADER' : 'DEFENDER'}</span>${short(G.body)}`;
     $('hp').firstChild.style.width = Math.max(0, p.health) + '%';
-    $('ammo').innerHTML = p.reload > 0 ? 'RELOAD' : `${p.ammo}<small> / ${p.mag}</small>`;
+    $('ammo').innerHTML = `<div class="wn">${p.weaponName}</div>` + (p.reload > 0 ? 'RELOAD' : `${p.ammo}<small> / ${p.mag}</small>`);
     $('lives').textContent = `PERSPECTIVES ${G.lives.length}  ·  HOME IN ${fmtCounter(Math.max(0, G.tau - st.spawn)).slice(2)}`;
     const moving = Math.hypot(p.vel.x, p.vel.z) / 5;
     setCross(0.022 * (1 - p.ads) + moving * 0.012 + p.recoil * 0.2, p.ads < 0.6);
@@ -673,7 +725,7 @@ function tick(dt, draw = true) {
   if (G.state !== 'play') $('warn').style.opacity = 0;
 
   // camera fov for ADS
-  if (G.state === 'play') { const f = 74 - p.ads * 22; if (Math.abs(camera.fov - f) > 0.05) { camera.fov = f; camera.updateProjectionMatrix(); } }
+  if (G.state === 'play') { const f = 74 - p.ads * (74 - (p.gun.userData.adsFov || 52)); if (Math.abs(camera.fov - f) > 0.05) { camera.fov = f; camera.updateProjectionMatrix(); } }
 
   // post
   G.flash *= Math.exp(-dt * 3.5); G.damageFx *= Math.exp(-dt * 2.2);

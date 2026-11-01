@@ -18,8 +18,13 @@
   #sp { position: absolute; bottom: 5%; left: 5%; font-size: clamp(18px, 2.6vw, 28px); opacity: .9; }
   #ident { position: absolute; bottom: 12%; left: 5%; font-size: clamp(18px, 2.4vw, 26px); }
   #ident .side { display: inline-block; padding: 0 6px; margin-right: 8px; background: rgba(0,0,0,.35); }
-  #ammo { position: absolute; bottom: 12%; right: 5%; font-size: clamp(26px, 3.6vw, 40px); text-align: right; }
+  #ammo { position: absolute; bottom: 14.5%; right: 5%; font-size: clamp(26px, 3.6vw, 40px); text-align: right; }
   #ammo small { font-size: .55em; opacity: .8; }
+  #ammo .wn { font-size: .5em; opacity: .75; letter-spacing: 2px; }
+  #pick { position: absolute; left: 50%; top: 54.5%; transform: translateX(-50%); font-size: clamp(20px, 2.6vw, 30px); opacity: 0; transition: opacity .15s; white-space: nowrap; }
+  #pick small { opacity: .7; font-size: .7em; }
+  #bSwap { right: calc(var(--u)*3.1); bottom: calc(var(--u)*2.0); width: calc(var(--u)*1.0); height: calc(var(--u)*1.0); display: none; }
+  #bGun { right: calc(var(--u)*0.75); bottom: calc(var(--u)*4.0); width: calc(var(--u)*.8); height: calc(var(--u)*.8); }
   #hp { display: none; position: absolute; bottom: 9.5%; left: 5%; width: min(30vw, 240px); height: 8px; background: rgba(0,0,0,.4); }
   #hp i { display: block; height: 100%; width: 100%; background: #f4f1e8; }
   #lives { position: absolute; top: 11%; left: 5%; font-size: clamp(16px, 2vw, 22px); opacity: .85; }
@@ -66,10 +71,15 @@
   #ovl .row { display: flex; gap: 14px; align-items: center; justify-content: center; font-size: clamp(18px, 2.6vw, 28px); margin: .35em; }
   #ovl input[type=range] { width: min(46vw, 320px); accent-color: #f4f1e8; }
   #ovl input[type=checkbox] { width: 22px; height: 22px; accent-color: #f4f1e8; }
+  #load.vcr { background: none; align-items: flex-end; padding-bottom: 9vh; box-sizing: border-box; pointer-events: none; text-shadow: 2px 2px 0 rgba(0,0,0,.6); letter-spacing: 3px; }
+  #load .blink { animation: blink 1.1s steps(2, start) infinite; }
+  @keyframes blink { to { visibility: hidden; } }
+  #fade { position: fixed; inset: 0; background: #0b0a08; opacity: 0; pointer-events: none; z-index: 9; }
   #load { position: fixed; inset: 0; background: #1530c8; color: #f4f1e8; font: clamp(28px,5vw,52px) 'VT323', monospace; display: flex; align-items: center; justify-content: center; z-index: 10; }
 </style>
 </head>
 <body>
+<div id="fade"></div>
 <div id="load">LOADING TAPE...</div>
 <div id="hud">
   <div class="osd" id="mode"></div>
@@ -87,9 +97,10 @@
   <div id="warn">MINEFIELD &mdash; TURN BACK</div>
   <div id="card"></div>
   <div id="sub"></div>
+  <div id="pick"></div>
 </div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>
-  <div class="tb" id="bFire">FIRE</div><div class="tb" id="bFire2">FIRE</div><div class="tb" id="bPause">&#10074;&#10074;</div><div class="tb" id="bAds">AIM</div><div class="tb" id="bCrouch">DUCK</div><div class="tb" id="bJump">JUMP</div><div class="tb" id="bReload">RLD</div></div>
+  <div class="tb" id="bFire">FIRE</div><div class="tb" id="bFire2">FIRE</div><div class="tb" id="bPause">&#10074;&#10074;</div><div class="tb" id="bAds">AIM</div><div class="tb" id="bCrouch">DUCK</div><div class="tb" id="bJump">JUMP</div><div class="tb" id="bReload">RLD</div><div class="tb" id="bSwap">SWAP</div><div class="tb" id="bGun">GUN</div></div>
 <div id="ovl"></div>
 <script>/*BUNDLE*/</script>
 </body>
