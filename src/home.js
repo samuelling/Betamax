@@ -1,6 +1,7 @@
 // The last tape, and the only one that plays forward: an ordinary afternoon at home. Chores, a garden, a cat in a
 // patch of sun. At some point you're drawn to put on a tape and sit down; then the phone rings.
 import { enhance } from './homelife.js';
+import { story } from './homestory.js';
 import * as THREE from 'three';
 import { Post } from './post.js';
 import { cultureSheet, buildHouse, furnish, buildYard, mk, col, std, B, RB, CY } from './homebuild.js';
@@ -15,7 +16,7 @@ const $ = (id) => document.getElementById(id);
 
 // ------------------------------------------------------------------ words
 const TASKS = {
-  us: { dishes: 'Do the dishes', read: 'Finish the book', game: 'Beat my high score', water: 'Water the garden', weed: 'Weed the beds', harvest: 'Pick the tomatoes', cook: 'Make chowder', laundry: 'Fold the laundry', type: 'Write to Gram', cat: 'Feed Biscuit' },
+  us: { dishes: 'Do the dishes', read: 'Finish the book', game: 'Beat my high score', water: 'Water the garden', weed: 'Weed the beds', harvest: 'Pick the tomatoes', cook: 'Make chowder', laundry: 'Fold the laundry', type: 'Write to Gram', cat: 'Feed Quahog' },
   tx: { dishes: 'Dishes', read: 'Finish my book', game: 'Beat my high score', water: 'Water before it gets hot', weed: 'Pull the weeds', harvest: 'Pick tomatoes + peppers', cook: 'Make chili', laundry: 'Fold the laundry', type: 'Write Mamaw', cat: 'Feed Pepper' },
 };
 const TEMPLATES = [
@@ -144,6 +145,15 @@ class HomeAudio {
     const us = this.us;
     this.play((d, sr) => { for (let i = 0; i < d.length; i++) { const t = i / sr, on = us ? (t < 2) : (t < 1); const strike = Math.pow(0.5 + 0.5 * Math.sin(TAU * 20 * t), 6); d[i] = on ? (Math.sin(TAU * 1080 * t) + 0.7 * Math.sin(TAU * 1340 * t) + 0.3 * Math.sin(TAU * 2900 * t)) * (0.35 + 0.65 * strike) * 0.3 : 0; } }, us ? 2.2 : 1.2, 0.7, -0.3);
   }
+  // the story's sounds
+  chord(g = 0.22) { this.play((d, sr) => { const fs = [220, 277.2, 329.6, 440]; for (let i = 0; i < d.length; i++) { const t = i / sr, e = Math.min(1, t / 0.8) * Math.exp(-Math.max(0, t - 0.8) / 1.6); d[i] = fs.reduce((a, f, k) => a + Math.sin(TAU * f * t + k) * (k === 3 ? 0.3 : 0.5), 0) * e * 0.3; } }, 4.5, g); }
+  hum(g = 0.2) { this.play((d, sr) => { const mel = [392, 440, 392, 349, 330, 349, 392, 0, 392, 523, 494, 440, 392]; let ph = 0; for (let i = 0; i < d.length; i++) { const t = i / sr, n = Math.floor(t / 0.42), f = mel[n % mel.length], u = (t / 0.42) % 1; if (!f) continue; ph += TAU * f * (1 + 0.012 * Math.sin(t * 34) + (Math.sin(n * 7.1) * 0.025)) / sr; const v = Math.sin(ph) + 0.5 * Math.sin(2 * ph) + 0.25 * Math.sin(3 * ph); d[i] = v * Math.sin(Math.PI * u) * 0.25; } }, 5.5, g); }
+  talk(dur, g, rate = 1) { this.play((d, sr, r) => { let ph = 0, y = 0, y2 = 0, lo = 0; const syl = 4.3 * rate; for (let i = 0; i < d.length; i++) { const t = i / sr, s = Math.floor(t * syl), u = (t * syl) % 1, gap = Math.sin(s * 12.9898) > 0.75 ? 0 : 1, f0 = 118 + 20 * Math.sin(s * 3.1) + 10 * Math.sin(t * 2);
+      ph += TAU * f0 / sr; const src = ((ph / TAU) % 1) - 0.5 + (r() - 0.5) * 0.4; y += 0.25 * (src - y); y2 += 0.04 * (y - y2); lo += 0.6 * (((r() * 2 - 1) * 0.04) - lo); d[i] = ((y - y2) * 2.2 * Math.pow(Math.sin(Math.PI * u), 0.6) * gap + lo) * Math.min(1, t * 4, (dur - t) * 4); } }, dur, g, -0.2); }
+  jets() { this.play((d, sr, r) => { let y = 0, y2 = 0; for (let i = 0; i < d.length; i++) { const t = i / sr, near = Math.exp(-Math.pow((t - 2.4) / 1.1, 2)), tail = t > 2.4 ? Math.exp(-(t - 2.4) / 2.2) : 0; const c = 0.02 + 0.25 * near; y += c * ((r() * 2 - 1) - y); y2 += 0.02 * ((r() * 2 - 1) - y2); d[i] = y * (0.15 + 1.6 * near + 0.5 * tail) * Math.min(1, t / 1.5) + y2 * 3 * (near + tail * 0.6); } }, 8, 0.55); }
+  helis() { this.play((d, sr, r) => { let y = 0; for (let i = 0; i < d.length; i++) { const t = i / sr, env = Math.sin(Math.PI * t / 12), beat = Math.pow(0.5 + 0.5 * Math.sin(TAU * 4.6 * t), 8) + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(TAU * 5.3 * t + 1), 8); y += 0.03 * ((r() * 2 - 1) - y); d[i] = y * 6 * beat * env; } }, 12, 0.3, 0.5, this.out); }
+  thin(k) { if (!this.ok) return; this.out.gain.value = 1 - 0.8 * k; }
+  tock(g) { this.tk = !this.tk; const f = this.tk ? 2600 : 2100; this.play((d, sr, r) => { for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = (Math.sin(TAU * f * t) * Math.exp(-t / 0.012) + (r() * 2 - 1) * Math.exp(-t / 0.002) * 0.5) * 0.8; } }, 0.06, g, -0.3); }
   purr(on) { this.loop('purr', on, (d, sr, r) => { let y = 0; for (let i = 0; i < d.length; i++) { const t = i / sr; y += 0.05 * ((r() * 2 - 1) - y); d[i] = y * 4 * Math.pow(0.5 + 0.5 * Math.sin(TAU * 26 * t), 3) * (0.6 + 0.4 * Math.sin(TAU * t * 0.5)); } }, 0.5); }
   water(on, g = 0.35) { this.loop('water', on, (d, sr, r) => { let y = 0, y2 = 0; for (let i = 0; i < d.length; i++) { y += 0.4 * ((r() * 2 - 1) - y); y2 += 0.1 * (y - y2); d[i] = (y - y2) * 1.2 * (0.85 + 0.15 * Math.sin(i / sr * 37)); } }, g); }
   simmer(on) { this.loop('simmer', on, (d, sr, r) => { for (let i = 0; i < d.length; i++) d[i] = 0; for (let k = 0; k < 60; k++) { const i0 = Math.floor(r() * d.length), f = 300 + r() * 900; for (let i = 0; i < 1200 && i0 + i < d.length; i++) d[i0 + i] += Math.sin(TAU * f * i / sr * (1 + i / 3000)) * Math.exp(-i / 300) * 0.3; } }, 0.25); }
@@ -206,12 +216,13 @@ export class Home {
     this.buildCat(); this.drawNote(); this.buildActivities();
     this.dust = this.makeDust();
     this.life = enhance(this);
+    this.story = story(this);
     this.tvMat = new T.MeshBasicMaterial({ color: 0x0a0c0b }); this.A.tvScreen.material = this.tvMat;
     this.msgT = 0;
     for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = 'hidden'; }
     this.say(this.us ? 'An afternoon off.' : 'Saturday. Going to be a hot one.', '', 4);
   }
-  dispose() { for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = ''; } this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
+  dispose() { if (this.story) { this.story.dispose(); this.audio.loop('radioStatic', false); } for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = ''; } this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
   resize() { this.cam.aspect = innerWidth / innerHeight; this.cam.updateProjectionMatrix(); this.post.setSize(innerWidth, innerHeight, this.o.Q.pr); }
   say(a, b = '', dur = 4) { const c = $('sub'); c.innerHTML = a + (b ? `<br><em style="opacity:.75">${b}</em>` : ''); c.style.opacity = 1; clearTimeout(this._sayT); this._sayT = setTimeout(() => (c.style.opacity = 0), dur * 1000); }
 
@@ -230,7 +241,7 @@ export class Home {
   finish(k) {
     if (this.done.has(k)) return;
     this.done.add(k); this.drawNote(); this.audio.click(0.25, 1800);
-    if (this.tpl[1].every((x) => this.done.has(x)) && this.phase === 'free') setTimeout(() => this.compel(), 2500);
+    if (this.tpl[1].filter((x) => this.done.has(x)).length >= 2 && this.phase === 'free') setTimeout(() => this.compel(), 2500);
   }
   // the pull toward the tape
   compel() {
@@ -284,7 +295,7 @@ export class Home {
     const L = (en) => en;
     // dishes
     const plates = [], dirty = col('#d8d0b8', 0.5), clean = col('#f6f4ee', 0.25);
-    for (let k = 0; k < 5; k++) { const p = mk(this.scene, CY(0.12, 0.09, 0.02, 24), dirty.clone(), A.stack.x, A.stack.y + 0.012 + k * 0.022, A.stack.z); p.userData.k = k; plates.push(p); }
+    for (let k = 0; k < 3; k++) { const p = mk(this.scene, CY(0.12, 0.09, 0.02, 24), dirty.clone(), A.stack.x, A.stack.y + 0.012 + k * 0.022, A.stack.z); p.userData.k = k; plates.push(p); }
     act.push({ id: 'dishes', at: A.sink, reach: 1.6, label: () => L('Wash the dishes'), pose: { p: new T.Vector3(1.6, 1.58, 3.35), l: new T.Vector3(1.6, 0.78, 4.15) },
       n: 0, busy: -1, enter() { this.parent.audio.water(true); }, exit() { this.parent.audio.water(false); },
       click() { if (this.busy >= 0 || this.n >= plates.length) return; this.busy = 0; this.cur = plates[plates.length - 1 - this.n]; },
@@ -323,17 +334,17 @@ export class Home {
     const folds = [];
     act.push({ id: 'laundry', at: A.foldTable, reach: 1.6, label: () => L('Fold the laundry'), pose: { p: new T.Vector3(-4.75, 1.55, 0.8), l: new T.Vector3(-5.45, 0.82, 0.8) },
       n: 0, busy: -1,
-      click() { if (this.busy >= 0 || this.n >= 6) return; this.busy = 0; const c = mk(this.parent.scene, new T.PlaneGeometry(0.6, 0.6), std({ color: new T.Color(['#e8e4d8', '#5a7a9a', '#c84a3a', '#f4f0e6', '#3a5a3a', '#e8c84a'][this.n]), roughness: 1, side: T.DoubleSide }), A.basket.x, A.basket.y + 0.1, A.basket.z); c.rotation.x = -Math.PI / 2; this.cur = c; folds.push(c); this.parent.audio.swish(0.25, 0.4, 1200); },
+      click() { if (this.busy >= 0 || this.n >= 3) return; this.busy = 0; const c = mk(this.parent.scene, new T.PlaneGeometry(0.6, 0.6), std({ color: new T.Color(['#e8e4d8', '#5a7a9a', '#c84a3a', '#f4f0e6', '#3a5a3a', '#e8c84a'][this.n]), roughness: 1, side: T.DoubleSide }), A.basket.x, A.basket.y + 0.1, A.basket.z); c.rotation.x = -Math.PI / 2; this.cur = c; folds.push(c); this.parent.audio.swish(0.25, 0.4, 1200); },
       update(dt) {
         if (this.busy < 0) return; this.busy += dt; const c = this.cur, b = this.busy, tgt = new T.Vector3(A.foldTable.x, A.foldTable.y + 0.01 + this.n * 0.03, A.foldTable.z);
         if (b < 0.5) { c.position.lerpVectors(new T.Vector3(A.basket.x, A.basket.y + 0.4, A.basket.z), tgt, ease(b / 0.5)); c.position.y += Math.sin(b / 0.5 * Math.PI) * 0.3; c.rotation.z = b * 2; }
         else if (b < 1.4) { const k = ease((b - 0.5) / 0.9); c.scale.set(1 - 0.55 * Math.min(1, k * 2), 1 - 0.5 * Math.max(0, k * 2 - 1), 1); c.rotation.z = 0; if (Math.random() < dt * 4) this.parent.audio.swish(0.12, 0.2, 900); }
-        else { this.busy = -1; this.n++; if (this.n >= 6) this.parent.finish('laundry'); }
+        else { this.busy = -1; this.n++; if (this.n >= 3) this.parent.finish('laundry'); }
       }, hint: () => L('click: fold') });
     // typing
     act.push({ id: 'type', at: A.typewriter.position, reach: 1.6, label: () => L('Write a letter'), pose: { p: new T.Vector3(4.2, 1.18, -3.15), l: new T.Vector3(4.2, 0.92, -3.9) },
       n: 0, keys: true,
-      key() { const H = this.parent, txt = LETTER[us ? 'us' : 'tx'] + this.parent.ident.first; if (this.n >= txt.length) return; const k = Math.min(txt.length, this.n + 3); const ch = txt.slice(this.n, k); this.n = k; H.drawLetter(txt.slice(0, this.n)); H.audio.click(0.4, 1400 + Math.random() * 400); if (ch.includes('\n')) H.audio.bell(0.25); if (this.n >= txt.length) H.finish('type'); },
+      key() { const H = this.parent, txt = LETTER[us ? 'us' : 'tx'] + this.parent.ident.first; if (this.n >= txt.length) return; const k = Math.min(txt.length, this.n + 8); const ch = txt.slice(this.n, k); this.n = k; H.drawLetter(txt.slice(0, this.n)); H.audio.click(0.4, 1400 + Math.random() * 400); if (ch.includes('\n')) H.audio.bell(0.25); if (this.n >= txt.length) H.finish('type'); },
       click() { this.key(); }, update() {}, free: true, hint: () => L('type (any key) · Tab to stop') });
     // cooking
     const veg = new T.Group(); veg.position.copy(A.board); this.scene.add(veg);
@@ -345,14 +356,14 @@ export class Home {
       stage: 0, n: 0, chop: -1, stir: 0,
       click() {
         const H = this.parent;
-        if (this.stage === 0 && this.chop < 0) { this.chop = 0; H.audio.thud(0.5, 160); H.audio.click(0.3, 3000); const s = mk(veg, CY(0.04, 0.04, 0.012, 14), col(vegCol[this.n % 3], 0.5), -0.15 + (this.n % 6) * 0.05, 0.01, -0.07); slices.push(s); this.n++; const w = whole[Math.min(2, Math.floor(this.n / 3))]; if (w) w.scale.multiplyScalar(0.85); if (this.n >= 9) { this.stage = 1; whole.forEach((v) => (v.visible = false)); } }
+        if (this.stage === 0 && this.chop < 0) { this.chop = 0; H.audio.thud(0.5, 160); H.audio.click(0.3, 3000); const s = mk(veg, CY(0.04, 0.04, 0.012, 14), col(vegCol[this.n % 3], 0.5), -0.15 + (this.n % 6) * 0.05, 0.01, -0.07); slices.push(s); this.n++; const w = whole[Math.min(2, Math.floor(this.n / 3))]; if (w) w.scale.multiplyScalar(0.85); if (this.n >= 5) { this.stage = 1; whole.forEach((v) => (v.visible = false)); } }
         else if (this.stage === 1) { this.stage = 2; this.toss = 0; H.audio.swish(0.3, 0.4, 900); H.audio.simmer(true); }
       },
       update(dt, I) {
         const H = this.parent;
         if (this.chop >= 0) { this.chop += dt; knife.position.y = 0.02 + Math.abs(Math.sin(this.chop * 14)) * 0.05 * (1 - this.chop / 0.25); if (this.chop > 0.25) this.chop = -1; }
         if (this.stage === 2) { this.toss += dt; const k = ease(this.toss / 0.6); slices.forEach((s, i) => { const from = s.userData.from || (s.userData.from = s.position.clone()); s.position.lerpVectors(from, new T.Vector3(-0.85, 0.12, -0.0), k); s.position.y += Math.sin(k * Math.PI) * 0.2; if (k >= 1) s.visible = false; }); if (k >= 1) { this.stage = 3; H.A.soup.material.color.set(us ? 0xe8dcc0 : 0x7a2a12); } }
-        if (this.stage === 3) { if (I.held) { this.stir += dt; H.A.pot.rotation.y += dt * 3; } if (this.stir > 3.5) { this.stage = 4; H.finish('cook'); } }
+        if (this.stage === 3) { if (I.held) { this.stir += dt; H.A.pot.rotation.y += dt * 3; } if (this.stir > 2) { this.stage = 4; H.finish('cook'); } }
         if (this.stage >= 2) H.steam = Math.min(1, (H.steam || 0) + dt * 0.3);
       },
       hint() { return [L('click: chop'), L('click: into the pot'), '', L('hold click: stir'), L('simmering')][this.stage]; } });
@@ -502,10 +513,11 @@ export class Home {
     this.dust.rotation.y = Math.sin(this.t * 0.05) * 0.02; this.dust.position.y = Math.sin(this.t * 0.3) * 0.05;
     if (this.steam) this.steamFx(dt);
     if (this.life) this.life.update(dt);
+    if (this.story) this.story.update(dt);
     // the ending
     this.ending(dt);
     // fallback: after a long while the pull comes anyway
-    if (this.phase === 'free' && this.t > 480) this.compel();
+    if (this.phase === 'free' && this.t > 240) this.compel();
     if (this.snowMat) { this.snowMat.uniforms.uT.value = this.t; if (this.snowLight) this.snowLight.intensity = 0.4 + Math.random() * 0.25; }
     if (this.phase === 'compelled' && this.held !== 'tape') { this.nudgeT += dt; if (this.nudgeT > 40) { this.nudgeT = 0; this.say(this.inside ? 'The tape’s on the bottom shelf of the bookcase.' : 'The TV’s on inside. Hissing.', '', 4); } }
     if (this.phase === 'compelled' || this.phase === 'playing') { this.compelT = (this.compelT || 0) + dt; this.A.vcrLed.material.color.setHSL(0.47, 0.8, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(this.t * 4))); this.A.theTape.material.emissive = new T.Color(0x332a10).multiplyScalar(0.5 + 0.5 * Math.sin(this.t * 3)); }
@@ -538,13 +550,13 @@ export class Home {
   pull(w) {
     w.userData.pulled = true; this.audio.swish(0.4, 0.25, 1800); this.audio.thud(0.2, 80);
     const t0 = this.t, p0 = w.position.clone();
-    this.anims.push(() => { const k = (this.t - t0) / 0.6; if (k >= 1) { w.visible = false; const n = this.Y.weeds.filter((x) => x.userData.pulled).length; if (n >= this.Y.weeds.length - 1) this.finish('weed'); return true; } w.position.set(p0.x, p0.y + ease(k) * 0.5, p0.z); w.rotation.y += 0.2; w.scale.setScalar(0.35 * (1 - k * 0.6)); });
+    this.anims.push(() => { const k = (this.t - t0) / 0.6; if (k >= 1) { w.visible = false; const n = this.Y.weeds.filter((x) => x.userData.pulled).length; if (n >= Math.min(4, this.Y.weeds.length)) this.finish('weed'); return true; } w.position.set(p0.x, p0.y + ease(k) * 0.5, p0.z); w.rotation.y += 0.2; w.scale.setScalar(0.35 * (1 - k * 0.6)); });
   }
   pick(f) {
     this.audio.click(0.3, 700); this.audio.swish(0.15, 0.15, 3000);
     const t0 = this.t, p0 = f.getWorldPosition(new T.Vector3());
     f.userData.picked = true;
-    this.anims.push(() => { const k = (this.t - t0) / 0.35; if (k >= 1) { f.visible = false; const n = this.Y.fruit.filter((x) => x.userData.picked).length; if (n >= Math.min(8, this.Y.fruit.length)) this.finish('harvest'); return true; } const tgt = this.cam.position.clone().add(new T.Vector3(0, -0.4, 0)); f.position.lerpVectors(p0, tgt, ease(k)); });
+    this.anims.push(() => { const k = (this.t - t0) / 0.35; if (k >= 1) { f.visible = false; const n = this.Y.fruit.filter((x) => x.userData.picked).length; if (n >= Math.min(4, this.Y.fruit.length)) this.finish('harvest'); return true; } const tgt = this.cam.position.clone().add(new T.Vector3(0, -0.4, 0)); f.position.lerpVectors(p0, tgt, ease(k)); });
   }
   water(dt, pouring) {
     const c = this.heldObj; if (!c) return; c.updateMatrixWorld(true);
@@ -607,7 +619,7 @@ function breakout(c) {
       if (S.by < 14) { S.vy = Math.abs(S.vy); ev.beep = 330; }
       if (S.by > Hh - 24 && S.by < Hh - 16 && Math.abs(S.bx - S.px) < 22 && S.vy > 0) { S.vy = -Math.abs(S.vy) * 1.02; S.vx += (S.bx - S.px) * 3; ev.beep = 440; }
       if (S.by > Hh) { S.stuck = true; ev.beep = 110; }
-      for (const b of S.bricks) if (b.a && S.bx > b.x && S.bx < b.x + 22 && S.by > b.y && S.by < b.y + 8) { b.a = false; S.vy *= -1; S.hits++; ev.beep = 880; if (S.hits === 10) ev.win = true; break; } }
+      for (const b of S.bricks) if (b.a && S.bx > b.x && S.bx < b.x + 22 && S.by > b.y && S.by < b.y + 8) { b.a = false; S.vy *= -1; S.hits++; ev.beep = 880; if (S.hits === 6) ev.win = true; break; } }
     g.fillStyle = '#05060a'; g.fillRect(0, 0, W, Hh);
     for (const b of S.bricks) if (b.a) { g.fillStyle = b.c; g.fillRect(b.x, b.y, 22, 8); }
     g.fillStyle = '#e8e8e8'; g.fillRect(S.px - 20, Hh - 20, 40, 5); g.fillRect(S.bx - 2, S.by - 2, 4, 4);
@@ -631,7 +643,7 @@ function blocks(c) {
     fall += dt * (I.moveZ < -0.5 ? 12 : 2.2);
     if (fall >= 1) { fall = 0; if (fits(cur.b, cx, cy + 1)) cy++; else {
       for (const [u, v] of cur.b) if (cy + v >= 0) grid[cy + v][cx + u] = cur.k;
-      for (let y = CH - 1; y >= 0; y--) if (grid[y].every((q) => q >= 0)) { grid.splice(y, 1); grid.unshift(Array(CW).fill(-1)); lines++; y++; ev.beep = 990; if (lines === 2) ev.win = true; }
+      for (let y = CH - 1; y >= 0; y--) if (grid[y].every((q) => q >= 0)) { grid.splice(y, 1); grid.unshift(Array(CW).fill(-1)); lines++; y++; ev.beep = 990; if (lines === 1) ev.win = true; }
       ev.beep = ev.beep || 140; spawn(); } }
     g.fillStyle = '#060608'; g.fillRect(0, 0, W, Hh); g.strokeStyle = '#3a3a4a'; g.strokeRect(ox - 1, oy - 1, CW * sz + 2, CH * sz + 2);
     for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) if (grid[y][x] >= 0) { g.fillStyle = cols[grid[y][x]]; g.fillRect(ox + x * sz, oy + y * sz, sz - 1, sz - 1); }

@@ -167,11 +167,11 @@ function update(H, L, dt) {
   L.t += dt; const t = L.t, s = H.scene;
   // clouds crossing the sun; the afternoon slowly goes gold
   const cloud = smooth(0.6, 0.9, vnoise(t / 14, 1) * 0.7 + vnoise(t / 5, 2) * 0.3);
-  const evening = Math.min(1, t / 900);
+  const tilt = H.tilt || 0, evening = Math.max(Math.min(1, t / 900), tilt);
   const sd = L.dir0.clone(); sd.y = Math.max(0.12, L.dir0.y - 0.16 * evening); sd.normalize();
   H.sunDir.copy(sd); H.sun.position.copy(sd).multiplyScalar(60).add(new T.Vector3(0, 0, 8));
   H.sun.intensity = L.sun0 * (1 - 0.35 * cloud) * (1 - 0.2 * evening);
-  H.sun.color.copy(L.col0).lerp(L.gold, evening * 0.5);
+  H.sun.color.copy(L.col0).lerp(L.gold, evening * 0.5 + tilt * 0.35);
   if (L.hemi0) L.hemi0.intensity = L.hemiI * (1 + 0.15 * cloud);
   L.shaftMat.uniforms.uT.value = t; L.shaftMat.uniforms.uK.value = 0.03 * (1 - 0.8 * cloud);
   L.shaftMat.uniforms.uCol.value.copy(H.sun.color);

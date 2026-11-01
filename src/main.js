@@ -70,7 +70,7 @@ function boot() {
   G.brass = new THREE.InstancedMesh(brassGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.75, 0.56, 0.26, THREE.SRGBColorSpace), metalness: 1, roughness: 0.3 }), 48);
   G.brass.castShadow = true; G.brass.frustumCulled = false; G.brass.count = 0; scene.add(G.brass);
   G.casings = []; G.props = [];
-  window.BW = G; G.possess = (i) => beginPossess(i);
+  window.BW = G; G.possess = (i) => beginPossess(i); G.camera = camera; G.ending = (i) => { G.body = i; G.tau = G.S.actors[i].spawn; beginEnding(); };
   // debug: look at actor i from distance d (no player control)
   G.studio = (i, tau, d = 3, ang = 0.6, h = 1.2, clean = true) => {
     G.state = 'studio'; G.tau = tau; tick(0.0001, false);
@@ -139,7 +139,8 @@ function boot() {
   renderer.domElement.addEventListener('click', () => { if (G.home && !G.input.locked) G.input.lock(); });
   if (params.get('home')) { // straight to the last tape (for working on it): ?home=us | ?home=ru
     const side = ['tx', 'ru'].includes(params.get('home')) ? 1 : 0, want = params.get('house');
-    const a = S.actors.find((q) => q.side === side && q.deathTime > 0 && (!want || pickHouse(side, ident(q.id), q.id).id === want)) || S.actors.find((q) => q.side === side && q.deathTime > 0);
+    const lf = params.get('life'), fits = (q) => q.side === side && q.deathTime > 0 && (!lf || ident(q.id).life.includes(lf));
+    const a = S.actors.find((q) => fits(q) && (!want || pickHouse(side, ident(q.id), q.id).id === want)) || S.actors.find(fits) || S.actors.find((q) => q.side === side && q.deathTime > 0);
     G.lives = [a.id]; $('load').style.display = 'none'; if (vcr) vcr.dispose();
     const go = () => { removeEventListener('pointerdown', go); G.audio.init(); goHome(a.id, params.has('fwd')); };
     $('load').style.display = ''; $('load').classList.add('vcr'); $('load').innerHTML = '<span class="blink">CLICK TO PLAY THE LAST TAPE</span>';
@@ -491,6 +492,15 @@ function beginEnding() {
   hud(false);
   const st = G.S.actors[G.body];
   sub(st.side === 0 ? 'Back to the helicopter. Back to the sky.' : 'Back into the hull. Back out to sea.', 6);
+  if (st.side === 0 && G.world.helos[st.helo] && !G.world.helos[st.helo].legs) { // your own legs, hanging out of the cabin door
+    const sideSign = (st.id % 2) ? 1 : -1, g = new THREE.Group(), cloth = new THREE.MeshStandardMaterial({ color: 0x6a6a52, roughness: 0.95 }), boot = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 0.7 });
+    for (const dz of [-0.13, 0.13]) {
+      const th = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.46, 10), cloth); th.rotation.z = Math.PI / 2; th.position.set(sideSign * 1.45, 1.25, 1.5 + dz); th.rotation.y = sideSign * 0.5; g.add(th);
+      const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.055, 0.46, 10), cloth); sh.position.set(sideSign * 1.72, 1.02, 1.68 + dz * 1.15); sh.rotation.z = sideSign * 0.15; g.add(sh);
+      const bt = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.28), boot); bt.position.set(sideSign * 1.76, 0.76, 1.74 + dz * 1.2); bt.rotation.y = sideSign * 0.5; g.add(bt);
+    }
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; }); G.world.helos[st.helo].grp.add(g); G.world.helos[st.helo].legs = g;
+  }
   G.audio.play(G.audio.B.clunk, 0.4);
 }
 function showEnd(forwardDone) {
@@ -719,10 +729,6 @@ function tick(dt, draw = true) {
     case 'ending': {
       const st = S.actors[G.body];
       tauRate = 1.8; osd = '◀◀ REW ×2';
-      const k = Math.min(1, G.stateT / 1.6), e = k * k * (3 - 2 * k);
-      const target = endingCam(st);
-      camera.position.lerpVectors(G.end.from, target.pos, e);
-      camera.quaternion.slerpQuaternions(G.end.fromQ, target.q, e);
       if (G.tau <= Math.max(0.3, st.spawn - 13)) { G.audio.play(G.audio.B.clunk, 0.7); tapesBack(); }
       break;
     }
@@ -739,6 +745,11 @@ function tick(dt, draw = true) {
 
   const tauPrev = G.tau;
   G.tau = Math.max(0, G.tau - dt * tauRate);
+  if (G.state === 'ending') { // place the camera against the aircraft at the tape time it will be drawn at
+    const k = Math.min(1, G.stateT / 1.6), e = k * k * (3 - 2 * k), target = endingCam(S.actors[G.body]);
+    camera.position.lerpVectors(G.end.from, target.pos, e);
+    camera.quaternion.slerpQuaternions(G.end.fromQ, target.q, e);
+  }
 
   // battle playback
   ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body; ctx.camPos = camera.position;
@@ -756,12 +767,13 @@ function tick(dt, draw = true) {
 
   // events
   const L = listener();
+  const quiet = G.state === 'intro' && !G.caught;   // the tape hasn't caught yet: only the deck, nothing from the beach
   if (G.audio.enabled) {
     G.audio.update(G.tau, ctx.sound ? tauRate : 0, dt);
     G.audio.vcrTape(G.state === 'ff' ? 1.7 : G.state === 'ending' ? 1.35 : G.state === 'paused' ? 1 : 1, G.state === 'ff' || G.state === 'ending' ? 0.7 : G.state === 'paused' ? 0.5 : 0.3);
     G.audio.musicTape(Math.abs(tauRate) > 1.3 ? Math.min(2, Math.abs(tauRate) * 0.6) : 1, Math.min(1, G.shake || 0));
     if (ctx.sound) worldSounds(S, G.tau, L, G.body, G.audio, G.pb);
-    machineSounds(S, G.tau, L, G.audio);
+    if (!quiet) machineSounds(S, G.tau, L, G.audio); else if (G.audio.engines) G.audio.engines([], L);
   }
   if (G.state === 'play' && G.stateT > 2.2) { // brief grace after taking a body
     // Call of Duty-style health: no bar, a short invulnerability blink after each bullet, no one-shots from
@@ -789,10 +801,10 @@ function tick(dt, draw = true) {
   // audio loops
   if (G.audio.enabled) {
     G.audio.setLoop('heli', 0);
-    G.audio.setLoop('drone', ev.nearestDrone < 150 ? Math.min(0.5, 12 / (ev.nearestDrone + 4)) : 0, 1);
-    G.audio.setLoop('fire', ev.wrecks.length ? 0.06 : 0);
-    G.audio.setLoop('battle', G.state === 'end' || G.state === 'title' ? 0.05 : 0.2, tauRate > 1 ? 1.4 : 1);
-    G.audio.setLoop('sea', 0.22);
+    G.audio.setLoop('drone', !quiet && ev.nearestDrone < 150 ? Math.min(0.5, 12 / (ev.nearestDrone + 4)) : 0, 1);
+    G.audio.setLoop('fire', !quiet && ev.wrecks.length ? 0.06 : 0);
+    G.audio.setLoop('battle', quiet ? 0 : G.state === 'end' || G.state === 'title' ? 0.05 : 0.2, tauRate > 1 ? 1.4 : 1);
+    G.audio.setLoop('sea', quiet ? 0 : 0.22);
     G.audio.setLoop('hiss', G.state === 'ff' ? 0.12 : 0.035);
     G.audio.muffle.frequency.setTargetAtTime(muffle, G.audio.ctx.currentTime, 0.1);
   }
@@ -923,10 +935,13 @@ function endingCam(st) {
   if (st.side === 0) {
     const h = S.L.helos[st.helo]; const hp = heloPose(h, G.tau, {});
     const sideSign = st.ident && (st.id % 2) ? 1 : -1;
-    const local = new THREE.Vector3(sideSign * 0.7, 1.75, 0.9).applyEuler(new THREE.Euler(hp.pitch, hp.yaw, 0, 'YXZ'));
+    // sitting in the open cabin door, legs out: looking out and forward at the beach as the aircraft backs away from it
+    const hq = new THREE.Quaternion().setFromEuler(new THREE.Euler(hp.pitch, hp.yaw, 0, 'YXZ'));
+    const sway = Math.sin(G.real * 1.3) * 0.02;
+    const local = new THREE.Vector3(sideSign * 1.26, 1.92 + sway, 1.15).applyQuaternion(hq);
     pos.set(hp.x, hp.y, hp.z).add(local);
-    const look = new THREE.Euler(-0.25, hp.yaw + (sideSign > 0 ? -Math.PI / 2 : Math.PI / 2), 0, 'YXZ');
-    q.setFromEuler(look);
+    const a = 0.8;   // turned toward the nose: the way the beach is
+    q.copy(hq).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, sideSign > 0 ? -Math.PI / 2 - a : Math.PI / 2 + a, 0, 'YXZ')));
   } else {
     const v = S.L.vehicles[st.veh]; const z = vehZ(v, G.tau);
     if (v.type === 'aav') { pos.set(v.x + 2.5, heightAt(v.x, z) + 5.5, z + 9); }
