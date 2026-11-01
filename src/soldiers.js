@@ -5,6 +5,8 @@ import { J, NJ, NB, bindJoints, boneFrames, buildSoldierGeometry, makeSoldierMat
 import { posePose, simulateRagdoll } from './anim.js';
 import { MODE, SHOT_F } from './sim.js';
 import { styleOf } from './gait.js';
+import { CLIPS } from './mocap.js';
+import { heightFast } from './terrain.js';
 
 function lastBefore(arr, t) { // index of last element <= t, or -1
   let lo = 0, hi = arr.length;
@@ -54,7 +56,7 @@ export class Soldiers {
     this.hitT = hits.map((h) => Float32Array.from(h.map((x) => x[0])));
     this.hitD = hits.map((h) => h.map((x) => { const l = Math.hypot(x[1], x[2]) || 1; return [x[1] / l, x[2] / l]; }));
     this.joints = new Float32Array(NJ * 3);
-    this.ragdolls = new Array(N).fill(null); this.slump = new Float32Array(N);
+    this.ragdolls = new Array(N).fill(null); this.slump = new Float32Array(N); this.getup = new Array(N).fill(null);
     this.pp = { u: 0, speed: 0, crouch: 0, pitch: 0, idleT: 0, recoil: 0, flinch: 0, fdx: 0, fdz: 0, reload: -1, mode: 0 };
     this.keys = { head: new THREE.Vector3(), neck: new THREE.Vector3(), pelvis: new THREE.Vector3(), headM: new THREE.Matrix4() };
     this.tmpM = new THREE.Matrix4();
@@ -80,6 +82,9 @@ export class Soldiers {
       // impulse from the killing hit
       let ix = 0, iz = 0, iy = 0.4, w = {}, wDefault = 0.25, jitter = 0.6, kx = 0, kz = 0;
       const k = lastBefore(this.hitT[i], st.deathTime + 1e-3);
+      // some of the shot go down as a real person lies down: a mocap getting-up, run backwards. In rewind
+      // you see the real thing — a body pushing itself up off the sand and standing
+      if (this.planGetup(i, s)) { this.ragdolls[i] = new Float32Array(NJ * 3); return; }
       const TS = this.slumpTime(i);
       if (TS > 0) {
         // folded to the knees first: the ragdoll starts from the slump, with a gentle topple
@@ -105,6 +110,40 @@ export class Soldiers {
       }
       const O = S.obstacles; this.ragdolls[i] = simulateRagdoll(start, prev, { x: ix, y: iy, z: iz, w, wDefault, jitter, kx, kz }, i + 1, 75, (x, z, y) => O.restY(x, z, y), O.anyNear(start[0], start[2], 4, st.deathTime) ? (x, z, y, r) => O.pushOut(x, z, r, y, st.deathTime, -1, 0.25) : null);
     }
+  }
+
+  planGetup(i, s) {
+    const st = this.S.actors[i];
+    if (st.cause !== 'shot' || s.y < 0.1) return false;
+    const h = (((i + 13) * 2246822519) >>> 0) / 4294967296;
+    if (h > 0.42) return false;
+    const key = ['c_getup_front', 'c_getup_back', 'c_getup_tactical'][Math.floor(h / 0.14) % 3];
+    const c = CLIPS[key], n = c.n, D = c.data, e = (n - 1) * 57;
+    // final (standing) frame: where the hips are and which way the body faces (left = shL - shR)
+    const lx = D[e + 15] - D[e + 24], lz = D[e + 17] - D[e + 26];
+    const fcx = -lz, fcz = lx, fa = Math.atan2(Math.sin(s.yaw), Math.cos(s.yaw)), fc = Math.atan2(fcx, fcz);
+    const th = fa - fc, co = Math.cos(th), si = Math.sin(th);
+    const hx = D[e], hz = D[e + 2];
+    const rx = hx * co + hz * si, rz = -hx * si + hz * co;
+    this.getup[i] = { key, n, D, co, si, ox: s.x - rx, oz: s.z - rz, dur: c.dur / 1.2 };
+    return true;
+  }
+  getupPose(i, tt, out) {
+    const g = this.getup[i];
+    const u = 1 - Math.min(1, Math.max(0, tt / g.dur)); // forward time: standing → lying (so rewind = getting up)
+    const f = u * (g.n - 1), a = Math.floor(f), b = Math.min(g.n - 1, a + 1), t = f - a;
+    const M = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]; // mocap order == J order for the 19 body joints
+    for (let k = 0; k < 19; k++) {
+      const pa = a * 57 + k * 3, pb = b * 57 + k * 3;
+      const x = g.D[pa] + (g.D[pb] - g.D[pa]) * t, y = g.D[pa + 1] + (g.D[pb + 1] - g.D[pa + 1]) * t, z = g.D[pa + 2] + (g.D[pb + 2] - g.D[pa + 2]) * t;
+      const wx = g.ox + x * g.co + z * g.si, wz = g.oz - x * g.si + z * g.co;
+      const j = M[k] * 3; out[j] = wx; out[j + 2] = wz; out[j + 1] = y + heightFast(wx, wz);
+    }
+    // rifle: held in the right hand along the forearm
+    const hx = out[J.handR * 3], hy = out[J.handR * 3 + 1], hz = out[J.handR * 3 + 2];
+    let dx = hx - out[J.elbR * 3], dy = hy - out[J.elbR * 3 + 1], dz = hz - out[J.elbR * 3 + 2]; const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    out[J.grip * 3] = hx; out[J.grip * 3 + 1] = hy; out[J.grip * 3 + 2] = hz;
+    out[J.muzzle * 3] = hx + dx * 0.7; out[J.muzzle * 3 + 1] = Math.max(hy + dy * 0.7, heightFast(hx + dx * 0.7, hz + dz * 0.7) + 0.03); out[J.muzzle * 3 + 2] = hz + dz * 0.7;
   }
 
   // Dying isn't instant for most of the shot: they stagger, fold to their knees and slump before toppling.
@@ -167,7 +206,16 @@ export class Soldiers {
     const st = this.S.actors[i];
     const j = this.joints;
     if (s.mode === MODE.DEAD && !this.ragdolls[i] && this.pb) this.computeRagdoll(i);
-    if (s.mode === MODE.DEAD && this.ragdolls[i] && tau - st.deathTime < this.slump[i]) {
+    if (s.mode === MODE.DEAD && this.ragdolls[i] && this.getup[i]) {
+      const tt = tau - st.deathTime;
+      this.getupPose(i, tt, j);
+      if (tt < 0.3) { // ease out of the living pose (aiming) into the mocap
+        const s0 = this._s0 || (this._s0 = {}), L = this._l0 || (this._l0 = new Float32Array(NJ * 3));
+        this.pb.sample(i, st.deathTime - 0.002, s0); s0.mode = MODE.GROUND; this.living(i, s0, st.deathTime - 0.002, L);
+        const k = tt / 0.3, e = k * k * (3 - 2 * k);
+        for (let q = 0; q < NJ * 3; q++) j[q] = L[q] + (j[q] - L[q]) * e;
+      }
+    } else if (s.mode === MODE.DEAD && this.ragdolls[i] && tau - st.deathTime < this.slump[i]) {
       this.slumpPose(i, (tau - st.deathTime) / this.slump[i], j);
     } else if (s.mode === MODE.DEAD && this.ragdolls[i]) {
       const R = this.ragdolls[i], nf = R.length / (NJ * 3);
