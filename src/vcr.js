@@ -69,9 +69,9 @@ export function drawMenu(g, w = MENU_W, h = MENU_H) {
   g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(bx, by, bw, bh);
   g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25B6 PLAY', w / 2, by + 64);
   g.globalAlpha = 0.55; g.font = '26px "VT323", "Courier New", monospace';
-  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 700);
+  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 646);
   g.globalAlpha = 1; g.textAlign = 'left';
-  g.font = '40px "VT323", "Courier New", monospace'; g.fillText('\u25C0\u25C0 REW', 60, 80);
+  g.font = '40px "VT323", "Courier New", monospace'; g.fillText('\u25C0\u25C0 REW', 150, 136);
   g.restore();
 }
 
