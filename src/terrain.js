@@ -2,9 +2,13 @@
 // Mayflower Beach, Dennis MA. +z = north (Cape Cod Bay), -z = inland (south). -x = east.
 // Low tide at dawn: the waterline sits ~140m out across rippled tidal flats with pools and sandbars.
 import { fbm, vnoise, smoothstep } from './rng.js';
+import { SC, onScene } from './scenes.js';
+import { heightSandwich, ARENA_SANDWICH } from './terrain4.js';
 
 export const WATERLINE_Z = 140;
 export const ARENA = { x0: -125, x1: 125, z0: -138, z1: 132 };
+const ARENA_BEACH = { ...ARENA };
+onScene((id) => { Object.assign(ARENA, id === 'sandwich' ? ARENA_SANDWICH : ARENA_BEACH); HG.d = HG.cache[id] || null; });
 export const LOT = { x0: -48, x1: 48, z0: -128, z1: -70, y: 3.6 };
 
 export function crestD(x) {
@@ -22,6 +26,7 @@ function flats(x, z) {
 }
 
 export function heightAt(x, z) {
+  if (SC.id === 'sandwich') return heightSandwich(x, z);
   if (z > WATERLINE_Z + 20) {
     const f = flats(x, WATERLINE_Z + 20);
     return f - (z - WATERLINE_Z - 20) * 0.03;
@@ -49,13 +54,15 @@ export function heightAt(x, z) {
 }
 
 export function lotMask(x, z) {
+  if (SC.id !== 'beach') return 0;
   const mx = smoothstep(LOT.x1 + 6, LOT.x1, Math.abs(x));
   const mz = smoothstep(LOT.z1 + 6, LOT.z1, z) * smoothstep(LOT.z0 - 6, LOT.z0, z);
   return mx * mz;
 }
-export function onLot(x, z) { return Math.abs(x) < LOT.x1 && z < LOT.z1 && z > LOT.z0; }
+export function onLot(x, z) { return SC.id === 'beach' && Math.abs(x) < LOT.x1 && z < LOT.z1 && z > LOT.z0; }
 
 export function grassMask(x, z) {
+  if (SC.id !== 'beach') return 0;
   const d = -z;
   if (d < 20) return 0;
   if (onLot(x, z)) return 0;
@@ -71,11 +78,12 @@ export function inMinefield(x, z) {
 }
 
 // Fast bilinear lookup over the playable area (1 m grid), exact function elsewhere.
-const HG = { x0: -170, z0: -210, nx: 341, nz: 441, d: null };
+const HG = { x0: -170, z0: -210, nx: 341, nz: 441, d: null, cache: {} };
 export function heightFast(x, z) {
   if (!HG.d) {
     HG.d = new Float32Array(HG.nx * HG.nz);
     for (let j = 0; j < HG.nz; j++) for (let i = 0; i < HG.nx; i++) HG.d[j * HG.nx + i] = heightAt(HG.x0 + i, HG.z0 + j);
+    HG.cache[SC.id] = HG.d;
   }
   const fx = x - HG.x0, fz = z - HG.z0;
   const i = Math.floor(fx), j = Math.floor(fz);

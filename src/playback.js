@@ -80,7 +80,7 @@ export class Playback {
     const st = S.actors[i];
     if (st.deathTime > 0 && tau >= st.deathTime) out.mode = MODE.DEAD;
     else if (out.mode === MODE.DEAD) out.mode = MODE.GROUND;
-    if (out.mode === MODE.GROUND && tau < st.spawn) out.mode = st.side === 1 && S.L.vehicles[st.veh].type === 'lcac' ? MODE.BOAT : MODE.HIDDEN;
+    if (out.mode === MODE.GROUND && tau < st.spawn) out.mode = st.side === 1 && S.L.vehicles[st.veh] && S.L.vehicles[st.veh].type === 'lcac' ? MODE.BOAT : MODE.HIDDEN;
     return out;
   }
 
@@ -229,7 +229,7 @@ export class Playback {
     const houses = S.L.houses;
     S.explosions.forEach((e, ei) => {
       const age = tau - e.t;
-      if (age > 40 && e.kind !== 'vehicle' && !e.house && e.car == null) return;
+      if (age > 40 && e.kind !== 'vehicle' && !e.house && e.car == null && !e.persist) return;
       // ---- incoming ordnance ----
       if (tau >= e.launchT && tau < e.t) {
         const u = (tau - e.launchT) / (e.t - e.launchT);
@@ -305,7 +305,7 @@ export class Playback {
       let fire = null;
       if (e.kind === 'vehicle') { const v = S.L.vehicles[e.vi]; fire = [v.x, heightAt(v.x, v.zStop) + (v.type === 'aav' ? 3 : 4.5), v.zStop, 1]; ev.wrecks.push(v); }
       else if (e.house) { let best = null, bd = 99; for (const h of houses) { const d = Math.hypot(h.x - e.ix, h.z - e.iz); if (d < bd) { bd = d; best = h; } } if (best && bd < 14) fire = [best.x, heightAt(best.x, best.z) + 7, best.z, 1.6]; }
-      else if (e.kind === 'crash') fire = [e.ix, 0.6, e.iz, 1.3];
+      else if (e.kind === 'crash') fire = [e.ix, Math.max(heightAt(e.ix, e.iz), 0) + 0.6, e.iz, 1.3];
       else if (e.car != null) fire = [e.ix, e.iy + 0.5, e.iz, 0.75];
       if (fire) {
         const [fx, fy, fz, fs] = fire;
@@ -363,6 +363,11 @@ export class Playback {
     const hp = {};
     for (const h of S.L.helos) {
       heloPose(h, tau, hp);
+      if (h.kind === 'crash' && tau > h.tHit) {   // hit: burning, trailing black smoke down into the trees
+        for (let k = 0; k < 5; k++) gl.push(hp.x + (hash1(k) - 0.5) * 1.5, hp.y + 2.4 + hash1(k + 2) * 0.6, hp.z + (hash1(k + 4) - 0.5) * 1.5, 1.6 + Math.sin(tau * 11 + k), 3.4, 1.4, 0.35, 0.9, k + tau);
+        for (let k = 0; k < 28; k++) { const tk = tau - k * 0.14; if (tk < h.tHit) break; if (tk > h.tDown + 0.3) continue; const q = heloPose(h, tk, {}); sm.push(q.x, q.y + 2.5 + k * 0.08, q.z, 1.2 + k * 0.32, 0.08, 0.075, 0.07, 0.5 * (1 - k / 28), k); }
+      }
+      if (hp.dead) continue;
       const alt = hp.y - heightAt(hp.x, hp.z);
       const d = Math.hypot(hp.x - pp.x, hp.y - pp.y, hp.z - pp.z);
       if (d < ev.heloDist) ev.heloDist = d;

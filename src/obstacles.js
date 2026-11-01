@@ -22,15 +22,19 @@ export class Obstacles {
         this.circles.push({ x: h.x + lx * Math.cos(h.rot) + lz * Math.sin(h.rot), z: h.z - lx * Math.sin(h.rot) + lz * Math.cos(h.rot), r: 0.12, y1: gy(h.x, h.z) + 3, hi });
       }
     });
-    const S = L.snackShack; ob(S.x, S.z, S.w / 2, S.l / 2, S.rot, 5, 'shack');
-    const lg = L.lifeguard; ob(lg.x, lg.z, 0.8, 0.7, 0, 2.6, 'stand');
+    const S = L.snackShack; if (S) ob(S.x, S.z, S.w / 2, S.l / 2, S.rot, 5, 'shack');
+    const lg = L.lifeguard; if (lg) ob(lg.x, lg.z, 0.8, 0.7, 0, 2.6, 'stand');
+    // East Sandwich: fieldstone walls and picket fences you can hop, hedges you can't, utility poles
+    for (const w of L.walls || []) ob(w.x, w.z, w.len / 2, w.kind === 'stone' ? 0.35 : 0.06, w.rot, w.h, 'wall', true);
+    for (const h of L.hedges || []) ob(h.x, h.z, h.len / 2, 0.55, h.rot, h.h, 'hedge');
+    for (const p of L.poles || []) this.circles.push({ x: p.x, z: p.z, r: 0.16, y1: gy(p.x, p.z) + 9 });
     for (const [x, z, rot] of L.cars) ob(x, z, 0.98, 2.35, rot, 1.75, 'car');
     for (const k of L.rocks) if (k.s > 0.45) this.circles.push({ x: k.x, z: k.z, r: k.s * 0.95, y1: gy(k.x, k.z) + k.s * k.sq * 0.8, walk: true });
     for (const t of L.trees) this.circles.push({ x: t.x, z: t.z, r: 0.35 * t.s, y1: gy(t.x, t.z) + 4 });
     // sandbag walls: low, you can jump onto them; soldiers can't walk through them
     for (const p of L.positions) if (p.bagZ != null) ob(p.x, p.bagZ - 0.4, 1.85, 0.42, 0, 0.5, 'bags', true);
     // boardwalk railings (gaps where side steps lead down to the sand)
-    const bw = L.boardwalk;
+    const bw = L.boardwalk || [];
     for (let i = 0; i < bw.length - 1; i++) {
       const a = bw[i], b = bw[i + 1], mz = (a.z + b.z) / 2, my = (a.y + b.y) / 2;
       for (const sd of [-1, 1]) {
@@ -45,7 +49,7 @@ export class Obstacles {
     }
     // beach stairs: each tread is a solid walk-on block (you climb tread by tread, you can't walk underneath),
     // with handrails along both sides
-    {
+    if (L.stairs) {
       const st = L.stairs, z0 = st.z + 0.85, n = st.steps, rise = (st.top - st.bottom) / n;
       for (let k = 0; k < n; k++) {
         const zc = z0 + k * 0.3 + 0.15, ty = st.top - (k + 1) * rise;
@@ -154,8 +158,8 @@ export class Obstacles {
   // height of the walkable surface under (x,z) for someone whose feet are at yPrev (steps up to ~0.45 m)
   surfaceY(x, z, yPrev = 1e9, t = null) {
     let y = Math.max(heightAt(x, z) + (t != null && this.D ? this.D.craters.delta(x, z, t) : 0), -0.9);
-    const L = this.L, bw = L.boardwalk;
-    const ax = Math.abs(x - BW_X);
+    const L = this.L, bw = L.boardwalk || [];
+    const ax = bw.length ? Math.abs(x - BW_X) : 99;
     const step = (h) => { if (h > y && h <= yPrev + 0.48) y = h; };
     // deck
     if (ax < BW_HALF + 0.05) {

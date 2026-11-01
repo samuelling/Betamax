@@ -195,6 +195,8 @@ export function vehSpeed(v, t) { return (vehZ(v, t - 0.05) - vehZ(v, t + 0.05)) 
 
 // helicopter pose
 export function heloPose(h, t, out) {
+  if (h.kind === 'crash') return crashPose(h, t, out);
+  if (h.kind === 'extract') return extractPose(h, t, out);
   const u = h.tTouch - t;
   out.x = h.x; out.z = h.z; out.y = h.y; out.yaw = 0; out.pitch = 0;
   if (u > 0) {
@@ -210,6 +212,45 @@ export function heloPose(h, t, out) {
     out.y = h.y + w * w * 0.9 + w * 2;
     const fw = Math.max(0, w - 3);
     out.z = h.z - fw * fw * 2.6 - fw * 6;
+    out.pitch = 0.18 * smoothstep(3, 5, w);
+  }
+  return out;
+}
+
+// East Sandwich (-x is east, as at the beach), helicopter 0: low over the pines from the west, hit, a flat spin into the clearing, on its side
+function crashPose(h, t, out) {
+  const hitX = h.x + 34, hitZ = h.z + 6, alt = 34;
+  out.roll = 0; out.dead = false; out.spin = 0;
+  if (t <= h.tHit) {   // straight and level, east
+    const d = (h.tHit - t) * 46;
+    out.x = hitX + d; out.z = hitZ + Math.sin(d * 0.01) * 6; out.y = h.y + alt + Math.min(20, d * 0.04); out.yaw = -Math.PI / 2; out.pitch = 0.1;
+    return out;
+  }
+  const k = Math.min(1, (t - h.tHit) / (h.tDown - h.tHit)), e = k * k;
+  out.x = hitX + (h.x - hitX) * (1 - (1 - k) * (1 - k)); out.z = hitZ + (h.z - hitZ) * k;
+  out.y = h.y + 0.9 + (alt - 0.9) * (1 - e);
+  out.yaw = -Math.PI / 2 + k * k * 9.5; out.pitch = 0.1 + Math.sin(k * 7) * 0.15; out.roll = Math.sin(k * 5) * 0.25;
+  out.spin = 1 - k;
+  if (t >= h.tDown) {   // down: tipped onto its left side, tail broken round
+    const s = Math.min(1, (t - h.tDown) / 0.8);
+    out.x = h.x; out.z = h.z; out.y = h.y + 0.9 + (1 - s) * 0.4; out.yaw = -Math.PI / 2 + 9.5 + s * 0.4; out.pitch = 0.1 + s * 0.05; out.roll = -1.25 * s * s; out.dead = true; out.spin = 0;
+  }
+  return out;
+}
+// East Sandwich, helicopter 1: in over the marsh from the north-east, down in the meadow, off east (-x) toward Dennis
+function extractPose(h, t, out) {
+  const u = h.tTouch - t;
+  out.x = h.x; out.z = h.z; out.y = h.y; out.yaw = 2.47; out.pitch = 0; out.roll = 0; out.dead = false; out.spin = 1;
+  if (u > 0) {
+    const flare = Math.min(u, 4), far = Math.max(0, u - 4), d = far * 46 + flare * flare * 2.2;
+    out.x = h.x - d * 0.62; out.z = h.z + d * 0.78; out.y = h.y + flare * 1.2 + Math.min(far * 4.5, 55);
+    out.pitch = u < 4 ? -0.25 * smoothstep(0, 3, flare) : 0.12;
+  } else if (t > h.tLift) {
+    const w = t - h.tLift, turn = smoothstep(0.5, 4, w);
+    out.yaw = 2.47 + turn * (1.5 * Math.PI - 2.47);
+    out.y = h.y + w * w * 0.9 + w * 2;
+    const fw = Math.max(0, w - 3);
+    out.x = h.x - fw * fw * 2.6 - fw * 6; out.z = h.z + fw * 2;
     out.pitch = 0.18 * smoothstep(3, 5, w);
   }
   return out;

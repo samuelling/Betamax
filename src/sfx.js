@@ -92,7 +92,7 @@ export function machineSounds(S, tau, L, A) {
       _em.push({ cls: 'lcac', id: vi, x: v.x, y: y + 2, z, load: sp > 0.5 ? 1 : 0.6, pitch: sp > 0.5 ? 1 : 0.86 });
     }
   });
-  S.L.helos.forEach((h, hi) => { heloPose(h, tau, _hp); _em.push({ cls: 'uh60', id: hi, x: _hp.x, y: _hp.y + 2, z: _hp.z, load: 1, pitch: 1 + _hp.pitch * 0.3 }); });
+  S.L.helos.forEach((h, hi) => { heloPose(h, tau, _hp); if (_hp.dead) return; _em.push({ cls: 'uh60', id: hi, x: _hp.x, y: _hp.y + 2, z: _hp.z, load: 1, pitch: 1 + _hp.pitch * 0.3 }); });
   S.L.gunships.forEach((g, gi) => { gunshipPose(g, tau, _hp); if (!_hp.alive) return; _em.push({ cls: 'gunship', id: gi, x: _hp.x, y: _hp.y, z: _hp.z, load: 1, pitch: _hp.burn ? 0.85 : 1 }); });
   A.engines(_em, L);
 }

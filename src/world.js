@@ -8,6 +8,8 @@ import { buildCar, planBlast, poseBlast, PAINT } from './cars.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 import { buildIFV, buildLCAC, buildUH60, buildGunship, VM } from './vehicles.js';
+import { buildSandwichLayout } from './layout4.js';
+import { buildSandwich, sandwichGround } from './world4.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.9, 0.26, 0.28).normalize();
 
@@ -76,15 +78,28 @@ export function std(color, rough = 0.85, metal = 0, extra = {}) {
 }
 
 // ===========================================================================
+function groundGrain() {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), r = mulberry32(5);
+  g.fillStyle = '#d0d0d0'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 12000; i++) { const v = 140 + r() * 115; g.fillStyle = `rgba(${v},${v},${v},0.55)`; g.fillRect(r() * 256, r() * 256, 1 + r() * 2, 1 + r() * 3); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+
 export class World {
-  constructor(renderer, scene, quality) {
-    this.scene = scene; this.renderer = renderer; this.q = quality;
-    this.L = buildLayout();
+  constructor(renderer, scene, quality, kind = 'beach') {
+    this.scene = scene; this.renderer = renderer; this.q = quality; this.kind = kind;
+    this.L = kind === 'sandwich' ? buildSandwichLayout() : buildLayout();
     this.uTau = { value: 0 };
     this.root = new THREE.Group(); scene.add(this.root);
     this.buildSky();
     this.buildLights();
     this.buildTerrain();
+    if (kind === 'sandwich') {
+      buildSandwich(this);
+      this.vehicles = []; this.gunships = []; this.tracks = [];
+      this.buildHelos(); this.buildDecals(); this.toonPrep();
+      return;
+    }
     this.buildWater();
     this.buildGrass();
     this.buildRocks();
@@ -169,11 +184,11 @@ export class World {
     const envScene = new THREE.Scene();
     envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat.clone()));
     const pm = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pm.fromScene(envScene, 0.02).texture;
+    this.scene.environment = this.envTex = pm.fromScene(envScene, 0.02).texture;
     this.scene.environmentIntensity = 0.75;
     const fc = skyColorJS(new THREE.Vector3(-SUN_DIR.x, 0.02, -SUN_DIR.z).normalize());
     this.fogColor = new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
-    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.0015);
+    this.scene.fog = this.fog = new THREE.FogExp2(this.fogColor, this.kind === 'sandwich' ? 0.0026 : 0.0015);
   }
 
   buildLights() {
@@ -238,7 +253,8 @@ export class World {
       pos.setY(i, y);
       let k;
       let w = 0;
-      if (z > 4) {
+      if (this.kind === 'sandwich') { k = sandwichGround(x, z, y); w = y < 0.1 && z > 80 ? 0.5 : 0; }
+      else if (z > 4) {
         const low = smoothstep(0.2, -0.15, y);
         k = mix(WET, mix(WET, [0.5, 0.45, 0.36], 0.6), low);
         const alg = fbm(x * 0.04 + 9, z * 0.04, 3);
@@ -268,9 +284,10 @@ export class World {
     if (matIn) return matIn;
     const sand = TX.makeSandTextures();
     sand.map.repeat.set(220, 230); sand.normal.repeat.set(220, 230);
+    if (this.kind === 'sandwich') { sand.map = groundGrain(); sand.map.repeat.set(330, 345); sand.normal = null; }
     // softer sand grain under cel bands
     sand.map.minFilter = THREE.LinearMipmapLinearFilter;
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal || null, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
     // craters: looked up from a coarse grid of crater ids, each crater (x, z, radius, time) in a float texture
     const cu = this.crU = {
       uCrG: { value: new THREE.DataTexture(new Float32Array(8).fill(-1), 2, 1, THREE.RGBAFormat, THREE.FloatType) },
@@ -858,6 +875,8 @@ export class World {
   }
 
   // ---------------------------------------------------------------
+  // only one battlefield is in the deck at a time
+  setActive(on) { this.root.visible = on; this.sky.visible = on; this.sun.visible = on; this.hemi.visible = on; if (on) { this.scene.environment = this.envTex; this.scene.fog = this.fog; } }
   update(tau, cam, explosions) {
     this.uTau.value = tau;
     if (this.cars) {
@@ -903,10 +922,11 @@ export class World {
     for (const o of this.helos) {
       const p = heloPose(o.h, tau, o.pose);
       o.grp.position.set(p.x, p.y, p.z);
-      o.grp.rotation.set(p.pitch, p.yaw, 0, 'YXZ');
-      o.rotor.rotation.y = tau * 28;
+      o.grp.rotation.set(p.pitch, p.yaw, p.roll || 0, 'YXZ');
+      if (!p.dead) o.rotor.rotation.y = tau * 28 * (p.spin == null ? 1 : 0.4 + 0.6 * p.spin);
+      if (!!p.dead !== !!o.charred) { o.charred = !!p.dead; o.grp.traverse((m) => { if (!m.isMesh || m.name === 'disc') return; if (!m.userData.mat) m.userData.mat = m.material; m.material = p.dead ? VM.char : m.userData.mat; }); const dsc = o.rotor.getObjectByName('disc'); if (dsc) dsc.userData.off = !!p.dead; }
       o.tail.rotation.x = tau * 60;
-      const d = o.rotor.getObjectByName('disc'); if (d) d.visible = true;
+      const d = o.rotor.getObjectByName('disc'); if (d) d.visible = !d.userData.off;
     }
     for (const t of this.tracks) t.m.material.uniforms.uZ.value = vehZ(t.v, tau);
     // scorch decals
