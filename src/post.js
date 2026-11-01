@@ -102,10 +102,56 @@ const RAYS = {
     }`,
 };
 
+// cel shading: luminance pulled into a few soft-edged bands (hue kept, a little extra saturation) plus ink
+// outlines from the depth buffer — silhouettes and creases where 1/z stops being planar
+const CEL = {
+  uniforms: {
+    tDiffuse: { value: null }, tDepth: { value: null }, uRes: { value: new THREE.Vector2(1, 1) },
+    uNear: { value: 0.05 }, uFar: { value: 5000 }, uBands: { value: 4 }, uInk: { value: 1 }, uOn: { value: 1 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uBands, uInk, uOn;
+    varying vec2 vUv;
+    float linZ(vec2 uv){ float d = texture2D(tDepth, uv).x; float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
+    void main(){
+      vec4 base = texture2D(tDiffuse, vUv);
+      if (uOn < 0.5) { gl_FragColor = base; return; }
+      vec3 c = base.rgb;
+      // bands
+      float lum = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+      float p = pow(lum, 1.0 / 2.2) * uBands;
+      float q = (floor(p) + smoothstep(0.42, 0.58, fract(p))) / uBands;
+      vec3 col = c * pow(max(q, 0.0), 2.2) / lum;
+      float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = max(mix(vec3(g), col, 1.18), 0.0);
+      // ink
+      vec2 px = 1.0 / uRes;
+      float z0 = linZ(vUv);
+      if (z0 < uFar * 0.98 && base.a > 0.75) {
+        float w0 = 1.0 / z0;
+        float wl = 1.0 / linZ(vUv - vec2(px.x, 0.0)), wr = 1.0 / linZ(vUv + vec2(px.x, 0.0));
+        float wd = 1.0 / linZ(vUv - vec2(0.0, px.y)), wu = 1.0 / linZ(vUv + vec2(0.0, px.y));
+        float lap = abs(wl + wr - 2.0 * w0) + abs(wd + wu - 2.0 * w0);
+        float sil = max(max(abs(wl - w0), abs(wr - w0)), max(abs(wd - w0), abs(wu - w0)));
+        float e = max(smoothstep(0.02, 0.05, lap / w0), smoothstep(0.1, 0.2, sil / w0));
+        float fade = 1.0 - smoothstep(60.0, 260.0, z0);
+        col = mix(col, vec3(0.025, 0.02, 0.018), e * fade * uInk);
+      }
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+
 export class Post {
   constructor(renderer, scene, camera, q) {
     this.composer = new EffectComposer(renderer);
+    // the scene pass renders into renderTarget2; give it a depth texture for the ink lines
+    const rt = this.composer.renderTarget2;
+    rt.depthTexture = new THREE.DepthTexture(rt.width, rt.height); rt.depthTexture.type = THREE.UnsignedIntType;
     this.composer.addPass(new RenderPass(scene, camera));
+    this.cel = new ShaderPass(CEL); this.cel.uniforms.tDepth.value = rt.depthTexture;
+    this.cel.uniforms.uNear.value = camera.near; this.cel.uniforms.uFar.value = camera.far;
+    this.composer.addPass(this.cel);
     this.rays = new ShaderPass(RAYS); this.composer.addPass(this.rays);
     this.camera = camera; this._v = new THREE.Vector3();
     if (q.bloom) {
@@ -118,9 +164,10 @@ export class Post {
     this.composer.addPass(this.vhs);
     this.u = this.vhs.uniforms;
   }
-  setSize(w, h, pr) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.u.uRes.value.set(w * pr, h * pr); }
+  setSize(w, h, pr) { this.composer.setPixelRatio(pr); this.composer.setSize(w, h); this.u.uRes.value.set(w * pr, h * pr); this.cel.uniforms.uRes.value.set(w * pr, h * pr); }
   render(t, sunDir) {
     this.u.uTime.value = t;
+    this.cel.uniforms.uNear.value = this.camera.near; this.cel.uniforms.uFar.value = this.camera.far;
     if (sunDir) {
       const c = this.camera, v = this._v.copy(c.position).addScaledVector(sunDir, 1000).project(c);
       const fwd = new THREE.Vector3(); c.getWorldDirection(fwd);

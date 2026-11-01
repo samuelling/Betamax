@@ -393,7 +393,7 @@ export class Playback {
     for (let k = 0; k < 22; k++) {
       const x = ((k * 37.3 + tau * 1.1) % 280) - 140;
       const z = -50 + hash1(k + 300) * 150;
-      sm.push(x, heightAt(x, z) + 2.5 + hash1(k) * 4, z, 16 + hash1(k + 1) * 14, 0.78, 0.74, 0.7, 0.03, k);
+      sm.push(x, heightAt(x, z) + 2.5 + hash1(k) * 4, z, 16 + hash1(k + 1) * 14, 0.78, 0.74, 0.7, 0.018, k);
     }
 
     // ---------------- kill feed ----------------

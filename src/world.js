@@ -98,6 +98,7 @@ export class World {
     this.buildGunships();
     this.buildDecals();
     this.buildTracks();
+    this.toonPrep();
   }
 
   // AAV tread marks pressed into the wet flats; they exist only where the vehicle has already passed
@@ -171,7 +172,7 @@ export class World {
     this.scene.environmentIntensity = 0.75;
     const fc = skyColorJS(new THREE.Vector3(-SUN_DIR.x, 0.02, -SUN_DIR.z).normalize());
     this.fogColor = new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
-    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.0022);
+    this.scene.fog = new THREE.FogExp2(this.fogColor, 0.0015);
   }
 
   buildLights() {
@@ -185,6 +186,20 @@ export class World {
     this.sun = sun;
     this.hemi = new THREE.HemisphereLight(new THREE.Color(0.55, 0.62, 0.78), new THREE.Color(0.45, 0.38, 0.3), 0.55);
     this.scene.add(this.hemi);
+  }
+
+  // cel shading works on clean surfaces: bumpy normal maps turn into speckle once the light is banded, so they go;
+  // colour textures stay (the bands and ink are added in post)
+  toonPrep() {
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m || m.userData.toon) continue;
+        m.userData.toon = true;
+        if (m.normalMap) { m.normalMap = null; m.needsUpdate = true; }
+        if (m.roughnessMap) { m.roughnessMap = null; m.needsUpdate = true; }
+      }
+    });
   }
 
   // ---------------- terrain ----------------
@@ -234,6 +249,8 @@ export class World {
     g.computeVertexNormals();
     const sand = TX.makeSandTextures();
     sand.map.repeat.set(220, 230); sand.normal.repeat.set(220, 230);
+    // softer sand grain under cel bands
+    sand.map.minFilter = THREE.LinearMipmapLinearFilter;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet; varying float vWet;')
@@ -262,7 +279,7 @@ export class World {
     const nrm = TX.makeWaterNormal();
     const uni = {
       uTime: this.uTau, uSunDir: { value: SUN_DIR }, uNormal: { value: nrm }, uHeight: { value: ht },
-      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0022 },
+      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0015 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: uni, transparent: true, depthWrite: false,
@@ -333,6 +350,8 @@ export class World {
     const uT = this.uTau;
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uT;
+      // tag grass pixels (alpha 0.5) so the cel pass doesn't ink every blade
+      sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n gl_FragColor.a = 0.5;');
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
