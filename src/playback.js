@@ -181,9 +181,9 @@ export class Playback {
         const ta = Math.min(Math.max(tauPrev, fireT), impT), tb = Math.min(Math.max(tau, fireT), impT);
         if (ta !== tb) {
           this.shotPos(o, ta, pa); this.shotPos(o, tb, pb);
-          if (segSegDist(pa, pb, cap0, cap1) < 0.42) {
+          if (segSegDist(pa, pb, cap0, cap1) < 0.3) {
             this.hitShots.add(si);
-            ev.playerHits.push({ dmg: veh ? 45 : 24, fromX: A[o + 2], fromZ: A[o + 4] });
+            ev.playerHits.push({ dmg: veh ? 38 : 15 + hash1(si) * 9, bullet: true, fromX: A[o + 2], fromZ: A[o + 4] });
           }
         }
       }
@@ -271,7 +271,7 @@ export class Playback {
       if (e.t <= tauPrev && e.t > tau && ctx.playerAlive && !e.air) {
         const d = Math.hypot(e.ix - pp.x, e.iz - pp.z);
         const rad = e.big > 1.5 ? 9 : 6.5 * e.big;
-        if (d < rad) ev.playerHits.push({ dmg: 130 * (1 - d / rad) + 10, fromX: e.ix, fromZ: e.iz });
+        if (d < rad) ev.playerHits.push({ dmg: d < 1.6 ? 150 : 95 * (1 - d / rad) + 8, fromX: e.ix, fromZ: e.iz });
         ev.shake = Math.max(ev.shake, Math.max(0, 1 - d / (60 * Math.min(2, e.big))));
       }
       if (age < 0) return;

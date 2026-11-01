@@ -464,6 +464,10 @@ export class Audio {
     this.loops.drone = this.loop(this.makeDroneBuzz(r), 0);
     this.loops.battle = this.loop(this.rev(this.makeBattleBed(r)), 0.22);
     this.loops.fire = this.loop(this.makeNoiseLoop(r, 'fire'), 0);
+    // your own body, forward: heartbeat and ragged breathing as health drops; a grunt when hit
+    this.loops.heart = this.loop(this.makeHeart(), 0);
+    this.loops.breath = this.loop(this.makeBreath(r), 0);
+    this.B.hurt = [0, 1, 2].map((k) => this.toBuf(synthVoice(mulberry32(900 + k), this.sr, 'grunt')));
     this.enabled = true;
   }
 
@@ -678,6 +682,24 @@ export class Audio {
       const t = i / sr; let v = 0;
       for (const [t0, amp, f] of hits) { const dt = t - t0; if (dt < 0) continue; v += amp * Math.exp(-dt / 0.012) * (Math.sin(2 * Math.PI * f * dt) * 0.6 + (r() * 2 - 1) * 0.5); }
       d[i] = v * 0.7;
+    }
+    return b;
+  }
+  hurt(dmg) {
+    if (!this.enabled || !this.B.hurt || Math.random() > 0.6) return;
+    this.play(this.B.hurt[Math.floor(Math.random() * 3)], Math.min(0.5, 0.15 + dmg / 120), 0, 0.9 + Math.random() * 0.15);
+  }
+  makeHeart() {
+    const b = this.buf(0.8), d = b.getChannelData(0), sr = this.sr; // ~75 bpm lub-dub
+    for (let i = 0; i < d.length; i++) { const t = i / sr; const beat = (tt, f) => (tt > 0 ? Math.sin(TAU2 * f * tt) * Math.exp(-tt / 0.045) : 0); d[i] = (beat(t, 52) + 0.65 * beat(t - 0.17, 46)) * 0.9; }
+    return b;
+  }
+  makeBreath(r) {
+    const b = this.buf(3.2), d = b.getChannelData(0), sr = this.sr; let a = 0, c = 0;
+    for (let i = 0; i < d.length; i++) {
+      const t = i / sr, n = r() * 2 - 1; a += (n - a) * 0.12; c += (a - c) * 0.3;
+      const inh = Math.pow(Math.max(0, Math.sin(Math.PI * t / 1.3)), 2) * (t < 1.3 ? 1 : 0), exh = Math.pow(Math.max(0, Math.sin(Math.PI * (t - 1.45) / 1.5)), 1.5) * (t > 1.45 && t < 2.95 ? 1 : 0);
+      d[i] = (a - c) * (inh * 0.7 + exh) * 1.6;
     }
     return b;
   }

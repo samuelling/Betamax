@@ -447,7 +447,7 @@ function frame(now) {
   tick(Math.min(0.05, (now - G.last) / 1000)); G.last = now;
 }
 // test hook: advance the game deterministically
-window.BWstep = (n, dt = 1 / 30) => { for (let i = 0; i < n; i++) tick(dt, i === n - 1); };
+window.BWstep = (n, dt = 1 / 30, draw = true) => { for (let i = 0; i < n; i++) tick(dt, draw && i === n - 1); };
 
 function tick(dt, draw = true) {
   fpsAvg += (1 / Math.max(dt, 1e-3) - fpsAvg) * 0.05;
@@ -516,7 +516,7 @@ function tick(dt, draw = true) {
       const mz = p.tryFire(inp);
       if (mz) { playerFire(mz, inp); ejectBrass(); }
       handlePlayerEvents();
-      if (G.real - p.lastHit > 3.5) p.health = Math.min(100, p.health + dt * 22);
+      if (G.real - p.lastHit > 3.2) p.health = Math.min(100, p.health + dt * 45);
       // minefield
       const dx = Math.max(ARENA.x0 - p.pos.x, p.pos.x - ARENA.x1, 0), dz = Math.max(ARENA.z0 - p.pos.z, p.pos.z - ARENA.z1, 0);
       const out2 = Math.max(dx, dz);
@@ -603,9 +603,16 @@ function tick(dt, draw = true) {
     machineSounds(S, G.tau, L, G.audio);
   }
   if (G.state === 'play' && G.stateT > 2.2) { // brief grace after taking a body
+    // Call of Duty-style health: no bar, a short invulnerability blink after each bullet, no one-shots from
+    // healthy, and fast regeneration once you've been out of fire for a few seconds
     for (const h of ev.playerHits) {
-      p.health -= h.dmg; p.lastHit = G.real; G.damageFx = Math.min(1, G.damageFx + 0.5); damageDir(h.fromX, h.fromZ);
-      p.shake = Math.max(p.shake, 0.4);
+      let dmg = h.dmg;
+      if (h.bullet && G.real - (p.lastBullet || -9) < 0.4) dmg *= 0.3;
+      if (h.bullet) p.lastBullet = G.real;
+      if (h.bullet && p.health > 45 && p.health - dmg <= 0) dmg = p.health - 6; // a burst can drop you, a single round can't
+      p.health -= dmg; p.lastHit = G.real; G.damageFx = Math.min(1, G.damageFx + 0.25 + dmg / 80); damageDir(h.fromX, h.fromZ);
+      p.shake = Math.max(p.shake, 0.25 + dmg / 120);
+      if (G.audio.enabled) G.audio.hurt(dmg);
     }
     if (ev.shake) p.shake = Math.max(p.shake, ev.shake * 1.5);
     if (p.health <= 0) beginDeath('shot');
@@ -652,7 +659,8 @@ function tick(dt, draw = true) {
 
   // post
   G.flash *= Math.exp(-dt * 3.5); G.damageFx *= Math.exp(-dt * 2.2);
-  const lowHp = G.state === 'play' ? Math.max(0, 1 - p.health / 45) * 0.5 : 0;
+  const lowHp = G.state === 'play' ? Math.pow(Math.max(0, 1 - p.health / 70), 1.3) * 0.85 : 0;
+  if (G.audio.enabled) G.audio.setLoop('heart', G.state === 'play' ? Math.max(0, 1 - p.health / 55) * 0.9 : 0), G.audio.setLoop('breath', G.state === 'play' ? Math.max(0, 1 - p.health / 65) * 0.5 : 0);
   pu.uRew.value = rew; pu.uFF.value = ff; pu.uPause.value = pause; pu.uDesat.value = Math.max(desat, lowHp * 0.6);
   pu.uDamage.value = Math.min(1, G.damageFx + lowHp); pu.uFlash.value = G.state === 'possess' ? Math.max(G.flash, 0) : G.flash * 0.8;
   pu.uAmt.value = 1; pu.uStuck.value = stuck;
