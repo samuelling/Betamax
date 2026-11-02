@@ -18,6 +18,9 @@ import { buildPort } from './worldP.js';
 import { buildPortLayout } from './layoutP.js';
 import { buildShipWorld } from './worldS.js';
 import { buildShipLayout } from './layoutS.js';
+import { buildAsh, ashGround } from './worldA.js';
+import { planStructure, Megastructures } from './megastruct.js';
+import { buildAshLayout } from './layoutA.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.9, 0.26, 0.28).normalize();
 
@@ -96,7 +99,7 @@ function groundGrain() {
 export class World {
   constructor(renderer, scene, quality, kind = 'beach') {
     this.scene = scene; this.renderer = renderer; this.q = quality; this.kind = kind;
-    this.L = kind === 'sandwich' ? buildSandwichLayout() : kind === 'bomb' ? buildBombLayout() : kind === 'jump' ? buildJumpLayout() : kind === 'port' ? buildPortLayout() : kind === 'ship' ? buildShipLayout() : buildLayout();
+    this.L = kind === 'sandwich' ? buildSandwichLayout() : kind === 'bomb' ? buildBombLayout() : kind === 'jump' ? buildJumpLayout() : kind === 'port' ? buildPortLayout() : kind === 'ship' ? buildShipLayout() : kind === 'ash' ? buildAshLayout() : buildLayout();
     this.uTau = { value: 0 };
     this.root = new THREE.Group(); scene.add(this.root);
     if (kind === 'ship') {   // night at sea
@@ -125,6 +128,12 @@ export class World {
     }
     this.buildSky();
     this.buildLights();
+    if (kind === 'ash') {
+      buildAsh(this);
+      this.vehicles = []; this.gunships = []; this.tracks = []; this.helos = [];
+      this.buildDecals(); this.toonPrep();
+      return;
+    }
     if (kind === 'bomb') {
       buildBombTerrain(this); buildBomb(this);
       this.vehicles = []; this.gunships = []; this.tracks = [];
@@ -152,6 +161,9 @@ export class World {
     this.buildGunships();
     this.buildDecals();
     this.buildTracks();
+    // a resort hotel up the beach to the east, which the naval guns take down mid-morning
+    { const plans = [planStructure({ name: 'HOTEL', x: -285, y: heightAt(-285, -40), z: -40, rot: 0.05, w: 64, d: 18, floors: 8, fh: 3.4, bay: 4.3, style: 'office', T: 96, seed: 1957, lean: [0.2, -1] })];
+      this.megas = new Megastructures(this.root, plans, { dustColor: [0.7, 0.66, 0.6] }); this.megaPlans = plans; }
     this.toonPrep();
   }
 
@@ -226,7 +238,7 @@ export class World {
     this.scene.environmentIntensity = 0.75;
     const fc = skyColorJS(new THREE.Vector3(-SUN_DIR.x, 0.02, -SUN_DIR.z).normalize());
     this.fogColor = new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
-    this.scene.fog = this.fog = new THREE.FogExp2(this.fogColor, this.kind === 'sandwich' ? 0.0026 : this.kind === 'bomb' ? 0.0016 : 0.0015);
+    this.scene.fog = this.fog = new THREE.FogExp2(this.fogColor, this.kind === 'sandwich' ? 0.0026 : this.kind === 'bomb' ? 0.0016 : this.kind === 'ash' ? 0.0042 : 0.0015);
   }
 
   buildLights() {
@@ -293,6 +305,7 @@ export class World {
       let w = 0;
       if (this.kind === 'sandwich') { k = sandwichGround(x, z, y); w = y < 0.1 && z > 80 ? 0.5 : 0; }
       else if (this.kind === 'bomb') k = bombGround(x, z, y);
+      else if (this.kind === 'ash') k = ashGround(x, z, y);
       else if (z > 4) {
         const low = smoothstep(0.2, -0.15, y);
         k = mix(WET, mix(WET, [0.5, 0.45, 0.36], 0.6), low);
@@ -312,7 +325,7 @@ export class World {
         k = mix(k, mix(SCRUB, DRY, smoothstep(0.62, 0.75, fbm(x * 0.03, z * 0.03, 3)) * 0.7), inland);
         k = mix(k, ASPH, lotMask(x, z));
       }
-      if (y < -0.4 && this.kind !== 'bomb') k = mix(k, [0.38, 0.36, 0.3], smoothstep(-0.4, -2, y));
+      if (y < -0.4 && this.kind !== 'bomb' && this.kind !== 'ash') k = mix(k, [0.38, 0.36, 0.3], smoothstep(-0.4, -2, y));
       c.setRGB(k[0], k[1], k[2], THREE.SRGBColorSpace);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       wet[i] = w;
@@ -324,7 +337,7 @@ export class World {
     const sand = TX.makeSandTextures();
     sand.map.repeat.set(220, 230); sand.normal.repeat.set(220, 230);
     if (this.kind === 'sandwich') { sand.map = groundGrain(); sand.map.repeat.set(330, 345); sand.normal = null; }
-    if (this.kind === 'bomb') { sand.map = groundGrain(); sand.map.repeat.set(1, 1); sand.normal = null; }
+    if (this.kind === 'bomb' || this.kind === 'ash') { sand.map = groundGrain(); sand.map.repeat.set(1, 1); sand.normal = null; }
     // softer sand grain under cel bands
     sand.map.minFilter = THREE.LinearMipmapLinearFilter;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal || null, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
@@ -924,10 +937,12 @@ export class World {
       for (const e of this.carBlasts) poseBlast(this.cars[e.car], tau - e.t);
     }
     this.updatePieces(tau);
+    if (this.megas) this.megas.update(tau);
     if (this.bombUpdate) this.bombUpdate(tau, cam);
     if (this.jumpUpdate) this.jumpUpdate(tau, cam);
     if (this.portUpdate) this.portUpdate(tau, cam);
     if (this.shipUpdate) this.shipUpdate(tau, cam);
+    if (this.ashUpdate) this.ashUpdate(tau, cam);
     // sun shadow follows camera
     const s = this.sun;
     const tx = Math.round(cam.position.x / 4) * 4, tz = Math.round(cam.position.z / 4) * 4;

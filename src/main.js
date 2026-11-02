@@ -22,6 +22,8 @@ import { simulateBomb } from './simB.js';
 import { simulateJump } from './simJ.js';
 import { simulatePort } from './simP.js';
 import { simulateShip } from './simS.js';
+import { simulateAsh } from './simA.js';
+import { LOT as A_LOT, TRAILHEAD as A_TRAIL, CAMPS as A_CAMPS } from './terrainA.js';
 import { WELL as S_WELL, HULL as S_HULL } from './terrainS.js';
 import { QUAY_Z as P_QUAY, DECK as P_DECK } from './terrainP.js';
 import { JT } from './layoutJ.js';
@@ -291,15 +293,16 @@ function startChapter(id) {
   if (id === 'beach') { $('ovl').classList.add('out'); setTimeout(startTape, 380); return; }
   const S = G.S;
   let a = S.actors.find((q) => q.side === 0 && q.helo >= 0);
-  if (id === 'port' || id === 'ship') a = S.actors.find((q) => q.side === 1 && q.deathTime < 0) || S.actors.find((q) => q.side === 1);   // a Texan from the beach
+  if (id === 'port' || id === 'ship' || id === 'ashTX') a = S.actors.find((q) => q.side === 1 && q.deathTime < 0) || S.actors.find((q) => q.side === 1);   // a Texan from the beach
   if (id === 'homeUS' || id === 'homeTX') {
     const side = id === 'homeTX' ? 1 : 0, b = S.actors.find((q) => q.side === side && q.deathTime > 0) || S.actors.find((q) => q.side === side);
     G.lives = [lifeOf(b.id)]; goHome(b.id, false); return;
   }
   G.lives = [lifeOf(a.id)];
-  const title = { sandwich: 'EAST SANDWICH', bomb: 'THE BOMB', jump: 'THE JUMP', port: 'THE PORT', ship: 'THE NIGHT BEFORE' }[id], n = { sandwich: 2, bomb: 3, jump: 4, port: 3, ship: 2 }[id];
+  const title = { sandwich: 'EAST SANDWICH', bomb: 'THE BOMB', jump: 'THE JUMP', port: 'THE PORT', ship: 'THE NIGHT BEFORE', ash: 'ASHLAND STATE PARK', ashTX: 'ASHLAND STATE PARK' }[id], n = { sandwich: 2, bomb: 3, jump: 4, port: 3, ship: 2, ash: 4, ashTX: 4 }[id];
   overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE ${n} / 5</div><h2 style="margin-top:3em">${title}</h2><p style="opacity:.6">loading&hellip;</p>`, 'blue');
   setTimeout(() => {
+    if (id === 'ash' || id === 'ashTX') { loadTape('ash', ident(a.id), a.skin, id === 'ashTX' ? 1 : 0); startAsh(); return; }
     loadTape(id, ident(a.id), a.skin);
     if (id === 'bomb') startBomb(); else if (id === 'jump') startJump(); else if (id === 'port') startPort(); else if (id === 'ship') startShip(); else startSandwich();
   }, 80);
@@ -557,6 +560,7 @@ function beginEnding() {
   hud(false);
   const st = G.S.actors[G.body];
   if (G.sceneId === 'jump') sub('Back to your seat. Back out over the Gulf, before the coast.', 6);
+  else if (G.sceneId === 'ash') sub(st.side ? 'Back into your tent. Back to sleep.' : 'Back down the shore path. Back into the truck in the lot.', 6);
   else if (G.sceneId === 'ship') sub(st.rope ? 'Back up the rope. Back into the helicopter, out over the sea.' : st.role === 'well' ? 'Back up out of the well deck, to wait.' : 'Back inside the island.', 6);
   else if (G.sceneId === 'port') sub(st.para ? 'Back up into the dark, under the canopy, toward the aircraft.' : st.role === 'embark' ? 'Back to the buses. Back out of the gate.' : 'Back inside.', 6);
   else if (G.sceneId === 'bomb') sub(st.side === 0 ? 'Back out of the truck. Back across the common, to before the light.' : 'Back down the road. Back into the trees.', 6);
@@ -593,13 +597,12 @@ const MIDDLE = {
   beach1: [['THE NIGHT BEFORE', 'the hovercraft deck'], ['THE WAR ARRIVES', 'the port'], ['THE FIRST SHOT', '']],
   sandwich0: [['THE BOMB', 'Route 9, the other road out of Boston'], ['ASHLAND STATE PARK', 'scouts in the woods']],
   sandwich1: [['THE WAR ARRIVES', 'the port'], ['THE FIRST SHOT', '']],
-  bomb0: [['ASHLAND STATE PARK', 'scouts in the woods']],
-  bomb1: [['ASHLAND STATE PARK', 'the camps']],
+  bomb0: [], bomb1: [], ash0: [], ash1: [],
   jump0: [],
-  port1: [['ASHLAND STATE PARK', 'the camps']],
+  port1: [],
   ship0: [], ship1: [],
 };
-const TAPE_N = { beach: 2, sandwich: 3, bomb: 4, jump: 5, port: 4, ship: 3 };
+const TAPE_N = { beach: 2, sandwich: 3, bomb: 4, jump: 5, port: 4, ship: 3, ash: 5 };
 function tapesBack() {
   const i = G.body, d = ident(i), side = G.S.actors[i].side;
   G.state = 'tapes'; hud(false);
@@ -612,6 +615,8 @@ function tapesBack() {
   if (G.sceneId === 'beach' && side === 1) { tapeCard(2, 'THE NIGHT BEFORE', d, side, 'aboard the "7", the well deck', () => { loadTape('ship', d, G.S.actors[i].skin); startShip(); }); return; }
   // aboard: the boarding team came out to the fleet in The Bomb's second helicopter; the company came aboard at the port
   if (G.sceneId === 'ship') { if (side === 0) tapeCard(3, 'THE BOMB', d, side, 'Route 135, the helicopter out to the fleet', () => { loadTape('bomb', d, G.S.actors[i].skin, 1); startBomb(); }); else tapeCard(3, 'THE PORT', d, side, 'Corpus Christi, the night before that', () => { loadTape('port', d, G.S.actors[i].skin); startPort(); }); return; }
+  // the Bomb's scouts came out of the park; its Texans, and the Port's, came out of the camps in it
+  if (G.sceneId === 'bomb' || (G.sceneId === 'port' && side === 1)) { tapeCard(4, 'ASHLAND STATE PARK', d, side, side ? 'the camps in the woods, the hour before' : 'first light, the scouts in the woods', () => { loadTape('ash', d, G.S.actors[i].skin, side); startAsh(); }); return; }
   // the Port's paratroopers came out of a C-130 over the Gulf: before that, The Jump
   if (G.sceneId === 'port' && side === 0) { tapeCard(4, 'THE JUMP', d, side, 'over the Gulf, an hour before', () => { loadTape('jump', d, G.S.actors[i].skin); startJump(); }); return; }
   const list = MIDDLE[G.sceneId + side] || MIDDLE.beach1, n0 = TAPE_N[G.sceneId] || 2;
@@ -654,7 +659,7 @@ function loadTape(id, who, skin, group = 0) {
   if (!G.scenes[id]) {
     const prev = G.sceneId; setScene(id);
     const world = new World(renderer, scene, Q, id);
-    const S = id === 'bomb' ? simulateBomb(3, { ident: who, skin }) : id === 'jump' ? simulateJump(5, { ident: who, skin }) : id === 'port' ? simulatePort(7, { ident: who, skin }) : id === 'ship' ? simulateShip(11, { ident: who, skin }) : simulateSandwich(4, { ident: who, skin });
+    const S = id === 'bomb' ? simulateBomb(3, { ident: who, skin }) : id === 'jump' ? simulateJump(5, { ident: who, skin }) : id === 'port' ? simulatePort(7, { ident: who, skin }) : id === 'ship' ? simulateShip(11, { ident: who, skin }) : id === 'ash' ? simulateAsh(13, { ident: who, skin, group }) : simulateSandwich(4, { ident: who, skin });
     world.S = S;
     world.setDestruction(S.destruction);
     const sol = new Soldiers(scene, S);
@@ -688,6 +693,8 @@ function startJump() { startSandwich(); card('THE JUMP', 3); G.player.ride = nul
 function startPort() { startSandwich(); card('THE PORT', 3); G.player.ride = null; }
 // The Night Before opens in the well deck, at the back of an AAV, the last man in
 function startShip() { startSandwich(); card('THE NIGHT BEFORE', 3); G.player.ride = null; }
+// Ashland State Park opens at first light: the scouts on the trail out to the common, or the camp pulling out
+function startAsh() { startSandwich(); card('ASHLAND STATE PARK', 3); G.player.ride = null; }
 function goHome(i, forward) {
   const a = G.S.actors[i], who = ident(i);
   G.endBody = i; G.homeForward = forward; G.endScene = G.sceneId; G.endIdent = who;
@@ -740,6 +747,7 @@ const WP = { t: 0, x: 0, y: 0, z: 0, final: false, on: false }, _ws = {}, _wv = 
 function wpLabel(st) {
   const S = G.S;
   if (G.sceneId === 'jump') return 'YOUR SEAT';
+  if (G.sceneId === 'ash') return st.side ? 'YOUR TENT' : 'THE TRUCK IN THE LOT';
   if (G.sceneId === 'ship') return st.rope ? (G.tau >= st.tOut ? 'THE ROPE' : 'THE HELICOPTER') : st.role === 'well' ? 'THE WELL DECK DOOR' : 'THE ISLAND';
   if (G.sceneId === 'port') return st.para ? (G.tau >= st.tOut ? 'WHERE YOU LANDED' : 'THE SKY') : st.role === 'embark' ? 'THE BUSES' : st.role === 'aa' ? 'THE GUN' : 'THE DOOR';
   if (G.sceneId === 'bomb') { if (st.car != null && G.tau >= st.tOut) return S.L.rides[st.car].kind === 'pickup' ? 'THE TRUCK' : 'THE CAR'; return st.side ? 'THE WOODS ROAD' : 'THE TRAIL'; }
@@ -821,6 +829,14 @@ function bombBeats(t0, t1, p) {
   if ((t0 - B.t) * (t1 - B.t) < 0) { G.flash = 1.4; G.audio.play(G.audio.B.boom, 0.5, 0, 0.32); p.shake = Math.max(p.shake || 0, 0.6); if (t1 < t0) sub('The light.', 2.5); }
   if ((t0 - boomT) * (t1 - boomT) < 0) { G.audio.play(G.audio.B.boom, 1.3, -0.2, 0.42); G.audio.play(G.audio.B.boom, 0.8, 0.3, 0.27); p.shake = Math.max(p.shake || 0, 1.4); }
 }
+// the big buildings: the charges, and the long roar of it coming down, arriving at the speed of sound
+function megaBeats(t0, t1, p) {
+  const plans = G.world && G.world.megaPlans; if (!plans || t0 === t1) return;
+  for (const pl of plans) { if (pl.T > 1e5) continue; const s = pl.spec, d = Math.hypot(s.x - p.pos.x, s.z - p.pos.z), ta = pl.T + d / 343, tb = ta + 1.2;
+    if ((t0 - ta) * (t1 - ta) < 0) { const g = Math.min(1.6, 260 / (d + 60)); G.audio.play(G.audio.B.boom, g, 0, 0.55); if (d < 400) p.shake = Math.max(p.shake || 0, 0.3 + (400 - d) / 300); }
+    if ((t0 - tb) * (t1 - tb) < 0) { const g = Math.min(1.2, 200 / (d + 80)); G.audio.play(G.audio.B.boom, g, -0.3, 0.3); G.audio.play(G.audio.B.boom, g * 0.8, 0.3, 0.24); } }
+}
+
 // The Jump: the jumpmasters' commands, the flak arriving at the speed of sound
 const JUMP_CALLS = [[JT.warn, 'TEN MINUTES!'], [JT.getReady, 'GET READY!'], [JT.outStand, 'OUTBOARD PERSONNEL — STAND UP!'], [JT.inStand, 'INBOARD PERSONNEL — STAND UP!'], [JT.hook, 'HOOK UP!'],
   [JT.check, 'CHECK EQUIPMENT! SOUND OFF FOR EQUIPMENT CHECK!'], [JT.planeHit + 0.8, '— they hit Chalk Six —'], [JT.hit + 0.4, 'MEDIC!'], [JT.door, 'STAND IN THE DOOR!'], [JT.green, 'GREEN LIGHT — GO! GO! GO!']];
@@ -837,6 +853,15 @@ function endingCamJ(st) {
   // out of the aircraft: hanging off its quarter in the dark as it backs away over the Gulf with the formation
   const k = Math.min(1, G.stateT / 6), pos = new THREE.Vector3(-26 - k * 30, 9 + k * 8, 34 + k * 40), q = new THREE.Quaternion();
   q.setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, new THREE.Vector3(10, 1.5, -20), new THREE.Vector3(0, 1, 0)));
+  return { pos, q };
+}
+
+// Ashland endings: the scouts' pickup in the lot; the tent
+function endingCamA(st) {
+  const L = G.S.L, pos = new THREE.Vector3(), look = new THREE.Vector3(), q = new THREE.Quaternion();
+  if (st.side === 0) { const [x, z] = L.cars[L.trucks.length]; pos.set(x - 14, A_LOT.y + 3, z + 12); look.set(x, A_LOT.y + 1, z); }
+  else { const t = L.tents[Math.max(0, st.tent)] || L.tents[0]; pos.set(t.door.x + (t.door.x - t.x) * 2.5, heightAt(t.door.x, t.door.z) + 2.2, t.door.z + (t.door.z - t.z) * 2.5); look.set(t.x, heightAt(t.x, t.z) + 1, t.z); }
+  q.setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, look, new THREE.Vector3(0, 1, 0)));
   return { pos, q };
 }
 
@@ -952,7 +977,9 @@ function tick(dt, draw = true) {
         if (G.stateT < 3.2) { tauRate = 0; stuckTape(dt); osd = Math.sin(G.real * 5) > -0.3 ? '◀ SLOW' : ''; rew = 0.25; stuck = 1 - G.stateT / 3.2; }
         else if (!G.caught) { G.caught = true; G.audio.play(G.audio.B.clunk, 0.7); G.flash = 0.4; G.introK = 0; G.introFrom = camera.position.clone(); G.introQ = camera.quaternion.clone(); }
         const h = G.pb.hit[G.body];
-        if (G.introK === undefined && G.sceneId === 'ship') {   // wide: from the open stern gate, forward into the well deck and the boats
+        if (G.introK === undefined && G.sceneId === 'ash') {   // wide: over the woods at first light, toward where you'll be
+          const h = G.pb.hit[G.body], a = G.real * 0.02, cx = h ? h.pelvis.x : 0, cz = h ? h.pelvis.z : 0; camera.position.set(cx - 30 + Math.sin(a) * 4, heightAt(cx - 30, cz + 18) + 14, cz + 18); camera.lookAt(cx, heightAt(cx, cz) + 1.5, cz);
+        } else if (G.introK === undefined && G.sceneId === 'ship') {   // wide: from the open stern gate, forward into the well deck and the boats
           const a = G.real * 0.02; camera.position.set(S_HULL.x1 - 3, S_WELL.floor + 9.5 + Math.sin(a) * 0.4, 5.6); camera.lookAt(104, S_WELL.floor + 1.2, -1);
         } else if (G.introK === undefined && G.sceneId === 'port') {   // wide: the wharf from the quay edge, the gangway and the ship, fires beyond
           const a = 0.3 + G.real * 0.02; camera.position.set(-40 + Math.sin(a) * 10, P_DECK + 11, P_QUAY - 30); camera.lookAt(16, P_DECK + 8, P_QUAY - 2);
@@ -1100,6 +1127,7 @@ function tick(dt, draw = true) {
   if (p.ride) rideCarry(p, dt);
   if (G.sceneId === 'bomb') bombBeats(tauPrev, G.tau, p);
   if (G.sceneId === 'jump') jumpBeats(tauPrev, G.tau, p);
+  megaBeats(tauPrev, G.tau, p);
   if (G.state === 'ending') { // place the camera against the aircraft at the tape time it will be drawn at
     const k = Math.min(1, G.stateT / 1.6), e = k * k * (3 - 2 * k), target = endingCam(S.actors[G.body]);
     camera.position.lerpVectors(G.end.from, target.pos, e);
@@ -1293,6 +1321,7 @@ function endingCam(st) {
   if (G.sceneId === 'jump') return endingCamJ(st);
   if (G.sceneId === 'port') return endingCamP(st);
   if (G.sceneId === 'ship') return endingCamS(st);
+  if (G.sceneId === 'ash') return endingCamA(st);
   const S = G.S, pos = new THREE.Vector3(), q = new THREE.Quaternion();
   if (st.side === 0) {
     const h = S.L.helos[st.helo]; const hp = heloPose(h, G.tau, {});

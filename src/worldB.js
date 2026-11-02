@@ -115,7 +115,7 @@ function baleEndTex() {
 
 // ---------------------------------------------------------------- the woods: full-crowned oaks and maples, tall white pines
 // Instanced in 200 m chunks so each chunk can be culled (and left out of the shadow map) on its own.
-function addWoods(root, trees, r, hi) {
+export function addWoods(root, trees, r, hi) {
   const blob = (rad) => new THREE.IcosahedronGeometry(rad, hi ? 1 : 0);
   const decid = (seed, wide) => { const q = mulberry32(seed), l = [];
     for (let k = 0; k < 11; k++) { const a = q() * 6.28, rr = Math.sqrt(q()) * (wide ? 3.4 : 2.8), y = 6.2 + q() * 6 - rr * 0.35; l.push(place(blob(1.9 + q() * 1.1), Math.cos(a) * rr, y, Math.sin(a) * rr, 0, 0, 0, 1, 0.85, 1)); }
@@ -349,7 +349,7 @@ export function buildBomb(W) {
     if (parts.length) { const m = new THREE.Mesh(merge(parts), red); m.castShadow = m.receiveShadow = true; root.add(m); const rm = new THREE.Mesh(merge(roofs), std([0.3, 0.3, 0.32], 0.7, 0.3)); rm.castShadow = true; root.add(rm); } }
 
   // ---------- the Telechron works, standing (until the missiles) ----------
-  W.megas = new Megastructures(root, L.megaPlans);
+  W.megas = new Megastructures(root, L.megaPlans); W.megaPlans = L.megaPlans;
   // ---------- the cloud over Boston ----------
   buildCloud(W);
   // ---------- the flash: a light from the east for a few seconds ----------
@@ -435,7 +435,6 @@ function buildCloud(W) {
 
 function updateBomb(W, tau, cam) {
   const L = W.L;
-  W.megas.update(tau);
   // the convoy
   for (const car of W.rideCars) {
     const c = car.c, p = carPose(c, tau, car.pose), h = c.kind === 'pickup' ? 2.6 : 2.3;

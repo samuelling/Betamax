@@ -13,7 +13,18 @@ export function planStructure(spec) {
   const w = spec.w, d = spec.d, bay = spec.bay || 4, nx = Math.max(2, Math.round(w / bay)), nz = Math.max(2, Math.round(d / bay));
   const style = spec.style || 'glass';
   const add = (mat, x, y, z, sx, sy, sz, kind = 'panel') => P.push({ mat, x, y, z, sx, sy, sz, kind });
-  if (style === 'crane') {   // ship-to-shore crane: four legs, the portal, a 100 m boom out over the water, the A-frame, the house
+  if (style === 'stack') {   // a power-station chimney: a tapering concrete tube in rings, red and white at the top
+    const n2 = spec.floors, R0 = spec.binR || 7;
+    for (let k = 0; k < n2; k++) { const R = R0 * (1 - k / n2 * 0.38), band = k >= n2 - 6 ? (Math.floor((n2 - k) / 2) % 2 ? 'stackR' : 'stackW') : 'concrete';
+      for (let a = 0; a < 4; a++) P.push({ mat: band, kind: 'arc', x: 0, y: k * fh + fh / 2, z: 0, sx: R, sy: fh, sz: R, arc: a }); }
+    add('steel', 0, n2 * fh + 0.6, 0, R0 * 1.3, 1.2, R0 * 1.3, 'cap');
+  } else if (style === 'mast') {   // a lattice radio mast: three legs in 6 m sections, bracing, the dishes and whips at the top
+    const n2 = spec.floors, sec = fh, half = 1.4;
+    for (let k = 0; k < n2; k++) { const y = k * sec + sec / 2, s2 = half * (1 - k / n2 * 0.5);
+      for (let a = 0; a < 3; a++) { const an = a / 3 * Math.PI * 2; add('steel', Math.cos(an) * s2, y, Math.sin(an) * s2, 0.18, sec, 0.18, 'leg'); }
+      add('steel', 0, y, 0, s2 * 1.6, 0.08, 0.08, 'brace'); add('steel', 0, y + sec * 0.3, 0, 0.08, 0.08, s2 * 1.6, 'brace'); }
+    const H2 = n2 * sec; add('steel', 0, H2 + 2, 0, 0.12, 4, 0.12, 'whip'); add('slab', 0.9, H2 - 3, 0, 1.4, 1.4, 0.3, 'dish'); add('slab', -0.8, H2 - 6, 0.4, 1.2, 1.2, 0.3, 'dish');
+  } else if (style === 'crane') {   // ship-to-shore crane: four legs, the portal, a 100 m boom out over the water, the A-frame, the house
     for (const lx of [-9, 9]) for (const lz of [-8, 8]) for (let k = 0; k < 2; k++) add('crane', lx, 8.5 + k * 17, lz, 1.6, 17, 1.6, 'leg');
     for (const lz of [-8, 8]) add('crane', 0, 34.5, lz, 19.6, 1.8, 1.4, 'beam');
     for (const lx of [-9, 9]) add('crane', lx, 34.5, 0, 1.4, 1.8, 17.6, 'beam');
@@ -48,7 +59,7 @@ export function planStructure(spec) {
   const ex = w / 2 + H * 0.35, ez = d / 2 + H * 0.35, Rpile = Math.max(ex, ez), Hpile = Math.min(H * 0.24, 5 + n * 0.6);
   const heap = (x, z) => { const q = Math.hypot((x - lx * H * 0.08) / ex, (z - lz * H * 0.08) / ez); return q < 1 ? Hpile * Math.pow(1 - q, 1.1) : 0; };
   const delay = 0.35, cut = fh * (spec.cut ?? 2.2);   // the charges take the lower floors; the block above starts to drop
-  const crane = style === 'crane', tiltMax = spec.tiltMax ?? (crane ? 1.5 : 0.32), tiltRate = spec.tiltRate ?? (crane ? 0.16 : 0.02), dropK = spec.dropK ?? (crane ? 0.02 : 0.9);
+  const crane = style === 'crane' || style === 'mast' || style === 'stack', tiltMax = spec.tiltMax ?? (crane ? 1.5 : 0.32), tiltRate = spec.tiltRate ?? (style === 'stack' ? 0.045 : style === 'mast' ? 0.09 : crane ? 0.16 : 0.02), dropK = spec.dropK ?? (crane ? 0.02 : 0.9);
   const plan = { spec, P, H, T, Rpile, Hpile, ex, ez, lx, lz, heap, tiltMax, tiltRate, dropK, pivot: [lx * (w / 2), 0, lz * (d / 2)] };
   const ground = (x, z) => heap(x, z) + (spec.ground ? spec.ground(x, z) : 0);
   const _P = new THREE.Vector3(), _Q = new THREE.Quaternion();
@@ -86,7 +97,7 @@ function pieceLocal(plan, p, t, outP, outQ) {
   const a = Math.min(t - p.td, p.tl);
   outP.set(p.s0[0] + p.v[0] * a, p.s0[1] + p.v[1] * a - 0.5 * G * a * a, p.s0[2] + p.v[2] * a);
   _e.set(p.w[0] * a, p.w[1] * a, p.w[2] * a); outQ.setFromEuler(_e); _q2.set(p.q0[0], p.q0[1], p.q0[2], p.q0[3]); outQ.multiply(_q2);
-  if (t - p.td > p.tl && !plan.spec.crane) { _e.set(p.rest[0], p.rest[1], p.rest[2]); _q2.setFromEuler(_e); outQ.slerp(_q2, Math.min(1, (t - p.td - p.tl) * 6)); }
+  if (t - p.td > p.tl && !plan.spec.crane && plan.spec.style !== 'mast' && plan.spec.style !== 'stack') { _e.set(p.rest[0], p.rest[1], p.rest[2]); _q2.setFromEuler(_e); outQ.slerp(_q2, Math.min(1, (t - p.td - p.tl) * 6)); }
 }
 
 // all the big buildings of a scene: instanced boxes by material, a dust surge each, updated only while something moves
@@ -101,12 +112,13 @@ export class Megastructures {
       office: new THREE.MeshStandardMaterial({ map: facadeTex('office'), roughness: 0.6, metalness: 0.15 }),
       steel: new THREE.MeshStandardMaterial({ color: 0x5a5e62, roughness: 0.5, metalness: 0.8 }),
       crane: new THREE.MeshStandardMaterial({ color: 0x2c5a8c, roughness: 0.55, metalness: 0.3 }),
+      stackR: new THREE.MeshStandardMaterial({ color: 0x9a2a20, roughness: 0.8 }), stackW: new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.8 }),
     }, opts.mats || {});
     const box = new THREE.BoxGeometry(1, 1, 1), arcGeo = arcSegment();
     this.groups = {};
-    for (const pl of plans) for (const p of pl.P) { const key = p.kind === 'arc' ? 'arc' : p.mat; (this.groups[key] ||= []).push([pl, p]); }
+    for (const pl of plans) for (const p of pl.P) { const key = p.kind === 'arc' ? 'arc:' + p.mat : p.mat; (this.groups[key] ||= []).push([pl, p]); }
     this.meshes = Object.entries(this.groups).map(([key, list]) => {
-      const m = new THREE.InstancedMesh(key === 'arc' ? arcGeo : box, key === 'arc' ? mats.concrete : mats[key] || mats.slab, list.length);
+      const arc = key.startsWith('arc:'), mk = arc ? key.slice(4) : key, m = new THREE.InstancedMesh(arc ? arcGeo : box, mats[mk] || mats.slab, list.length);
       m.castShadow = m.receiveShadow = true; m.frustumCulled = false; root.add(m); return { m, list };
     });
     // dust: soft puffs around each foot

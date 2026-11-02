@@ -90,7 +90,7 @@ export function buildPort(W) {
       root.add(new THREE.Mesh(place(new THREE.PlaneGeometry(14, 2.2), s.x, DECK + s.h - 2, s.z - s.d / 2 - 0.08, 0, Math.PI, 0), new THREE.MeshBasicMaterial({ map: canvasTex(512, 80, (g, w, h) => { g.fillStyle = '#1e2a3a'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8e4d8'; g.font = 'bold 52px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(`TRANSIT SHED ${L.sheds.indexOf(s) + 1}`, w / 2, h / 2); }, false), toneMapped: true })));
     } }
   // ---------- the big ones: the tower, the elevator, the cranes ----------
-  W.megas = new Megastructures(root, L.megaPlans, { dustColor: [0.2, 0.16, 0.13] });
+  W.megas = new Megastructures(root, L.megaPlans, { dustColor: [0.2, 0.16, 0.13] }); W.megaPlans = L.megaPlans;
   // ---------- the ship alongside ----------
   buildShip(W, root);
   // ---------- the staging lot: AAVs, trucks, the AA technicals, buses ----------
@@ -167,7 +167,6 @@ function buildShip(W, root) {
 const _hc = {};
 function updatePort(W, tau, cam) {
   const L = W.L;
-  W.megas.update(tau);
   W.water.material.uniforms.uT.value = tau;
   if (W.radar) W.radar.rotation.y = tau * 1.4;
   // the four nearest high-masts light the ground around you
