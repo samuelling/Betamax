@@ -28,6 +28,9 @@ export function simulateShip(seed = 11, opts = {}) {
   const well = [];
   for (let k = 0; k < 14; k++) { const a = base(1, { role: 'well', k, level: 'well', spawn: ST.come + k * 0.55, aav: k % 4 }); a.x = L.wellDoor.x; a.z = L.wellDoor.z + ((k % 3) - 1) * 0.8; a.y = WELL.floor; a.mg = k === 5; actors.push(a); well.push(a); }
   const me = well[13]; me.me = true; me.hp = 1e9; me.aav = 0;
+  // the sortie: you and three others go up the stair to the flight deck to meet the raid, and come back down ahead of it
+  for (const k of [13, 10, 11, 12]) well[k].sortie = true;
+  const SORTIE = [30, 74];
   for (let k = 0; k < 12; k++) { const d = L.islandDoors[k % 2], a = base(1, { role: 'deck', k, spawn: 1 + k * 0.6 + r(), from: { x: d.x, z: d.z } }); a.x = d.x; a.z = d.z; a.mg = k % 4 === 0; actors.push(a); }
   // ---------- Cape Cod: ten on two ropes ----------
   const H = L.helos[0], team = [];
@@ -112,6 +115,24 @@ export function simulateShip(seed = 11, opts = {}) {
       fight(a, t, a.spot); return;
     }
     // the company in the well deck
+    if (a.sortie && a.state !== 'gone' && t >= SORTIE[0] && (a.level === 'deck' || t < SORTIE[1] || a.sState === 'down' || a.sState === 'up')) {
+      if (t < SORTIE[1]) {
+        if (a.level === 'well') {   // to the foot of the stair, then up it
+          if (a.sState !== 'up') { a.crouchT = 0.2; if (go(a, L.stairBot.x, L.stairBot.z, a.speedRun)) { a.sState = 'up'; a.path = null; } return; }
+          if (!a.onStair) { moveTo(a, STAIR.x1 - 0.8, (STAIR.z0 + STAIR.z1) / 2, 2.4); ground(a); advance(a); if (Math.hypot(a.x - (STAIR.x1 - 0.8), a.z - (STAIR.z0 + STAIR.z1) / 2) < 0.5) a.onStair = true; return; }
+          if (a.x > STAIR.x0 + 0.6) { moveTo(a, Math.max(STAIR.x0 + 0.4, a.x - 3), (STAIR.z0 + STAIR.z1) / 2, 2.4); a.y = Math.max(WELL.floor, O.surfaceY(a.x, a.z, a.y + 0.5, curT)); advance(a); a.crouchT = 0.15; return; }
+          moveTo(a, L.stairTop.x, L.stairTop.z, 2.4); a.y = D; advance(a);
+          if (Math.hypot(a.x - L.stairTop.x, a.z - L.stairTop.z) < 0.6) { a.level = 'deck'; a.sState = 'deck'; a.onStair = false; a.path = null; a.spot = null; }
+          return;
+        }
+        if (!a.spot || t > a.reSpot) { a.spot = cover(a, { x: 52 + (a.k % 4) * 7, z: (a.k % 2 ? 1 : -1) * 6 }, 40); a.reSpot = t + 16 + r() * 8; }
+        fight(a, t, a.spot); return;
+      }
+      // back down, ahead of the raiders
+      if (a.sState !== 'down') { a.crouchT = 0.3; if (go(a, L.stairTop.x, L.stairTop.z, a.speedRun)) { a.sState = 'down'; a.bottom = false; } return; }
+      if (!a.bottom) { if (a.x >= STAIR.x1 - 1.05) a.bottom = true; moveTo(a, Math.min(STAIR.x1 - 0.8, a.x + 3), (STAIR.z0 + STAIR.z1) / 2, 2.8); a.y = Math.max(WELL.floor, O.surfaceY(a.x, a.z, a.y + 0.45, curT)); advance(a); a.crouchT = 0.15; return; }
+      moveTo(a, L.stairBot.x, L.stairBot.z, 2.6); ground(a); advance(a); if (Math.hypot(a.x - L.stairBot.x, a.z - L.stairBot.z) < 0.6) { a.level = 'well'; a.sState = 'home'; a.path = null; a.spot = null; } return;
+    }
     const boardAt = ST.board + a.k * 0.75 + (a.me ? 4 : 0);
     if (a.state === 'gone') { a.mode = MODE.HIDDEN; return; }
     if (t >= boardAt) {

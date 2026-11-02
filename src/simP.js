@@ -26,6 +26,9 @@ export function simulatePort(seed = 7, opts = {}) {
   const bus = [];
   L.buses.forEach((b, bi) => { for (let k = 0; k < 8; k++) { const a = base(1, { role: 'embark', bus: bi, k, spawn: PT.bus + bi * 1.4 + k * 0.45 }); a.x = b.x + Math.cos(b.rot) * 1.8 * (bi ? -1 : 1); a.z = b.z + (k - 4) * 0.4; a.mg = k === 3; actors.push(a); bus.push(a); } });
   const me = bus[7]; me.me = true; me.hp = 1e9;
+  // your section doesn't sit it out: it pushes into the boxes at the paratroopers, falls back to the cranes, and holds the gangway
+  for (const k of [4, 5, 6, 7]) bus[k].push = true;
+  const PUSH = [{ t: 0, x: 14, z: -60 }, { t: 40, x: 72, z: -78 }, { t: 76, x: 28, z: -40 }, { t: 112, x: 20, z: -6 }];
   const doorsOf = [[30, -25 - 16], [30, 30 - 14], [-40, -140 + 12]];   // shed and tower doors the defenders come out of
   for (let k = 0; k < 14; k++) { const d = doorsOf[k % 3], a = base(1, { role: 'def', spawn: 3 + r() * 9, from: { x: d[0] + (r() - 0.5) * 16, z: d[1] } }); a.x = a.from.x; a.z = a.from.z; a.mg = k % 5 === 0; actors.push(a); }
   const crews = [];
@@ -133,6 +136,11 @@ export function simulatePort(seed = 7, opts = {}) {
       return;
     }
     if (t < PT.aa + 1.5) { a.state = 'march'; a.crouchT = 0; go(a, -6 + a.bus * 10 + (a.k % 2) * 1.4, -120 + a.k * 1.6, 1.6); return; }
+    if (a.push) {
+      let ph = 0; for (let k = 0; k < PUSH.length; k++) if (t >= PUSH[k].t) ph = k;
+      if (a.phase_ !== ph || !a.spot || t > a.reSpot) { a.phase_ = ph; const g = PUSH[ph]; a.spot = cover(a, { x: g.x + (a.k - 5.5) * 5, z: g.z + (a.k % 2) * 4 }, 36); a.reSpot = t + 12 + r() * 8; }
+      fight(a, t, a.spot); return;
+    }
     if (!a.spot || t > a.reSpot) { a.spot = cover(a, { x: 10 + a.bus * 30 + (a.k - 4) * 4, z: -60 + a.k * 3 }, 50); a.reSpot = t + 18 + r() * 14; }
     fight(a, t, a.spot);
   }

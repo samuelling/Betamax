@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { simulate, MODE, T_SIM } from './sim.js';
+import { simulate, MODE, T_SIM, SHOT_F } from './sim.js';
 import { World, SUN_DIR } from './world.js';
 import { Soldiers } from './soldiers.js';
 import { Billboards, Tracers } from './fx.js';
@@ -31,6 +31,7 @@ import { CABIN as J_CABIN } from './terrainJ.js';
 import { seatPose, carPose } from './layoutB.js';
 import { FIELD as B_FIELD, roadAt as bRoadAt, S_TOWN as B_TOWN } from './terrainB.js';
 import { LZ, CRASH, road6A } from './terrain4.js';
+import { Gameplay } from './gameplay.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -150,7 +151,40 @@ function boot() {
     enemyHp: new Float32Array(S.N).fill(100), cp: null, stateT: 0, shake: 0, feed: [], flash: 0, damageFx: 0,
   });
   buildCrosshair();
+  G.gp = new Gameplay({
+    feed, teach: (html) => sub(html, 6),
+    sound: (n) => { const A = G.audio; if (!A || !A.enabled) return;
+      if (n === 'cue') A.play(A.B.click, 0.22, 0, 1.7); else if (n === 'seg') A.play(A.B.clunk, 0.45, 0, 0.9); else if (n === 'contact') { A.play(A.B.clunk, 0.6, 0, 1.2); feed('\u25C0 REW \u00D71 \u00B7 contact'); }
+      else if (n === 'slow') { A.play(A.R.whoosh, 0.55, 0, 0.7); } else if (n === 'slowEnd') A.play(A.B.click, 0.4, 0, 0.8); },
+    caught: (pos, si) => {   // the round leaves the man it hit, and goes home: back up the barrel, back into the magazine
+      const p = G.player, mz = muzzleWorld();
+      addTracer(pos, mz, [2.6, 2.4, 1.6]); p.flashT = 0.035;
+      if (p.reloadT < 0) p.ammo = Math.min(p.mag + 1, p.ammo + 1);
+      revGun(0.32);
+    },
+    dropped: (pos, to) => addTracer(pos, to, [1.2, 0.5, 0.4], 0.35),
+    burst: (b, ok, inRange) => {
+      const A = G.S.shots, o = b.shots[0] * SHOT_F, at = new THREE.Vector3(A[o + 5], A[o + 6] + 0.4, A[o + 7]);
+      if (ok) { G.gp.pop(at, camera, `\u25C2 ${b.kill ? 'KILL ' : ''}CAUGHT${b.shots.length > 1 ? ' \u00D7' + b.shots.length : ''}`, '#8dffb0'); G.audio.play(G.audio.B.magIn, 0.32, 0, 1.15); }
+      else { G.gp.pop(at, camera, inRange ? '\u2715 DROPPED' : '\u2715 TOO FAR FROM YOUR PAST', '#ff7a66'); G.audio.play(G.audio.B.click, 0.3, 0, 0.6); G.damageFx = Math.min(1, G.damageFx + 0.08); }
+    },
+    segDone: (sg, st, clean) => {
+      feed(`${sg.name} ${clean ? '\u25C6 CLEAN' : '\u00B7 rough'}${st.n ? ` \u2014 caught ${st.c}/${st.n}` : ''}`);
+      if (clean) { G.player.health = 100; G.flash = Math.max(G.flash, 0.25); G.audio.play(G.audio.B.clunk, 0.5, 0, 1.3); }
+    },
+    snap: () => beginDeath('snap'),
+    liveShot: (from, to, sideCol, d, hit) => {
+      addTracer(from, to, sideCol === 0 ? [3.2, 1.0, 0.35] : [0.7, 3.0, 0.9]);
+      const F = from.clone(); addLive(0.06, (sm, gl) => gl.push(F.x, F.y, F.z, 0.7, 3.2, 1.9, 0.9, 1, 0));
+      if (!hit) addImpact(to, 1);
+      const A = G.audio; if (A && A.enabled) { camera.getWorldDirection(tmpV); const rx = from.x - camera.position.x, rz = from.z - camera.position.z; const pan = (tmpV.z * rx - tmpV.x * rz) / Math.max(1, Math.hypot(rx, rz)); A.play(sideCol === 0 ? A.B.player[0] : A.B.playerInv[0], Math.min(0.5, 9 / (d + 4)), -pan * 0.8, 0.94 + Math.random() * 0.08); }
+    },
+  });
+  if (input.touch) $('bSlow').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); if (G.state === 'play') G.gp.trySlow(); }, { passive: false });
+  addEventListener('keydown', (e) => { if (e.code === 'KeyV' && !e.repeat && G.state === 'play') G.gp.trySlow(); });
   if (input.touch) $('bPause').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); pauseGame(); }, { passive: false });
+  if (input.touch) $('bRew').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); toggleRew(); }, { passive: false });
+  addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !e.repeat && (G.state === 'play' || G.state === 'paused')) toggleRew(); });
   addEventListener('keydown', (e) => { if (G.home && G.home.act && G.home.act.keys && !e.repeat && e.code !== 'Escape') G.home._typed = true; });
   renderer.domElement.addEventListener('click', () => { if (G.home && !G.input.locked) G.input.lock(); });
   if (params.get('home')) { // straight to the last tape (for working on it): ?home=us | ?home=ru
@@ -265,6 +299,7 @@ function overlay(html, cls = '') {
   if (G && G.input.touch) $('touch').style.display = cls === 'hidden' ? 'block' : 'none';
 }
 function showTitle() {
+  if (G.gp) { G.gp.runLog = []; G.gp.reset(); G.gp.vis(false); }
   G.state = 'title';
   hud(false);
   // the same picture the set was showing, laid over the window the way the camera framed it (cover)
@@ -313,6 +348,7 @@ function startTape() {
   const S = G.S;
   useScene('beach');
   G.tau = G.S.T_START; G.body = G.S.startId; G.lives = [lifeOf(G.S.startId)];
+  G.gp.runLog = []; G.gp.reset(); $('hud').style.visibility = '';
   G.introK = undefined; G.introA = undefined;
   G.playT = 0; if (G.audio && G.audio.wilhelm) { G.audio.wilhelm.clear(); G.audio.wilhelmArmed = false; G.audio.wilhelmNext = 0; }
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
@@ -323,6 +359,9 @@ function startTape() {
   card('SO IT GOES.', 3);
 }
 
+// T (or the ×2 button): rewind at double speed, or back to normal
+function toggleRew() { G.rewX = (G.rewX || 1) > 1 ? 1 : 2; G.audio && G.audio.play(G.audio.B.click, 0.5); feed(G.rewX > 1 ? '\u25C0\u25C0 REW \u00D72' : '\u25C0 REW \u00D71'); if ($('bRew')) $('bRew').textContent = G.rewX > 1 ? '\u00D71' : '\u00D72'; }
+
 function beginPlayFromBody(i, tauNow) {
   const s = G.pb.sample(i, tauNow, {});
   const p = G.player;
@@ -330,11 +369,12 @@ function beginPlayFromBody(i, tauNow) {
   p.yaw = s.yaw + Math.PI; p.pitch = Math.max(-0.5, Math.min(0.5, s.pitch)) * 0.5;
   p.setBody(G.S.actors[i]); p.health = 100; p.ride = null;
   G.body = i;
+  if (G.gp) { if (G.gp.S !== G.S) G.gp.setTape(G.S, G.sceneId); G.gp.setBody(i, tauNow); }
 }
 
 function saveCheckpoint() {
   const p = G.player;
-  G.cp = { tau: G.tau, body: G.body, pos: p.pos.clone(), yaw: p.yaw, pitch: p.pitch, lives: G.lives.length, slots: JSON.parse(JSON.stringify(p.slots)), taken: new Set(G.pick.taken), left: G.pick.left.map((l) => ({ ...l })) };
+  G.cp = { tau: G.tau, body: G.body, pos: p.pos.clone(), yaw: p.yaw, pitch: p.pitch, lives: G.lives.length, slots: JSON.parse(JSON.stringify(p.slots)), taken: new Set(G.pick.taken), left: G.pick.left.map((l) => ({ ...l })), gp: G.gp.snapshot() };
 }
 function restoreCheckpoint() {
   const c = G.cp, p = G.player;
@@ -343,6 +383,7 @@ function restoreCheckpoint() {
   p.setLoadout(G.S.actors[c.body].side, null, null, c.slots);
   for (const l of G.pick.left) G.pick.free('l' + l.k); G.pick.taken = new Set(c.taken); G.pick.left = c.left.map((l) => ({ ...l }));
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
+  G.gp.restore(c.gp, c.body, c.tau);
 }
 
 // ---------------------------------------------------------------- combat
@@ -467,6 +508,19 @@ function handlePlayerEvents() {
   }
   p.events.length = 0;
 }
+function muzzleWorld() { const p = G.player, ud = p.gun.userData; p.gun.updateMatrixWorld(); return new THREE.Vector3(0, 0, ud.muzzleZ || -0.5).applyMatrix4(p.gun.matrixWorld); }
+// the sound of your own gun, backward: the round going home
+function revGun(gain) {
+  const A = G.audio; if (!A || !A.enabled) return;
+  const ud = G.player.gun.userData; A.R.gun = A.R.gun || {};
+  if (!A.R.gun[ud.id]) { A.gunW({ ...ud, gainK: 0 }); const set = A.B.wpn && A.B.wpn[ud.id]; if (!set) return; A.R.gun[ud.id] = set.map((b) => A.rev(b)); }
+  const set = A.R.gun[ud.id]; A.play(set[(Math.random() * set.length) | 0], gain * (ud.gainK || 1), 0, 1.05 + Math.random() * 0.08);
+}
+function losClear(a, b) {
+  const f = G.S.obstacles.segment(a.x, a.y, a.z, b.x, b.y, b.z, G.tau, -1);
+  if (f >= 0 && f < 0.98) return false;
+  const d = a.distanceTo(b); _d.subVectors(b, a).normalize(); return rayTerrain(a, _d, d) >= d - 0.5;
+}
 function ejectBrass() {
   const p = G.player; if (!p.eject) return;
   const c = { p: p.eject.p.clone(), v: p.eject.r.clone().multiplyScalar(2.6 + Math.random()).add(new THREE.Vector3(p.vel.x, 1.2 + Math.random(), p.vel.z)), r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: new THREE.Vector3(Math.random() * 30, Math.random() * 30, 0), t0: G.real, b: 0 };
@@ -499,12 +553,12 @@ function updateForwardProps(dt) {
 
 // forward-time effects (the player's own actions move with real time)
 function addLive(life, fn) { G.live.push({ t0: G.real, life, fn }); }
-function addTracer(a, b) {
+function addTracer(a, b, col, alpha = 0.9) {
   const A = a.clone(), B = b.clone(), dist = A.distanceTo(B), dir = B.clone().sub(A).normalize();
-  const c = G.player.side === 0 ? [3.2, 1.0, 0.35] : [0.7, 3.0, 0.9];
+  const c = col || (G.player.side === 0 ? [3.2, 1.0, 0.35] : [0.7, 3.0, 0.9]);
   addLive(dist / 900 + 0.02, (sm, gl, tr, age) => {
     const h = Math.min(dist, age * 900), t = Math.max(0, h - 9);
-    tr.push(A.x + dir.x * t, A.y + dir.y * t, A.z + dir.z * t, 0.02, A.x + dir.x * h, A.y + dir.y * h, A.z + dir.z * h, 0.03, c[0], c[1], c[2], 0.9);
+    tr.push(A.x + dir.x * t, A.y + dir.y * t, A.z + dir.z * t, 0.02, A.x + dir.x * h, A.y + dir.y * h, A.z + dir.z * h, 0.03, c[0], c[1], c[2], alpha);
   });
   addLive(1.2, (sm, gl, tr, age) => sm.push(A.x + age * 0.3, A.y + age * 0.4, A.z, 0.15 + age * 0.6, 0.8, 0.78, 0.75, 0.16 * (1 - age / 1.2), age));
 }
@@ -531,7 +585,7 @@ function addMineBlast(p) {
 function beginPossess(i, friendly = false) {
   if (G.forward) { feed(`${short(i)} \u2715`); return; } // played forward, a death is just a death
   G.state = 'possess'; G.stateT = 0;
-  G.pz = { i, from: camera.position.clone(), fromQ: camera.quaternion.clone(), oldBody: G.body, oldPos: G.player.pos.clone(), oldYaw: G.player.yaw };
+  G.pz = { friendly, i, from: camera.position.clone(), fromQ: camera.quaternion.clone(), oldBody: G.body, oldPos: G.player.pos.clone(), oldYaw: G.player.yaw };
   G.audio.play(G.audio.R.whoosh, 0.7); G.audio.play(G.audio.B.thump, 0.9);
   feed(friendly ? `${short(i)} ▸ YOU · friendly fire` : `${short(i)} ▸ YOU`);
 }
@@ -540,6 +594,7 @@ function finishPossess() {
   G.overrides.set(z.oldBody, { x: z.oldPos.x, y: z.oldPos.y, z: z.oldPos.z, yaw: z.oldYaw - Math.PI, t0: G.real });
   beginPlayFromBody(z.i, G.tau);
   G.lives.push(lifeOf(z.i));
+  G.gp.onTake(z.friendly);
   saveCheckpoint();
   G.state = 'play'; G.stateT = 0; G.flash = 1;
   card('SO IT GOES.', 1.8);
@@ -552,10 +607,11 @@ function beginDeath(cause) {
   G.state = 'dead'; G.stateT = 0;
   G.audio.play(G.audio.B.thump, 1);
   card(cause === 'mine' ? 'SO IT GOES.' : 'SO IT GOES.', 2.2);
-  sub(cause === 'mine' ? 'You stepped off the edge of the tape.' : `${short(G.body)} dies twice. Fast-forwarding to the last body you took.`, 3);
+  sub(cause === 'mine' ? 'You stepped off the edge of the tape.' : cause === 'snap' ? 'The tape snapped. You lost your past. Fast-forwarding to the last body you took.' : `${short(G.body)} dies twice. Fast-forwarding to the last body you took.`, 3);
 }
 function beginEnding() {
   G.state = 'ending'; G.stateT = 0;
+  { const g = G.gp.finishTape(); G.gp.autoX = 1; G.gp.slowOn = false; feed(`TAPE QUALITY ${g}`); }
   G.end = { from: camera.position.clone(), fromQ: camera.quaternion.clone() };
   hud(false);
   const st = G.S.actors[G.body];
@@ -585,7 +641,7 @@ function showEnd(forwardDone) {
   const last = G.endIdent || null;
   overlay(`<div class="ttl">&#9632; STOP</div><div class="ttr">0:00:00</div>
     <h2 style="margin-top:2.5em">You were ${G.lives.length} ${G.lives.length === 1 ? 'person' : 'people'}.</h2>
-    <div class="lives">${rows}</div>
+    <div class="lives">${rows}</div>${G.gp && G.gp.runLog.length ? `<div class="lives" style="margin-top:.8em">${G.gp.runLog.map((t) => `${t.grade} &nbsp;${t.title} <span>&mdash; rounds caught ${t.caught}/${t.total} &middot; clean ${t.clean}/${t.segs}${t.takes ? ` &middot; taken ${t.takes}` : ''}</span>`).join('<br>')}</div>` : ''}
     <p>${forwardDone ? 'The tape ran out. Everyone on it is where they were always going to be.' : last ? `The last of them was ${last.first} ${last.last}, at home in ${last.town}, the afternoon the phone rang.` : 'At the start of the tape every one of them was alive.'}</p>
     <button id="again">&#9664;&#9664; REWIND AGAIN</button>${G.endBody != null && !forwardDone && G.endScene === 'beach' ? '<button id="fwd">&#9654; PLAY IT FORWARD</button><p style="font-size:.8em;opacity:.7">bonus: the same life, start to finish, in order</p>' : ''}`, 'blue');
   $('again').onclick = () => { G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); G.forward = false; startTape(); };
@@ -652,6 +708,7 @@ function useScene(id) {
   nx.world.setActive(true); nx.sol.mesh.visible = true;
   Object.assign(G, { world: nx.world, S: nx.S, sol: nx.sol, pb: nx.pb, pick: nx.pick });
   G.enemyHp = new Float32Array(nx.S.N).fill(100); G.overrides.clear(); nx.pb.hitShots.clear(); nx.pb.whizzed.clear(); nx.pick.reset();
+  if (G.gp) G.gp.setTape(nx.S, id);
 }
 function loadSandwich(who, skin) { loadTape('sandwich', who, skin); }
 function loadBomb(who, skin) { loadTape('bomb', who, skin); }
@@ -678,6 +735,7 @@ function startSandwich() {
   overlay('', 'hidden');
   const S = G.S;
   G.tau = S.T_START; G.body = S.startId;
+  G.gp.reset();
   G.introK = undefined; G.introA = undefined; G.playT = 0;
   if (G.audio && G.audio.wilhelm) { G.audio.wilhelm.clear(); G.audio.wilhelmArmed = false; G.audio.wilhelmNext = 0; }
   G.player.setBody(S.actors[S.startId]); G.player.health = 100;
@@ -1048,8 +1106,11 @@ function tick(dt, draw = true) {
       showHud = true; spreadShow = true;
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
       rideCheck(p, S.actors[G.body]);
-      const out = p.update(dt, inp, S.obstacles, G.tau);
-      if (p.jumped) G.input.consumeJump();
+      const fast = !G.forward && !G.gp.slowOn ? Math.max(G.rewX || 1, G.gp.autoX) : 1;   // at ×2 your body runs the fast tape too, so the world keeps its shape around you
+      let jumped2 = false;
+      if (fast > 1) { p.update(dt, inp, S.obstacles, G.tau); jumped2 = p.jumped; if (jumped2) G.input.consumeJump(); }
+      const out = p.update(dt, fast > 1 && jumped2 ? Object.assign({}, inp, { jump: false }) : inp, S.obstacles, G.tau - (fast > 1 ? dt : 0));
+      if (p.jumped || jumped2) G.input.consumeJump();
       // weapons: 1 / 2 / wheel to switch, F or E to swap with a gun on the ground
       if (inp.slot === 1) p.switchTo('primary'); else if (inp.slot === 2) p.switchTo('sidearm'); else if (inp.slot === 3) p.switchTo(p.cur === 'primary' ? 'sidearm' : 'primary');
       { camera.getWorldDirection(tmpV); const n = G.pick.update(G.tau, p.pos, tmpV, G.body);
@@ -1070,6 +1131,12 @@ function tick(dt, draw = true) {
       if ((G.sceneId === 'jump' && p.pos.y < -25) || ((G.sceneId === 'port' || G.sceneId === 'ship') && p.pos.y < -2.5)) { beginDeath('mine'); break; }   // out of the door, or over the side, before your time
       if (out2 > 1.6) { addMineBlast(p.pos); G.audio.at('boom', p.pos.x, p.pos.y, p.pos.z, listener(), 1.4); p.shake = 2; beginDeath('mine'); break; }
       if (!G.forward && G.tau <= S.actors[G.body].spawn + 0.02) beginEnding();
+      if (!G.forward) {
+        const rx = Math.max(G.rewX || 1, G.gp.autoX);
+        if (G.gp.slowOn) { tauRate = 0.3; osd = Math.sin(G.real * 5) > -0.3 ? '\u25C0 SLOW' : ''; muffle = 1600; desat = 0.25; rew = 0.25; }
+        else if (rx > 1) { tauRate = rx; osd = (G.rewX || 1) > 1 ? '\u25C0\u25C0 REW \u00D72' : '\u25C0\u25C0 \u00D72 \u00B7 LULL'; muffle = 6000; }   // the fast rewind: same tape, half the wait
+      }
+      G.gp.rate = tauRate;
       if (G.forward) { tauRate = -1; osd = '\u25B6 PLAY'; rew = 0; if (G.tau >= T_SIM - 0.5) { G.forward = false; showEnd(true); } }
       break;
     }
@@ -1135,7 +1202,7 @@ function tick(dt, draw = true) {
   }
 
   // battle playback
-  ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body; ctx.camPos = camera.position;
+  ctx.face = G.gp.face; ctx.overrides = G.overrides; ctx.real = G.real; ctx.bodyId = G.body; ctx.camPos = camera.position;
   ctx.playerPos.copy(p.pos); ctx.playerHeight = p.eyeH + 0.1; ctx.playerAlive = G.state === 'play';
   ctx.sound = G.state !== 'title' && G.state !== 'end';
   // during the opening you watch your first body from outside, until the dive into its eyes
@@ -1158,6 +1225,11 @@ function tick(dt, draw = true) {
     if (ctx.sound) worldSounds(S, G.tau, L, G.body, G.audio, G.pb);
     if (!quiet) machineSounds(S, G.tau, L, G.audio); else if (G.audio.engines) G.audio.engines([], L);
   }
+  if (G.state === 'play' && !G.forward) {
+    const extra = G.gp.update({ camera, player: p, pb: G.pb, tau: G.tau, tauPrev, dt, touch: G.input.touch, playing: G.stateT > 1.2, lastHit: p.lastHit, alive: (i, t) => G.pb.alive(i, t), los: losClear });
+    for (const h of extra) ev.playerHits.push(h);
+  }
+  G.gp.vis(G.state === 'play' && !G.forward);
   if (G.state === 'play' && G.stateT > 2.2) { // brief grace after taking a body
     // Call of Duty-style health: no bar, a short invulnerability blink after each bullet, no one-shots from
     // healthy, and fast regeneration once you've been out of fire for a few seconds
@@ -1206,7 +1278,7 @@ function tick(dt, draw = true) {
     $('ident').innerHTML = `<span class="side">${st.side ? 'TEXAS' : 'CAPE COD'}</span>${short(G.body)}`;
     $('hp').firstChild.style.width = Math.max(0, p.health) + '%';
     $('ammo').innerHTML = `<div class="wn">${p.weaponName}</div>` + (p.reload > 0 ? 'RELOAD' : `${p.ammo}<small> / ${p.mag}</small>`);
-    $('lives').textContent = `PERSPECTIVES ${G.lives.length}  ·  HOME IN ${fmtCounter(Math.max(0, G.tau - st.spawn)).slice(2)}`;
+    $('lives').textContent = `PERSPECTIVES ${G.lives.length}  ·  HOME IN ${fmtCounter(Math.max(0, (G.tau - st.spawn) / (G.rewX || 1))).slice(2)}  ·  ${G.input.touch ? '' : '[T] '}${(G.rewX || 1) > 1 ? 'REW \u00D72' : 'REW \u00D71'}`;
     const moving = Math.hypot(p.vel.x, p.vel.z) / 5;
     setCross(0.022 * (1 - p.ads) + moving * 0.012 + p.recoil * 0.2, p.ads < 0.6);
   }

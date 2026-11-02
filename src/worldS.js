@@ -89,14 +89,25 @@ export function buildShipWorld(W) {
     const fl = new THREE.Mesh(box(len, 0.1, WELL.hz * 2, cx, WELL.floor - 0.05, 0), new THREE.MeshStandardMaterial({ map: (() => { const t = nonSkid(); t.repeat.set(16, 4); return t; })(), color: 0x8a8a8a, roughness: 0.25, metalness: 0.5 })); fl.receiveShadow = true; root.add(fl);
     const lights = []; for (let x = WELL.x0 + 4; x < WELL.x1; x += 7) for (const z of [-3.6, 3.6]) lights.push(box(1.8, 0.12, 0.35, x, WELL.roof - 0.5, z));
     root.add(new THREE.Mesh(merge(lights), new THREE.MeshBasicMaterial({ color: SODIUM.clone().multiplyScalar(2.2), toneMapped: false })));
-    W.wellLights = [102, 122, 145].map((x) => { const l = new THREE.PointLight(SODIUM, 130, 28, 1.2); l.position.set(x, WELL.roof - 1.5, 0); root.add(l); return l; });
+    W.wellLights = [102, 122, 145].map((x) => { const l = new THREE.PointLight(SODIUM, 170, 30, 1.2); l.position.set(x, WELL.roof - 1.5, 0); root.add(l); return l; });
+    // general quarters: two rotating amber beacons on the well walls, and the red battle lamps along the overhead
+    W.beacons = [[106, WELL.hz - 0.6], [138, -WELL.hz + 0.6]].map(([x, z], i) => {
+      const g = new THREE.Group(); g.position.set(x, WELL.roof - 3.2, z); root.add(g);
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.3, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 1.4, 0.2), toneMapped: false })); g.add(lamp);
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(1.4, 7, 14, 1, true).translate(0, -3.5, 0).rotateZ(Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.55, 0.1), transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      const spin = new THREE.Group(); spin.add(beam); g.add(spin);
+      const l = new THREE.PointLight(new THREE.Color(1, 0.55, 0.12), 0, 26, 1.3); l.position.set(0, -0.6, z > 0 ? -1.2 : 1.2); g.add(l);
+      return { g, spin, l, ph: i * 1.7 };
+    });
+    { const bl = []; for (let x = WELL.x0 + 7.5; x < WELL.x1; x += 14) for (const z of [-5.6, 5.6]) bl.push(box(0.5, 0.18, 0.5, x, WELL.roof - 0.9, z));
+      W.battleLamps = new THREE.Mesh(merge(bl), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.15, 0.08), toneMapped: false })); root.add(W.battleLamps); }
     // the stern gate down into the water; stencils; the stair with its red light
     root.add(Object.assign(new THREE.Mesh(box(9, 0.4, WELL.hz * 2, HULL.x1 + 4, WELL.floor - 2.4, 0, 0, 0, -0.55), dark), { receiveShadow: true }));
     root.add(new THREE.Mesh(place(new THREE.PlaneGeometry(10, 1.4), 104, 12, WELL.hz - 0.05, 0, Math.PI, 0), new THREE.MeshBasicMaterial({ map: canvasTex(512, 72, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#e8d84a'; g.font = 'bold 54px "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('WELL DECK  ·  NO SMOKING', w / 2, h / 2); }, false), transparent: true })));
     const st = [], rails = []; for (const s of L.steps) st.push(box(0.78, 0.08, STAIR.z1 - STAIR.z0 - 0.1, s.x, s.y - 0.04, (STAIR.z0 + STAIR.z1) / 2));
     for (const z of [STAIR.z0 + 0.1, STAIR.z1 - 0.1]) { const l = Math.hypot(STAIR.x1 - STAIR.x0, D - WELL.floor); rails.push(place(new THREE.BoxGeometry(l, 0.06, 0.06), (STAIR.x0 + STAIR.x1) / 2, (D + WELL.floor) / 2 + 1, z, 0, 0, -Math.atan2(D - WELL.floor, STAIR.x1 - STAIR.x0))); }
     root.add(Object.assign(new THREE.Mesh(merge(st), std([0.45, 0.46, 0.47], 0.5, 0.7)), { castShadow: true, receiveShadow: true }), new THREE.Mesh(merge(rails), std([0.75, 0.62, 0.15], 0.6)));
-    const red = new THREE.PointLight(new THREE.Color(1, 0.1, 0.06), 40, 20, 1.4); red.position.set((STAIR.x0 + STAIR.x1) / 2, 12, (STAIR.z0 + STAIR.z1) / 2); root.add(red);
+    const red = new THREE.PointLight(new THREE.Color(1, 0.1, 0.06), 16, 18, 1.6); red.position.set((STAIR.x0 + STAIR.x1) / 2, 12, (STAIR.z0 + STAIR.z1) / 2); root.add(red);
     // the corridor walls (we see them from the stair) and the hatch's ladder rail
     const cw = [box(STAIR.x1 - STAIR.x0, D - WELL.floor, 0.15, (STAIR.x0 + STAIR.x1) / 2, (D + WELL.floor) / 2, STAIR.z0 - 0.08), box(STAIR.x1 - 108.6 + (108.6 - STAIR.x0), D - WELL.floor, 0.15, (STAIR.x0 + 108.6) / 2, (D + WELL.floor) / 2, STAIR.z1 + 0.08)];
     root.add(Object.assign(new THREE.Mesh(merge(cw), bm), { receiveShadow: true })); }
@@ -107,6 +118,12 @@ export function buildShipWorld(W) {
   W.escort = buildDestroyer(L.escort, root, r); W.frigate = buildDestroyer(L.frigate, root, r, true);
   // the fast ropes
   W.ropes = [-1, 1].map((sd) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6).translate(0, -0.5, 0), std([0.08, 0.08, 0.07], 0.9)); m.userData.sd = sd; root.add(m); return m; });
+  // illumination flares: the destroyer fires them over the ship once the raid starts; each hangs under its little
+  // parachute, swinging, and lights the whole deck white for half a minute (in rewind they climb back up and go out)
+  { const fm = new THREE.SpriteMaterial({ map: TX.makeFlashTex(), color: new THREE.Color(3, 2.7, 2.4), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+    W.flareSched = [{ t: 21, x: 20, z: 60 }, { t: 34, x: 90, z: -50 }, { t: 47, x: -10, z: 30 }, { t: 60, x: 70, z: 70 }, { t: 73, x: 30, z: -40 }, { t: 86, x: 110, z: 40 }, { t: 99, x: 50, z: -60 }, { t: 112, x: 0, z: 50 }];
+    W.flares = [0, 1].map(() => { const l = new THREE.PointLight(new THREE.Color(1, 0.93, 0.86), 0, 520, 1.08); const sp = new THREE.Sprite(fm); sp.scale.setScalar(9); l.add(sp); root.add(l); return l; });
+    W.fireLight = new THREE.PointLight(new THREE.Color(1, 0.45, 0.12), 0, 900, 1.0); W.fireLight.position.set(L.escort.x, 30, L.escort.z - 20); root.add(W.fireLight); }
   W.shipUpdate = (tau, cam) => updateShip(W, tau, cam);
 }
 
@@ -134,6 +151,14 @@ function updateShip(W, tau, cam) {
   const L = W.L, D = HULL.deck;
   W.sea.material.uniforms.uT.value = tau;
   if (W.radar) W.radar.rotation.y = tau * 1.3;
+  // flares: the two most recent burning ones
+  { let n = 0; for (let i = W.flareSched.length - 1; i >= 0 && n < 2; i--) { const f = W.flareSched[i], a = tau - f.t; if (a < 0 || a > 32) continue;
+      const l = W.flares[n++], k = Math.min(1, a / 1.2) * Math.min(1, (32 - a) / 4) * (0.85 + 0.15 * Math.sin(tau * 23 + i));
+      l.position.set(f.x + Math.sin(a * 0.9 + i) * 6 + a * 1.2, 150 - a * 3.6, f.z + Math.cos(a * 0.7 + i) * 4); l.intensity = 900 * k; l.visible = true; }
+    for (; n < 2; n++) { W.flares[n].intensity = 0; W.flares[n].visible = false; }
+    const E = W.L.escort; W.fireLight.intensity = tau > E.hit ? (tau > E.blast ? 2600 * Math.max(0.4, Math.exp(-(tau - E.blast) / 80)) : 900) * (0.85 + 0.15 * Math.sin(tau * 7)) : 0; }
+  // general quarters from the moment the helicopter is heard
+  { const gq = tau > ST.come + 4; for (const b of W.beacons) { b.g.visible = gq; if (!gq) continue; const a = tau * 4.2 + b.ph; b.spin.rotation.y = a; b.l.intensity = 34 + 30 * Math.max(0, Math.cos(a)); } W.battleLamps.visible = gq; }
   // aircraft on deck: one burns
   for (const c of W.craft) { const burnt = c.c.burnT > 0 && tau >= c.c.burnT; if (burnt !== c.charred) { c.charred = burnt; for (const m of c.mats) { m.color.setRGB(burnt ? 0.06 : 0.32, burnt ? 0.055 : 0.34, burnt ? 0.05 : 0.36); m.roughness = burnt ? 1 : 0.6; } c.g.rotation.z = burnt ? 0.08 : 0; } }
   for (const a of W.aavs) { const burnt = a.a.burnT > 0 && tau >= a.a.burnT; if (burnt !== a.charred) { a.charred = burnt; for (const m of a.meshes) { if (!m.userData.mat) m.userData.mat = m.material; m.material = burnt ? (W._char || (W._char = std([0.06, 0.055, 0.05], 0.95))) : m.userData.mat; } } }

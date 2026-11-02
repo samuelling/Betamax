@@ -128,6 +128,7 @@ export class Playback {
           s.x = ov.x + (s.x - ov.x) * e; s.z = ov.z + (s.z - ov.z) * e; s.y = ov.y + (s.y - ov.y) * e; s.yaw = lerpAng(ov.yaw, s.yaw, e);
         }
       }
+      const fy = ctx.face && ctx.face.get(i); if (fy !== undefined) s.yaw = fy;   // off the tape: turned to look at you
       const k = this.sol.pose(i, s, tau);
       // keypoints are kept for the dead too (cameras and voices follow bodies); only the living are hittable
       h.ok = s.mode === MODE.GROUND; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
@@ -184,6 +185,9 @@ export class Playback {
           this.shotPos(o, ta, pa); this.shotPos(o, tb, pb);
           if (segSegDist(pa, pb, cap0, cap1) < 0.3) {
             this.hitShots.add(si);
+            // a round that passed through where your past stood missed it then (you're still here, aren't you); stay in your past and it misses you now
+            const bp = this.sample(body, tb, this.samp2 || (this.samp2 = {}));
+            if (Math.hypot(bp.x - pp.x, bp.z - pp.z) < 1.3 && Math.abs(bp.y - pp.y) < 1.2) { this.whizzed.add(si); continue; }
             ev.playerHits.push({ dmg: veh ? 38 : 15 + hash1(si) * 9, bullet: true, fromX: A[o + 2], fromZ: A[o + 4] });
           }
         }
@@ -272,7 +276,11 @@ export class Playback {
       if (e.t <= tauPrev && e.t > tau && ctx.playerAlive && !e.air) {
         const d = Math.hypot(e.ix - pp.x, e.iz - pp.z);
         const rad = e.big > 1.5 ? 9 : 6.5 * e.big;
-        if (d < rad) ev.playerHits.push({ dmg: d < 1.6 ? 150 : 95 * (1 - d / rad) + 8, fromX: e.ix, fromZ: e.iz });
+        // your past survived this one: as long as you're no closer to it than you were, neither does it touch you now
+        let dmg = d < rad ? (d < 1.6 ? 150 : 95 * (1 - d / rad) + 8) : 0;
+        if (dmg > 0 && body >= 0 && !e.opener) { const b = this.sample(body, e.t, this.samp2 || (this.samp2 = {})); const db = Math.hypot(e.ix - b.x, e.iz - b.z); if (db < rad && d > db - 2) dmg = 0; else if (db < rad) dmg *= Math.min(1, (db - d) / 4); }
+        if (dmg > 0) ev.playerHits.push({ dmg, fromX: e.ix, fromZ: e.iz });
+        else if (d < rad) ev.shake = Math.max(ev.shake, 1);
         ev.shake = Math.max(ev.shake, Math.max(0, 1 - d / (60 * Math.min(2, e.big))));
       }
       if (age < 0) return;

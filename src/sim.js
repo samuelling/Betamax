@@ -9,7 +9,7 @@ import { computeDestruction } from './destruction.js';
 
 export const DT = 0.05;
 export const HZ = 10; // recording rate (sim runs at 20 Hz)
-export const T_SIM = 200;
+export const T_SIM = 400;   // every tape is recorded for this long; each scene fills it with its own acts
 export const F = 9; // x y z yaw pitch crouch speed phase mode
 export const MODE = { HIDDEN: 0, BOAT: 1, CHUTE: 2, GROUND: 3, DEAD: 4 };
 export const SHOT_F = 11; // fireT impT fx fy fz ix iy iz shooter target kind
@@ -174,7 +174,9 @@ export function simulate(seed = 7) {
   const deaths = [];
 
   const tgtList = [];
-  const rc = mulberry32(seed * 613 + 11), COWARD_T = 164 + rc() * 4; let coward = null;
+  const rc = mulberry32(seed * 613 + 11), COWARD_T = 330 + rc() * 4; let coward = null;   // after the second act
+  // the one who becomes your first body came in with the second lift and lasts the whole morning, both acts
+  const hero = actors.filter((a) => a.side === 0 && a.helo === 4).sort((p, q) => Math.abs(p.exitX) - Math.abs(q.exitX))[0]; if (hero) hero.hp = 1e7;
   function updateCoward(a, t) {
     const c = a.coward, d = Math.hypot(c.x - a.x, c.z - a.z);
     if (d > 0.8 && !c.arrived) { moveTo(a, c.x, c.z, 4.6); a.crouchT = 0.15; a.pitch = 0; return; }
@@ -214,7 +216,7 @@ export function simulate(seed = 7) {
       if (e.air) continue;
       for (const a of actors) {
         if (!a.alive || a.mode !== MODE.GROUND) continue;
-        if (a.coward && !e.opener) continue;
+        if ((a.coward && !e.opener) || (a === hero && !coward)) continue;
         const d = Math.hypot(a.x - e.ix, a.z - e.iz);
         // dug-in defenders crouched behind sandbags are much harder to kill
         const cover = a.side === 0 && a.state === 'defend' && a.crouch > 0.6 ? 0.55 : 1;
@@ -245,7 +247,7 @@ export function simulate(seed = 7) {
     // the coward: late in the battle one defender breaks and runs for the parking lot. He makes it — and a
     // stray mortar finds him there anyway. He's your first body; the tape opens on that blast, far from the fight.
     if (!coward && t >= COWARD_T) {
-      const c = actors.filter((a) => a.alive && a.side === 0 && a.mode === MODE.GROUND && a.z > -70).sort((p, q) => Math.abs(p.x) - Math.abs(q.x))[0];
+      const c = hero && hero.alive ? hero : actors.filter((a) => a.alive && a.side === 0 && a.mode === MODE.GROUND && a.z > -70).sort((p, q) => (p.helo >= 6) - (q.helo >= 6) || Math.abs(p.x) - Math.abs(q.x))[0];   // one of the morning's first in, if any are left
       if (c) { coward = c; c.coward = { x: -14 + rc() * 10, z: -100 - rc() * 8 }; c.target = -1; c.burst = 0; c.hp = 1e6; }
     }
     for (const a of actors) {
@@ -579,7 +581,7 @@ export function simulate(seed = 7) {
   // choose the opening body: a defender who dies late in the battle, near the middle
   let start = null;
   const cw = actors.find((a) => a.coward && a.deathTime > 0);
-  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 168 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
+  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 320 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
   lateDef.sort((p, q) => Math.abs(p.fp.x) - Math.abs(q.fp.x));
   if (cw) start = cw;
   else if (lateDef.length) start = lateDef[0];

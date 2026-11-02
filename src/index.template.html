@@ -31,6 +31,8 @@
   #pick { position: absolute; left: 50%; top: 54.5%; transform: translateX(-50%); font-size: clamp(20px, 2.6vw, 30px); opacity: 0; transition: opacity .15s; white-space: nowrap; }
   #pick small { opacity: .7; font-size: .7em; }
   #bSwap { right: calc(var(--u)*3.1); bottom: calc(var(--u)*2.0); width: calc(var(--u)*1.0); height: calc(var(--u)*1.0); display: none; }
+  #bRew { left: 50%; top: 3%; width: calc(var(--u)*.7); height: calc(var(--u)*.7); margin-left: calc(var(--u)*.55); border-radius: 8px; font-size: calc(var(--u)*.26); }
+  #bSlow { left: calc(var(--u)*.4); top: calc(34% + var(--u)*1.25); width: calc(var(--u)*.8); height: calc(var(--u)*.8); font-size: 16px; }
   #bGun { right: calc(var(--u)*0.75); bottom: calc(var(--u)*4.0); width: calc(var(--u)*.8); height: calc(var(--u)*.8); }
   #hp { display: none; position: absolute; bottom: 9.5%; left: 5%; width: min(30vw, 240px); height: 8px; background: rgba(0,0,0,.4); }
   #hp i { display: block; height: 100%; width: 100%; background: #f4f1e8; }
@@ -118,7 +120,7 @@
   <div id="todo"></div>
 </div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>
-  <div class="tb" id="bFire">FIRE</div><div class="tb" id="bFire2">FIRE</div><div class="tb" id="bPause">&#10074;&#10074;</div><div class="tb" id="bAds">AIM</div><div class="tb" id="bCrouch">DUCK</div><div class="tb" id="bJump">JUMP</div><div class="tb" id="bReload">RLD</div><div class="tb" id="bSwap">SWAP</div><div class="tb" id="bGun">GUN</div></div>
+  <div class="tb" id="bFire">FIRE</div><div class="tb" id="bFire2">FIRE</div><div class="tb" id="bPause">&#10074;&#10074;</div><div class="tb" id="bAds">AIM</div><div class="tb" id="bCrouch">DUCK</div><div class="tb" id="bJump">JUMP</div><div class="tb" id="bReload">RLD</div><div class="tb" id="bSwap">SWAP</div><div class="tb" id="bGun">GUN</div><div class="tb" id="bRew">&times;2</div><div class="tb" id="bSlow">SLOW</div></div>
 <div id="ovl"></div>
 <script>/*BUNDLE*/</script>
 </body>

@@ -75,7 +75,7 @@ export function drawMenu(g, w = MENU_W, h = MENU_H) {
   g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(bx, by, bw, bh);
   g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25B6 PLAY', w / 2, by + 64);
   g.globalAlpha = 0.55; g.font = '26px "VT323", "Courier New", monospace';
-  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 516);
+  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP \u00B7 T REW \u00D72 \u00B7 V SLOW', w / 2, 516);
   g.globalAlpha = 0.7; g.font = '22px "VT323", "Courier New", monospace'; g.fillText('\u2014 OR START FROM A CHAPTER \u2014', w / 2, 558);
   g.globalAlpha = 0.9; g.font = '22px "VT323", "Courier New", monospace'; g.lineWidth = 2;
   for (const c of CHAPTERS) { const [x, y, cw, ch] = c.box; g.strokeRect(x, y, cw, ch); g.fillText(c.label, x + cw / 2, y + 27); }
