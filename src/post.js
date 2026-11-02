@@ -10,11 +10,11 @@ import { makeTapeNoiseTex } from './textures.js';
 const VHS = {
   uniforms: {
     tDiffuse: { value: null }, tNoise: { value: null }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
-    uRew: { value: 1 }, uFF: { value: 0 }, uAmt: { value: 1 }, uDamage: { value: 0 }, uFlash: { value: 0 }, uDesat: { value: 0 }, uStatic: { value: 0 }, uPause: { value: 0 }, uStuck: { value: 0 },
+    uRew: { value: 1 }, uFF: { value: 0 }, uAmt: { value: 1 }, uDamage: { value: 0 }, uFlash: { value: 0 }, uDesat: { value: 0 }, uStatic: { value: 0 }, uPause: { value: 0 }, uStuck: { value: 0 }, uVcr: { value: 1 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse, tNoise; uniform float uTime, uRew, uFF, uAmt, uDamage, uFlash, uDesat, uStatic, uPause, uStuck; uniform vec2 uRes;
+    uniform sampler2D tDiffuse, tNoise; uniform float uTime, uRew, uFF, uAmt, uDamage, uFlash, uDesat, uStatic, uPause, uStuck, uVcr; uniform vec2 uRes;
     varying vec2 vUv;
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
     vec3 toYIQ(vec3 c){ return vec3(dot(c, vec3(0.299,0.587,0.114)), dot(c, vec3(0.596,-0.274,-0.322)), dot(c, vec3(0.211,-0.523,0.312))); }
@@ -72,6 +72,8 @@ const VHS = {
       // vignette
       vec2 q = vUv - 0.5;
       col *= 1.0 - dot(q, q) * 0.75;
+      // the VCR off (settings): the clean picture, keeping only what the game needs you to see
+      if (uVcr < 0.5) { vec3 c0 = texture2D(tDiffuse, vUv).rgb; col = mix(c0, vec3(dot(c0, vec3(0.299, 0.587, 0.114))), uDesat * 0.85); col *= 1.0 - uPause * 0.25; }
       // damage + flash
       col = mix(col, vec3(0.5, 0.02, 0.02), uDamage * smoothstep(0.2, 0.75, length(q)*1.5));
       col = mix(col, vec3(1.0), uFlash);

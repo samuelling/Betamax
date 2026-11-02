@@ -11,7 +11,7 @@ Inspired by the rewound bombing raid in *Slaughterhouse-Five*.
 ## Play
 Open `index.html` (a single self-contained file), or enable GitHub Pages on `main` / root.
 
-- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground (and to use things at home; Q or Tab to stop), T double-speed rewind, V slow, P / Esc pause (sensitivity settings).
+- **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground (and to use things at home; Q or Tab to stop), T double-speed rewind, V slow, P / Esc pause (sensitivity settings, VCR filter on/off).
 - **Touch (phone/iPad):** floating left stick, drag right side to look, FIRE (drag to aim while firing), AIM, DUCK, JUMP, RLD, ×2, SLOW, pause. Light aim assist (toggle in pause).
 
 Reversed bullets still hurt, and every one is tracer you can see. The edges of the beach are mined.

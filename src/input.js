@@ -9,7 +9,7 @@ export class Input {
     this.t = { mx: 0, mz: 0, fire: false, ads: false, crouch: false, jump: false, reload: false, sprint: false };
     this.crouchToggle = false;
     this.canvas = canvas;
-    this.settings = Object.assign({ sens: 1.0, touchSens: 1.0, invert: false, assist: true, adsHold: true }, load());
+    this.settings = Object.assign({ sens: 1.0, touchSens: 1.0, invert: false, assist: true, adsHold: true, vcr: true }, load());
     this.jumpBuf = 0;
     addEventListener('keydown', (e) => {
       if (e.repeat) return;

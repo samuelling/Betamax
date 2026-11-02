@@ -1373,7 +1373,7 @@ function tick(dt, draw = true) {
   if (G.audio.enabled) G.audio.setLoop('heart', G.state === 'play' ? Math.max(0, 1 - p.health / 55) * 0.9 : 0), G.audio.setLoop('breath', G.state === 'play' ? Math.max(0, 1 - p.health / 65) * 0.5 : 0);
   pu.uRew.value = rew; pu.uFF.value = ff; pu.uPause.value = pause; pu.uDesat.value = Math.max(desat, lowHp * 0.6);
   pu.uDamage.value = Math.min(1, G.damageFx + lowHp); pu.uFlash.value = G.state === 'possess' ? Math.max(G.flash, 0) : G.flash * 0.8;
-  pu.uAmt.value = 1; pu.uStuck.value = stuck;
+  pu.uAmt.value = 1; pu.uStuck.value = stuck; pu.uVcr.value = G.input.settings.vcr === false ? 0 : 1;
   if (draw) G.post.render(G.real, SUN_DIR);
 }
 
@@ -1427,11 +1427,13 @@ function pauseGame() {
     <div class="row">${touch ? 'TOUCH' : 'MOUSE'} SENSITIVITY <input id="sens" type="range" min="0.2" max="3" step="0.05" value="${touch ? st.touchSens : st.sens}"> <span id="sv"></span></div>
     <div class="row"><label><input id="inv" type="checkbox" ${st.invert ? 'checked' : ''}> INVERT LOOK</label>
     ${touch ? `<label><input id="ast" type="checkbox" ${st.assist ? 'checked' : ''}> AIM ASSIST</label>` : `<label><input id="adh" type="checkbox" ${st.adsHold ? 'checked' : ''}> HOLD TO AIM</label>`}</div>
+    <div class="row"><label><input id="vcr" type="checkbox" ${st.vcr !== false ? 'checked' : ''}> VCR FILTER</label></div>
     <button id="res">&#9654; PLAY</button><button id="quit" style="font-size:.6em">&#9632; STOP</button>`, 'shade');
   const sv = $('sv'), sens = $('sens');
   const upd = () => { sv.textContent = (+sens.value).toFixed(2); if (touch) st.touchSens = +sens.value; else st.sens = +sens.value; G.input.save(); };
   sens.oninput = upd; upd();
   $('inv').onchange = (e) => { st.invert = e.target.checked; G.input.save(); };
+  $('vcr').onchange = (e) => { st.vcr = e.target.checked; G.input.save(); tick(0.0001); };   // see it change behind the menu
   if ($('ast')) $('ast').onchange = (e) => { st.assist = e.target.checked; G.input.save(); };
   if ($('adh')) $('adh').onchange = (e) => { st.adsHold = e.target.checked; G.input.save(); };
   $('res').onclick = resumeGame;
