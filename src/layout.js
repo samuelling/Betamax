@@ -87,11 +87,6 @@ export function buildLayout() {
     { t: 90, lcac: [-84, -28, 30, 86] },
     { t: 116, aav: [-90, -58, -24, 10, 42, 74] },
     { t: 140, lcac: [-52, 8, 66] },
-    // the second act: the follow-on echelon, and the push off the sand into the dunes, the lot and the houses
-    { t: 178, aav: [-80, -30, 18, 66] },
-    { t: 222, lcac: [-54, 40] },
-    { t: 262, aav: [-88, -40, 10, 58, 92] },
-    { t: 305, lcac: [-20, 60] },
   ];
   waves.forEach((w, wi) => {
     (w.aav || []).forEach((x, i) => add('aav', x + (r() - 0.5) * 7, w.t + i * 0.6 + r(), 6 + r() * 14, wi + 1));
@@ -110,8 +105,6 @@ export function buildLayout() {
   L.helos = [
     { x: -26, z: -98, tTouch: 24 }, { x: 2, z: -112, tTouch: 27.5 }, { x: 28, z: -94, tTouch: 31 },
     { x: -34, z: -116, tTouch: 76 }, { x: 0, z: -96, tTouch: 79 }, { x: 34, z: -116, tTouch: 82 },
-    { x: -30, z: -104, tTouch: 196 }, { x: 6, z: -116, tTouch: 199 }, { x: 36, z: -100, tTouch: 202 },
-    { x: -18, z: -112, tTouch: 262 }, { x: 22, z: -108, tTouch: 266 },
   ];
   L.helos.forEach((h) => { h.y = LOT.y; h.tLift = h.tTouch + 11; h.cap = 10; });
 
@@ -119,7 +112,6 @@ export function buildLayout() {
   L.gunships = [
     { tIn: 30, cx: -30, cz: 150, ax: 85, az: 30, alt: 46, w: 0.11, ph: 0, downT: 128 },
     { tIn: 58, cx: 40, cz: 175, ax: 75, az: 25, alt: 54, w: 0.09, ph: 2.1, downT: -1 },
-    { tIn: 188, cx: -10, cz: 160, ax: 90, az: 35, alt: 50, w: 0.1, ph: 4.0, downT: 291 },
   ];
   // houses (big ones on the dunes) that can burn
   // ---------- minefield border ----------

@@ -1184,7 +1184,7 @@ function tick(dt, draw = true) {
       rideCheck(p, S.actors[G.body]);
       const fast = !G.forward && !G.gp.slowOn && !(G.gp.real < G.gp.cineUntil) ? Math.max(G.rewX || 1, G.gp.autoX) : 1;   // at ×2 your body runs the fast tape too, so the world keeps its shape around you
       let jumped2 = false;
-      if (fast > 1) { p.update(dt, inp, S.obstacles, G.tau); jumped2 = p.jumped; if (jumped2) G.input.consumeJump(); }
+      for (let k = 1; k < Math.round(fast); k++) { p.update(dt, inp, S.obstacles, G.tau); if (p.jumped) { jumped2 = true; G.input.consumeJump(); } }
       const out = p.update(dt, fast > 1 && jumped2 ? Object.assign({}, inp, { jump: false }) : inp, S.obstacles, G.tau - (fast > 1 ? dt : 0));
       if (p.jumped || jumped2) G.input.consumeJump();
       // weapons: 1 / 2 / wheel to switch, F or E to swap with a gun on the ground
@@ -1211,7 +1211,7 @@ function tick(dt, draw = true) {
         const rx = Math.max(G.rewX || 1, G.gp.autoX);
         if (G.gp.real < G.gp.cineUntil) { tauRate = 0.35; osd = '\u25C0 SLOW \u00B7 UN-WRECK'; muffle = 2200; rew = 0.25; }
         else if (G.gp.slowOn) { tauRate = 0.3; osd = Math.sin(G.real * 5) > -0.3 ? '\u25C0 SLOW' : ''; muffle = 1600; desat = 0.25; rew = 0.25; }
-        else if (rx > 1) { tauRate = rx; osd = (G.rewX || 1) > 1 ? '\u25C0\u25C0 REW \u00D72' : '\u25C0\u25C0 \u00D72 \u00B7 LULL'; muffle = 6000; }   // the fast rewind: same tape, half the wait
+        else if (rx > 1) { tauRate = rx; osd = (G.rewX || 1) >= rx ? '\u25C0\u25C0 REW \u00D72' : `\u25C0\u25C0 \u00D7${rx} \u00B7 LULL`; muffle = 6000; }   // the fast rewind: same tape, half the wait
       }
       G.gp.rate = tauRate;
       if (G.forward) { tauRate = -1; osd = '\u25B6 PLAY'; rew = 0; if (G.tau >= T_SIM - 0.5) { G.forward = false; showEnd(true); } }

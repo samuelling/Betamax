@@ -350,7 +350,7 @@ export class Gameplay {
     const hostileNear = this.hostileWithin(28, tau, p.pos);
     const toNext = next >= 0 ? tau - sg[next].t1 : tau - me.spawn;
     const inLull = playing && on < 0 && toNext > 7 && !hostileNear && this.real - (v.lastHit || -9) > 3 && !show.length;
-    const wantX = inLull && this.lullAuto ? 2 : 1;
+    const wantX = inLull && this.lullAuto ? (toNext > 14 ? 3 : 2) : 1;   // a long wait goes by at ×3
     if (wantX !== this.autoX) { this.autoX = wantX; if (wantX === 1 && this.wasLull && next >= 0) this.h.sound('contact'); }
     this.wasLull = inLull;
     if (inLull && wantX > 1 && !this.taught.lull) { this.taught.lull = true; this.h.teach('Nothing on the tape here. It skims at &times;2 &mdash; or <em>take a body that’s still fighting</em> &#9670;'); }
@@ -386,8 +386,8 @@ export class Gameplay {
         const ss = this.segStat.get(this.body * 100 + on) || { c: 0, n: 0 };
         const tot = this.myBursts.filter((b) => b.t1 <= sg[on].t1 + 0.01 && b.t0 >= sg[on].t0 - 0.01).length;
         html = `&#9664; ${sg[on].name} <small>${sg.length - on}/${sg.length}</small><br><small>${tot ? `CATCH ${ss.c}/${tot} &middot; ` : 'SURVIVE &middot; '}${fmt((tau - sg[on].t0) / (this.rate || 1))}</small>`;
-      } else if (next >= 0) html = `<small>${this.autoX > 1 ? '&#9664;&#9664; &times;2 &middot; ' : ''}NEXT: ${sg[next].name} IN ${fmt(toNext / (this.rate || 1))}</small>`;
-      else html = `<small>${this.autoX > 1 ? '&#9664;&#9664; &times;2 &middot; ' : ''}HOME</small>`;
+      } else if (next >= 0) html = `<small>${this.autoX > 1 ? `&#9664;&#9664; &times;${this.autoX} &middot; ` : ''}NEXT: ${sg[next].name} IN ${fmt(toNext / (this.rate || 1))}</small>`;
+      else html = `<small>${this.autoX > 1 ? `&#9664;&#9664; &times;${this.autoX} &middot; ` : ''}HOME</small>`;
       this.objEl.innerHTML = html;
     }
     return this.hits;
