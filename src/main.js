@@ -18,6 +18,12 @@ import { Home } from './home.js';
 import { pickHouse } from './housetypes.js';
 import { setScene } from './scenes.js';
 import { simulateSandwich } from './sim4.js';
+import { simulateBomb } from './simB.js';
+import { simulateJump } from './simJ.js';
+import { JT } from './layoutJ.js';
+import { CABIN as J_CABIN } from './terrainJ.js';
+import { seatPose, carPose } from './layoutB.js';
+import { FIELD as B_FIELD, roadAt as bRoadAt, S_TOWN as B_TOWN } from './terrainB.js';
 import { LZ, CRASH, road6A } from './terrain4.js';
 
 const $ = (id) => document.getElementById(id);
@@ -151,6 +157,20 @@ function boot() {
     addEventListener('pointerdown', () => { $('load').style.display = 'none'; go(); }, { once: true });
     G.last = performance.now(); requestAnimationFrame(frame); return;
   }
+  if (params.get('scene') === 'jump') { // straight to The Jump (for working on it; in the game you reach it through the port)
+    const a = S.actors.find((q) => q.side === 0 && q.helo >= 0);
+    G.lives = [lifeOf(a.id)]; if (vcr) vcr.dispose();
+    $('load').style.display = ''; $('load').classList.add('vcr'); $('load').innerHTML = '<span class="blink">CLICK TO PLAY THE JUMP</span>';
+    addEventListener('pointerdown', () => { $('load').style.display = 'none'; G.audio.init(); G.input.lock(); loadTape('jump', ident(a.id), a.skin); startJump(); }, { once: true });
+    G.last = performance.now(); requestAnimationFrame(frame); return;
+  }
+  if (params.get('scene') === 'bomb') { // straight to tape 3 of the Cape Cod track (for working on it)
+    const a = S.actors.find((q) => q.side === 0 && q.helo >= 0);
+    G.lives = [lifeOf(a.id)]; if (vcr) vcr.dispose();
+    $('load').style.display = ''; $('load').classList.add('vcr'); $('load').innerHTML = '<span class="blink">CLICK TO PLAY TAPE 3</span>';
+    addEventListener('pointerdown', () => { $('load').style.display = 'none'; G.audio.init(); G.input.lock(); loadBomb(ident(a.id), a.skin); startBomb(); }, { once: true });
+    G.last = performance.now(); requestAnimationFrame(frame); return;
+  }
   if (params.get('scene') === 'sandwich') { // straight to tape 2 of the Cape Cod track (for working on it)
     const a = S.actors.find((q) => q.side === 0 && q.helo >= 0);
     G.lives = [lifeOf(a.id)]; if (vcr) vcr.dispose();
@@ -273,7 +293,7 @@ function beginPlayFromBody(i, tauNow) {
   const p = G.player;
   p.pos.set(s.x, s.y, s.z); p.vel.set(0, 0, 0);
   p.yaw = s.yaw + Math.PI; p.pitch = Math.max(-0.5, Math.min(0.5, s.pitch)) * 0.5;
-  p.setBody(G.S.actors[i]); p.health = 100;
+  p.setBody(G.S.actors[i]); p.health = 100; p.ride = null;
   G.body = i;
 }
 
@@ -284,7 +304,7 @@ function saveCheckpoint() {
 function restoreCheckpoint() {
   const c = G.cp, p = G.player;
   G.tau = c.tau; G.body = c.body; G.lives.length = c.lives;
-  p.pos.copy(c.pos); p.vel.set(0, 0, 0); p.yaw = c.yaw; p.pitch = c.pitch; p.health = 100;
+  p.pos.copy(c.pos); p.vel.set(0, 0, 0); p.yaw = c.yaw; p.pitch = c.pitch; p.health = 100; p.ride = null;
   p.setLoadout(G.S.actors[c.body].side, null, null, c.slots);
   for (const l of G.pick.left) G.pick.free('l' + l.k); G.pick.taken = new Set(c.taken); G.pick.left = c.left.map((l) => ({ ...l }));
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear();
@@ -358,7 +378,7 @@ function playerFire(muzzle, inp) {
   const spread = (0.022 * (1 - p.ads) + 0.0025 * p.ads + moving * 0.012 + p.recoil * 0.2) * (ud.spread || 1) + (ud.pellets > 1 ? 0.045 : 0);
   _d.x += (Math.random() - 0.5) * spread; _d.y += (Math.random() - 0.5) * spread; _d.z += (Math.random() - 0.5) * spread; _d.normalize();
   const tT = rayTerrain(_o, _d);
-  const hb = G.S.obstacles.segment(_o.x, _o.y, _o.z, _o.x + _d.x * 300, _o.y + _d.y * 300, _o.z + _d.z * 300, G.tau, -1, true);
+  const hb = G.S.obstacles.segment(_o.x, _o.y, _o.z, _o.x + _d.x * 300, _o.y + _d.y * 300, _o.z + _d.z * 300, G.tau, p.ride ? 100 + p.ride.car : -1, true);
   const tV = hb >= 0 ? hb * 300 : Infinity;
   let best = Infinity, who = -1, head = false;
   const pb = G.pb, side = G.S.actors[G.body].side;
@@ -504,7 +524,9 @@ function beginEnding() {
   G.end = { from: camera.position.clone(), fromQ: camera.quaternion.clone() };
   hud(false);
   const st = G.S.actors[G.body];
-  if (G.sceneId === 'sandwich') sub(st.helo === 0 ? 'Back into the wreck. Back into the sky.' : st.house >= 0 ? 'Back inside. Back to waiting.' : 'Back down the road, the way you came.', 6);
+  if (G.sceneId === 'jump') sub('Back to your seat. Back out over the Gulf, before the coast.', 6);
+  else if (G.sceneId === 'bomb') sub(st.side === 0 ? 'Back out of the truck. Back across the common, to before the light.' : 'Back down the road. Back into the trees.', 6);
+  else if (G.sceneId === 'sandwich') sub(st.helo === 0 ? 'Back into the wreck. Back into the sky.' : st.house >= 0 ? 'Back inside. Back to waiting.' : 'Back down the road, the way you came.', 6);
   else sub(st.side === 0 ? 'Back to the helicopter. Back to the sky.' : 'Back into the hull. Back out to sea.', 6);
   if (G.sceneId === 'beach' && st.side === 0 && G.world.helos[st.helo] && !G.world.helos[st.helo].legs) { // your own legs, hanging out of the cabin door
     const sideSign = (st.id % 2) ? 1 : -1, g = new THREE.Group(), cloth = new THREE.MeshStandardMaterial({ color: 0x6a6a52, roughness: 0.95 }), boot = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 0.7 });
@@ -535,16 +557,22 @@ function showEnd(forwardDone) {
 // ---------------------------------------------------------------- after the beach: back through the tapes, home
 const MIDDLE = {
   beach1: [['THE NIGHT BEFORE', 'the hovercraft deck'], ['THE WAR ARRIVES', 'the port'], ['THE FIRST SHOT', '']],
-  sandwich0: [['THE BOMB', 'Route 9, the run for the pickup'], ['ASHLAND STATE PARK', 'scouts in the woods']],
+  sandwich0: [['THE BOMB', 'Route 9, the other road out of Boston'], ['ASHLAND STATE PARK', 'scouts in the woods']],
   sandwich1: [['THE WAR ARRIVES', 'the port'], ['THE FIRST SHOT', '']],
+  bomb0: [['ASHLAND STATE PARK', 'scouts in the woods']],
+  bomb1: [['ASHLAND STATE PARK', 'the camps']],
+  jump0: [],
 };
+const TAPE_N = { beach: 2, sandwich: 3, bomb: 4, jump: 5 };
 function tapesBack() {
   const i = G.body, d = ident(i), side = G.S.actors[i].side;
   G.state = 'tapes'; hud(false);
   if (document.pointerLockElement) document.exitPointerLock();
   // the Cape Cod track: before the beach, East Sandwich
   if (G.sceneId === 'beach' && side === 0) { tapeCard(2, 'EAST SANDWICH', d, side, 'where the helicopter came down', () => { loadSandwich(d, G.S.actors[i].skin); startSandwich(); }); return; }
-  const list = MIDDLE[G.sceneId + side] || MIDDLE.beach1, n0 = G.sceneId === 'beach' ? 2 : 3;
+  // East Sandwich's crash squad came down in the helicopter from Hopkinton: before that, The Bomb
+  if (G.sceneId === 'sandwich' && side === 0 && G.S.actors[i].helo === 0) { tapeCard(3, 'THE BOMB', d, side, 'Route 135, the run for the helicopters', () => { loadBomb(d, G.S.actors[i].skin); startBomb(); }); return; }
+  const list = MIDDLE[G.sceneId + side] || MIDDLE.beach1, n0 = TAPE_N[G.sceneId] || 2;
   let k = 0;
   const show = () => {
     if (k >= list.length) { goHome(i, false); return; }
@@ -578,21 +606,24 @@ function useScene(id) {
   Object.assign(G, { world: nx.world, S: nx.S, sol: nx.sol, pb: nx.pb, pick: nx.pick });
   G.enemyHp = new Float32Array(nx.S.N).fill(100); G.overrides.clear(); nx.pb.hitShots.clear(); nx.pb.whizzed.clear(); nx.pick.reset();
 }
-function loadSandwich(who, skin) {
-  if (!G.scenes.sandwich) {
-    const prev = G.sceneId; setScene('sandwich');
-    const world = new World(renderer, scene, Q, 'sandwich');
-    const S = simulateSandwich(4, { ident: who, skin });
+function loadSandwich(who, skin) { loadTape('sandwich', who, skin); }
+function loadBomb(who, skin) { loadTape('bomb', who, skin); }
+function loadTape(id, who, skin) {
+  if (!G.scenes[id]) {
+    const prev = G.sceneId; setScene(id);
+    const world = new World(renderer, scene, Q, id);
+    const S = id === 'bomb' ? simulateBomb(3, { ident: who, skin }) : id === 'jump' ? simulateJump(5, { ident: who, skin }) : simulateSandwich(4, { ident: who, skin });
+    world.S = S;
     world.setDestruction(S.destruction);
     const sol = new Soldiers(scene, S);
     const pb = new Playback(S, world, sol, G.pb.smoke, G.pb.glow, G.pb.tr, scene);
     sol.prepare(pb);
     const pick = new Pickups(scene, S, sol);
     world.setActive(false); sol.mesh.visible = false;
-    G.scenes.sandwich = { world, S, sol, pb, pick };
+    G.scenes[id] = { world, S, sol, pb, pick };
     setScene(prev); if (G.scenes[prev]) G.scenes[prev].world.setActive(true);
-  } else { const S = G.scenes.sandwich.S; S.actors[S.startId].ident = who; }
-  useScene('sandwich');
+  } else { const S = G.scenes[id].S; S.actors[S.startId].ident = who; }
+  useScene(id);
 }
 // East Sandwich opens on the meadow: the extraction on the grass, you a few steps from the door
 function startSandwich() {
@@ -606,6 +637,10 @@ function startSandwich() {
   hud(false); $('feed').innerHTML = ''; $('hud').style.visibility = '';
   card('EAST SANDWICH', 3);
 }
+// The Bomb opens in the hayfield at Hopkinton: two helicopters on the grass, you at the door of the first
+function startBomb() { startSandwich(); card('THE BOMB', 3); G.player.ride = null; }
+// The Jump opens in the door: the light is green and you're next
+function startJump() { startSandwich(); card('THE JUMP', 3); G.player.ride = null; }
 function goHome(i, forward) {
   const a = G.S.actors[i], who = ident(i);
   G.endBody = i; G.homeForward = forward; G.endScene = G.sceneId; G.endIdent = who;
@@ -649,6 +684,76 @@ function beachTV(dt) {
   G.world.update(tau, tvCam, G.S.explosions);
   G.player.vm.visible = false;
   renderer.setRenderTarget(G.tvRT); renderer.render(scene, tvCam); renderer.setRenderTarget(null);
+}
+
+// ---------------------------------------------------------------- The Bomb: riding, the flash, the sound arriving
+const _sp = {}, _sp2 = {};
+// in a car between getting in (tIn) and getting out (tOut): the tape pulls you into your seat and the car carries you
+function rideCheck(p, st) {
+  if (G.sceneId !== 'bomb' || st.car == null || st.car < 0) { p.ride = null; return; }
+  const inCar = G.tau < st.tOut && G.tau >= st.tIn;
+  if (inCar && !p.ride) {
+    const c = G.S.L.rides[st.car]; seatPose(c, st.seat, G.tau, _sp);
+    const d = Math.hypot(p.pos.x - _sp.sx, p.pos.z - _sp.sz);
+    p.ride = { car: st.car, seat: st.seat, c, pos: p.pos.clone(), from: p.pos.clone(), k: d < 0.6 ? 1 : 0, lastYaw: _sp.yaw, crouch: c.kind === 'pickup' && st.seat >= 2 ? 0.75 : 1 };
+    if (d >= 0.6) { G.audio.play(G.audio.B.tug, 0.5); sub(st.seat >= 2 && c.kind === 'pickup' ? 'Into the bed of the truck. Hold on.' : 'Back in the car.', 2.5); }
+  } else if (!inCar && p.ride) {
+    // out the door you got in by
+    const c = p.ride.c, cs = c.seats[p.ride.seat], sd = cs[0] > 0 ? 1 : -1; seatPose(c, p.ride.seat, G.tau, _sp);
+    p.pos.set(_sp.sx + Math.cos(_sp.yaw) * 1.5 * sd, 0, _sp.sz - Math.sin(_sp.yaw) * 1.5 * sd); p.pos.y = heightAt(p.pos.x, p.pos.z); p.vel.set(0, 0, 0);
+    p.ride = null;
+  }
+}
+function rideCarry(p, dt) {
+  const R = p.ride; seatPose(R.c, R.seat, G.tau, _sp);
+  R.k = Math.min(1, R.k + dt / 0.7); const e = R.k * R.k * (3 - 2 * R.k);
+  R.pos.set(_sp.sx, _sp.sy, _sp.sz); if (e < 1) { R.pos.lerpVectors(R.from, R.pos, e); R.pos.y += Math.sin(e * Math.PI) * 0.8; }
+  let dy = _sp.yaw - R.lastYaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+  p.yaw += dy; R.lastYaw = _sp.yaw;
+  p.pos.copy(R.pos);
+  // the road through the springs
+  const v = Math.min(1, _sp.v / 30); p.shake = Math.max(p.shake || 0, 0.02 + v * 0.06);
+  if (G.state === 'play') { camera.position.set(p.pos.x, p.pos.y + p.eyeH + (Math.sin(G.real * 13.7) * 0.6 + Math.sin(G.real * 23.1) * 0.4) * 0.018 * v, p.pos.z); camera.rotation.y += dy; }
+}
+function bombBeats(t0, t1, p) {
+  const B = G.S.L.blast, boomT = B.t + 102;   // 35 km at the speed of sound
+  if ((t0 - B.t) * (t1 - B.t) < 0) { G.flash = 1.4; G.audio.play(G.audio.B.boom, 0.5, 0, 0.32); p.shake = Math.max(p.shake || 0, 0.6); if (t1 < t0) sub('The light.', 2.5); }
+  if ((t0 - boomT) * (t1 - boomT) < 0) { G.audio.play(G.audio.B.boom, 1.3, -0.2, 0.42); G.audio.play(G.audio.B.boom, 0.8, 0.3, 0.27); p.shake = Math.max(p.shake || 0, 1.4); }
+}
+// The Jump: the jumpmasters' commands, the flak arriving at the speed of sound
+const JUMP_CALLS = [[JT.warn, 'TEN MINUTES!'], [JT.getReady, 'GET READY!'], [JT.outStand, 'OUTBOARD PERSONNEL — STAND UP!'], [JT.inStand, 'INBOARD PERSONNEL — STAND UP!'], [JT.hook, 'HOOK UP!'],
+  [JT.check, 'CHECK EQUIPMENT! SOUND OFF FOR EQUIPMENT CHECK!'], [JT.planeHit + 0.8, '— they hit Chalk Six —'], [JT.hit + 0.4, 'MEDIC!'], [JT.door, 'STAND IN THE DOOR!'], [JT.green, 'GREEN LIGHT — GO! GO! GO!']];
+function jumpBeats(t0, t1, p) {
+  if (t0 === t1) return;
+  for (const [t, s] of JUMP_CALLS) if ((t0 - t) * (t1 - t) < 0) sub(s, 2.6);
+  if ((t0 - JT.doors) * (t1 - JT.doors) < 0) { G.audio.play(G.audio.B.clunk, 0.9, -0.3, 0.6); G.audio.play(G.audio.B.clunk, 0.9, 0.3, 0.55); }
+  for (const b of G.S.L.bursts) {
+    const d = Math.hypot(b.x - p.pos.x, b.y - p.pos.y, b.z - p.pos.z), ta = b.t + d / 343;
+    if ((t0 - ta) * (t1 - ta) < 0) { const g = Math.min(1.5, 70 / (d + 20)) * (G.tau > JT.doors ? 1 : 0.45); G.audio.play(G.audio.B.boom, g, Math.max(-1, Math.min(1, b.x / (d + 1))), 0.6 + Math.min(0.4, 30 / (d + 10))); if (d < 140) p.shake = Math.max(p.shake || 0, 0.4 + (140 - d) / 60); }
+  }
+}
+function endingCamJ(st) {
+  // out of the aircraft: hanging off its quarter in the dark as it backs away over the Gulf with the formation
+  const k = Math.min(1, G.stateT / 6), pos = new THREE.Vector3(-26 - k * 30, 9 + k * 8, 34 + k * 40), q = new THREE.Quaternion();
+  q.setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, new THREE.Vector3(10, 1.5, -20), new THREE.Vector3(0, 1, 0)));
+  return { pos, q };
+}
+
+// The Bomb endings: your scouts back across the common into the trees, toward the park; or their truck backing up
+// the woods road it came out of
+function endingCamB(st) {
+  const L = G.S.L, pos = new THREE.Vector3(), look = new THREE.Vector3(), q = new THREE.Quaternion(), tmp = {};
+  if (st.side === 0) {
+    const f = st.from || L.trail; bRoadAt(B_TOWN - 40, tmp);
+    const x = tmp.x - tmp.nx * 6, z = tmp.z - tmp.nz * 6;   // on the common, by the road: the church, the trees behind
+    pos.set(x, heightAt(x, z) + 1.7, z); look.set(f.x, heightAt(f.x, f.z) + 1.6, f.z);
+  } else {
+    const c = L.rides[st.car], cp = carPose(c, G.tau, _sp2), sr = L.sideRoad;
+    const late = st.car === 8, bx = late ? cp.x : sr.x + sr.ux * 6, bz = late ? cp.z : sr.z + sr.uz * 6;
+    pos.set(bx - (late ? 14 : sr.uz * 9), heightAt(bx, bz) + 3, bz + (late ? 8 : sr.ux * 9)); look.set(cp.x, cp.y + 1.2, cp.z);
+  }
+  q.setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, look, new THREE.Vector3(0, 1, 0)));
+  return { pos, q };
 }
 
 // East Sandwich endings: watch the wreck un-crash and climb away; or the house door they came out of; or the road
@@ -721,11 +826,16 @@ function tick(dt, draw = true) {
     }
     case 'intro': {
       const st = S.actors[G.body];
-      if (G.sceneId === 'sandwich') {
+      if (G.sceneId !== 'beach') {
         if (G.stateT < 3.2) { tauRate = 0; stuckTape(dt); osd = Math.sin(G.real * 5) > -0.3 ? '◀ SLOW' : ''; rew = 0.25; stuck = 1 - G.stateT / 3.2; }
         else if (!G.caught) { G.caught = true; G.audio.play(G.audio.B.clunk, 0.7); G.flash = 0.4; G.introK = 0; G.introFrom = camera.position.clone(); G.introQ = camera.quaternion.clone(); }
         const h = G.pb.hit[G.body];
-        if (G.introK === undefined) {   // wide: the meadow, the helicopter down on the grass
+        if (G.introK === undefined && G.sceneId === 'jump') {   // wide: from the front of the hold, down the two lines to the open doors
+          const a = G.real * 0.05; camera.position.set(Math.sin(a) * 0.35, 2.05, J_CABIN.z0 + 1.2); camera.lookAt(-0.4, 1.05, (J_CABIN.doorZ0 + J_CABIN.doorZ1) / 2);
+        } else if (G.introK === undefined && G.sceneId === 'bomb') {   // wide: the hayfield, both helicopters on the grass, the cloud behind
+          const F = B_FIELD, gy = heightAt(F.x, F.z), a = 1.75 + G.real * 0.02;
+          camera.position.set(F.x + Math.sin(a) * 46, gy + 9, F.z + 12 + Math.cos(a) * 46); camera.lookAt(F.x - 30, gy + 14, F.z - 4);
+        } else if (G.introK === undefined) {   // wide: the meadow, the helicopter down on the grass
           const gy = heightAt(LZ.x, LZ.z), a = 0.9 + G.real * 0.03;
           camera.position.set(LZ.x + Math.sin(a) * 34, gy + 13, LZ.z - 8 + Math.cos(a) * 34); camera.lookAt(LZ.x, gy + 2, LZ.z);
         } else if (h && h.head) {
@@ -784,6 +894,7 @@ function tick(dt, draw = true) {
       G.playT = (G.playT || 0) + dt; if (G.audio) { G.audio.playT = G.playT; if (G.playT > 20) G.audio.wilhelmArmed = true; }
       showHud = true; spreadShow = true;
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
+      rideCheck(p, S.actors[G.body]);
       const out = p.update(dt, inp, S.obstacles, G.tau);
       if (p.jumped) G.input.consumeJump();
       // weapons: 1 / 2 / wheel to switch, F or E to swap with a gun on the ground
@@ -803,6 +914,7 @@ function tick(dt, draw = true) {
       const out2 = Math.max(dx, dz);
       const near = Math.min(p.pos.x - ARENA.x0, ARENA.x1 - p.pos.x, p.pos.z - ARENA.z0, ARENA.z1 - p.pos.z);
       $('warn').style.opacity = near < 8 ? (0.6 + 0.4 * Math.sin(G.real * 10)) : 0;
+      if (G.sceneId === 'jump' && p.pos.y < -25) { beginDeath('mine'); break; }   // out of the door before your time
       if (out2 > 1.6) { addMineBlast(p.pos); G.audio.at('boom', p.pos.x, p.pos.y, p.pos.z, listener(), 1.4); p.shake = 2; beginDeath('mine'); break; }
       if (!G.forward && G.tau <= S.actors[G.body].spawn + 0.02) beginEnding();
       if (G.forward) { tauRate = -1; osd = '\u25B6 PLAY'; rew = 0; if (G.tau >= T_SIM - 0.5) { G.forward = false; showEnd(true); } }
@@ -842,6 +954,7 @@ function tick(dt, draw = true) {
     case 'ending': {
       const st = S.actors[G.body];
       tauRate = 1.8; osd = '◀◀ REW ×2';
+      if (G.sceneId === 'bomb' && st.side === 0) { tauRate = G.tau > 0.4 ? 0.6 : 0; if (G.stateT > 6.5) { G.audio.play(G.audio.B.clunk, 0.7); tapesBack(); } break; }   // hold on the common
       if (G.tau <= Math.max(0.3, st.spawn - 13)) { G.audio.play(G.audio.B.clunk, 0.7); tapesBack(); }
       break;
     }
@@ -858,6 +971,9 @@ function tick(dt, draw = true) {
 
   const tauPrev = G.tau;
   G.tau = Math.max(0, G.tau - dt * tauRate);
+  if (p.ride) rideCarry(p, dt);
+  if (G.sceneId === 'bomb') bombBeats(tauPrev, G.tau, p);
+  if (G.sceneId === 'jump') jumpBeats(tauPrev, G.tau, p);
   if (G.state === 'ending') { // place the camera against the aircraft at the tape time it will be drawn at
     const k = Math.min(1, G.stateT / 1.6), e = k * k * (3 - 2 * k), target = endingCam(S.actors[G.body]);
     camera.position.lerpVectors(G.end.from, target.pos, e);
@@ -892,7 +1008,7 @@ function tick(dt, draw = true) {
     // Call of Duty-style health: no bar, a short invulnerability blink after each bullet, no one-shots from
     // healthy, and fast regeneration once you've been out of fire for a few seconds
     for (const h of ev.playerHits) {
-      let dmg = h.dmg;
+      let dmg = h.dmg * (p.ride ? 0.35 : 1);   // the truck bed and the speed keep most of it off you
       if (h.bullet && G.real - (p.lastBullet || -9) < 0.4) dmg *= 0.3;
       if (h.bullet) p.lastBullet = G.real;
       if (h.bullet && p.health > 45 && p.health - dmg <= 0) dmg = p.health - 6; // a burst can drop you, a single round can't
@@ -916,8 +1032,9 @@ function tick(dt, draw = true) {
     G.audio.setLoop('heli', 0);
     G.audio.setLoop('drone', !quiet && ev.nearestDrone < 150 ? Math.min(0.5, 12 / (ev.nearestDrone + 4)) : 0, 1);
     G.audio.setLoop('fire', !quiet && ev.wrecks.length ? 0.06 : 0);
-    G.audio.setLoop('battle', quiet ? 0 : G.state === 'end' || G.state === 'title' ? 0.05 : 0.2, tauRate > 1 ? 1.4 : 1);
-    G.audio.setLoop('sea', quiet ? 0 : G.sceneId === 'sandwich' ? 0.04 : 0.22);
+    G.audio.setLoop('battle', quiet ? 0 : G.state === 'end' || G.state === 'title' ? 0.05 : G.sceneId === 'jump' ? 0.03 : 0.2, tauRate > 1 ? 1.4 : 1);
+    G.audio.setLoop('wind', quiet ? 0 : G.sceneId === 'jump' ? 0.1 + 0.6 * Math.min(1, Math.max(0, (G.tau - JT.doors) / 1.5)) * (G.state === 'ending' ? 0.3 : 1) : 0.12, G.sceneId === 'jump' ? 1.3 : 1);
+    G.audio.setLoop('sea', quiet || G.sceneId === 'bomb' || G.sceneId === 'jump' ? 0 : G.sceneId === 'sandwich' ? 0.04 : 0.22);
     G.audio.setLoop('hiss', G.state === 'ff' ? 0.12 : 0.035);
     G.audio.muffle.frequency.setTargetAtTime(muffle, G.audio.ctx.currentTime, 0.1);
   }
@@ -1045,6 +1162,8 @@ function dynamicColliders() {
 
 function endingCam(st) {
   if (G.sceneId === 'sandwich') return endingCam4(st);
+  if (G.sceneId === 'bomb') return endingCamB(st);
+  if (G.sceneId === 'jump') return endingCamJ(st);
   const S = G.S, pos = new THREE.Vector3(), q = new THREE.Quaternion();
   if (st.side === 0) {
     const h = S.L.helos[st.helo]; const hp = heloPose(h, G.tau, {});

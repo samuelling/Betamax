@@ -3,6 +3,9 @@
 // Pure JS so the simulation (node or browser) and the renderer share exactly the same geometry.
 import { heightFast as heightAt } from './terrain.js';
 import { vehZ, heloPose, lcacDeckY } from './layout.js';
+import { carPose } from './layoutB.js';
+const CAR_DIM = { sedan: [0.92, 2.35, 1.45], wagon: [0.92, 2.4, 1.46], hatch: [0.9, 2.08, 1.48], suv: [0.97, 2.38, 1.78], pickup: [0.98, 2.7, 1.85] };
+const _cp = {};
 
 const BW_X = 2, BW_HALF = 1.2;
 
@@ -29,6 +32,9 @@ export class Obstacles {
     for (const h of L.hedges || []) ob(h.x, h.z, h.len / 2, 0.55, h.rot, h.h, 'hedge');
     for (const p of L.poles || []) this.circles.push({ x: p.x, z: p.z, r: 0.16, y1: gy(p.x, p.z) + 9 });
     for (const [x, z, rot] of L.cars) ob(x, z, 0.98, 2.35, rot, 1.75, 'car');
+    for (const b of L.blocks || []) ob(b.x, b.z, b.hx, b.hz, b.rot, b.h, b.kind);
+    for (const b of L.rawBoxes || []) this.boxes.push({ ...b });
+    for (const b of L.bales || []) this.circles.push({ x: b.x, z: b.z, r: 0.85, y1: gy(b.x, b.z) + 1.5 });
     for (const k of L.rocks) if (k.s > 0.45) this.circles.push({ x: k.x, z: k.z, r: k.s * 0.95, y1: gy(k.x, k.z) + k.s * k.sq * 0.8, walk: true });
     for (const t of L.trees) this.circles.push({ x: t.x, z: t.z, r: 0.35 * t.s, y1: gy(t.x, t.z) + 4 });
     // sandbag walls: low, you can jump onto them; soldiers can't walk through them
@@ -99,6 +105,12 @@ export class Obstacles {
         d.push({ x: v.x, z: z + 12.4, c: 1, s: 0, hx: 7.2, hz: 1.0, y0: g - 1, y1: g + 6.5, kind: 'veh', vi, walk: false });
       }
     });
+    for (const b of this.L.dynBoxes || []) if (t < b.until) d.push(b);
+    // The Bomb: the cars, moving or wrecked
+    for (const c of this.L.rides || []) {
+      const p = carPose(c, t, _cp), dm = CAR_DIM[c.kind] || CAR_DIM.sedan;
+      d.push({ x: p.x, z: p.z, c: Math.cos(p.yaw), s: Math.sin(p.yaw), hx: dm[0], hz: dm[1], y0: p.y - 0.3, y1: p.y + dm[2], kind: 'car', vi: 100 + c.i, walk: false });
+    }
     const hp = {};
     for (const h of this.L.helos) {
       heloPose(h, t, hp);
@@ -206,7 +218,7 @@ export class Obstacles {
     for (let cx = Math.floor(minx / this.cell); cx <= Math.floor(maxx / this.cell); cx++) for (let cz = Math.floor(minz / this.cell); cz <= Math.floor(maxz / this.cell); cz++) {
       const l = this.grid.get(cx * 10007 + cz); if (l) for (const o of l) if (o.hx !== undefined && (includeLow || !o.walk) && o.kind !== 'rail' && !this.ruined(o, t)) cands.push(o);
     }
-    if (t != null) for (const o of this.dynamic(t)) if (o.vi !== ignoreVeh) cands.push(o);
+    if (t != null) for (const o of this.dynamic(t)) if (ignoreVeh instanceof Set ? !ignoreVeh.has(o.vi) : o.vi !== ignoreVeh) cands.push(o);
     for (const o of cands) {
       // slab test in the box frame
       const [lax, laz] = Obstacles.local(o, ax, az), [lbx, lbz] = Obstacles.local(o, bx, bz);

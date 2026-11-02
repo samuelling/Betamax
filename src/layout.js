@@ -239,18 +239,21 @@ function crashPose(h, t, out) {
 }
 // East Sandwich, helicopter 1: in over the marsh from the north-east, down in the meadow, off east (-x) toward Dennis
 function extractPose(h, t, out) {
+  // arrives from direction (ax, az), leaves toward (dx, dz); defaults are East Sandwich's (from the north-east, off east)
+  const ax = h.ax ?? -0.62, az = h.az ?? 0.78, dx = h.dx ?? -1, dz = h.dz ?? 0.07, yIn = Math.atan2(-ax, -az), yOut = Math.atan2(dx, dz);
   const u = h.tTouch - t;
-  out.x = h.x; out.z = h.z; out.y = h.y; out.yaw = 2.47; out.pitch = 0; out.roll = 0; out.dead = false; out.spin = 1;
+  out.x = h.x; out.z = h.z; out.y = h.y; out.yaw = yIn; out.pitch = 0; out.roll = 0; out.dead = false; out.spin = 1;
   if (u > 0) {
     const flare = Math.min(u, 4), far = Math.max(0, u - 4), d = far * 46 + flare * flare * 2.2;
-    out.x = h.x - d * 0.62; out.z = h.z + d * 0.78; out.y = h.y + flare * 1.2 + Math.min(far * 4.5, 55);
+    out.x = h.x + d * ax; out.z = h.z + d * az; out.y = h.y + flare * 1.2 + Math.min(far * 4.5, 55);
     out.pitch = u < 4 ? -0.25 * smoothstep(0, 3, flare) : 0.12;
   } else if (t > h.tLift) {
     const w = t - h.tLift, turn = smoothstep(0.5, 4, w);
-    out.yaw = 2.47 + turn * (1.5 * Math.PI - 2.47);
+    let dy = yOut - yIn; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    out.yaw = yIn + turn * dy;
     out.y = h.y + w * w * 0.9 + w * 2;
-    const fw = Math.max(0, w - 3);
-    out.x = h.x - fw * fw * 2.6 - fw * 6; out.z = h.z + fw * 2;
+    const fw = Math.max(0, w - 3), d = fw * fw * 2.6 + fw * 6;
+    out.x = h.x + d * dx; out.z = h.z + d * dz;
     out.pitch = 0.18 * smoothstep(3, 5, w);
   }
   return out;

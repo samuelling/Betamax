@@ -356,6 +356,8 @@ export const ENGINE = {
   uh60: { sec: 4, main: 4.3, mainBlades: 4, tail: 19.8, tailBlades: 4, slap: 1.0, whine: 6800, whineA: 0.004, slapLP: 450 },
   // attack helicopter: 5-blade main rotor ~240 rpm, 3-blade tail
   gunship: { sec: 4, main: 4.7, mainBlades: 5, tail: 19, tailBlades: 4, slap: 1.2, whine: 7400, whineA: 0.005, slapLP: 520 },
+  // a car or pickup flat out on a two-lane: gasoline V8 at ~4000 rpm, open exhaust, tyre roar under it
+  car: { sec: 3, fire: 66, exhaustLP: 520, knockF: 1600, knock: 0.05, turbo: 3400, turboA: 0.003, rumble: 0.7, uneven: 0.18 },
 };
 function synthEngine(r, sr, P) {
   const L = Math.floor(P.sec * sr), X = Math.floor(0.25 * sr), n = L + X, d = new Float32Array(n);
@@ -417,8 +419,8 @@ function synthRotor(r, sr, P) {
   softclip(d, 1.2);
   return loopify(d, L, X);
 }
-const ENGINE_POOLS = { ifv: 3, track: 3, lcac: 2, uh60: 2, gunship: 2 };
-const ENGINE_REF = { ifv: [14, 0.55], track: [10, 0.5], lcac: [30, 0.9], uh60: [35, 0.9], gunship: [40, 0.95] };
+const ENGINE_POOLS = { ifv: 3, track: 3, lcac: 2, uh60: 2, gunship: 2, car: 4 };
+const ENGINE_REF = { ifv: [14, 0.55], track: [10, 0.5], lcac: [30, 0.9], uh60: [35, 0.9], gunship: [40, 0.95], car: [10, 0.55] };
 
 // which recipe, how many variants, which distance bands
 const RECIPES = {
@@ -518,7 +520,7 @@ export class Audio {
     // positional machine voices (vehicle engines, tracks, rotors) — reversed loops on the world bus
     for (const [cls, k] of Object.entries(ENGINE_POOLS)) {
       const P = ENGINE[cls], rr = mulberry32(300 + cls.length * 17);
-      const x = cls === 'track' ? synthTrack(rr, this.sr, P) : cls === 'lcac' ? synthLCAC(rr, this.sr, P) : cls === 'ifv' ? synthEngine(rr, this.sr, P) : synthRotor(rr, this.sr, P);
+      const x = cls === 'track' ? synthTrack(rr, this.sr, P) : cls === 'lcac' ? synthLCAC(rr, this.sr, P) : cls === 'ifv' || cls === 'car' ? synthEngine(rr, this.sr, P) : synthRotor(rr, this.sr, P);
       const buf = this.rev(this.toBuf(x));
       this.eng[cls] = [];
       for (let j = 0; j < k; j++) {

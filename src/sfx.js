@@ -3,6 +3,7 @@
 import { SHOT_F } from './sim.js';
 import { heightAt, WATERLINE_Z } from './terrain.js';
 import { vehZ, vehSpeed, heloPose, gunshipPose } from './layout.js';
+import { carPose } from './layoutB.js';
 
 function lb(A, n, v) { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (A[m * SHOT_F] < v) lo = m + 1; else hi = m; } return lo; }
 const IMPACT = [null, 'iSand', 'iWater', 'iBody', 'iHard'];
@@ -76,7 +77,7 @@ export function worldSounds(S, tau, L, body, A, pb) {
 }
 
 // engines, tracks and rotors around you
-const _em = [], _hp = {};
+const _em = [], _hp = {}, _cp = {};
 export function machineSounds(S, tau, L, A) {
   _em.length = 0;
   S.L.vehicles.forEach((v, vi) => {
@@ -91,6 +92,13 @@ export function machineSounds(S, tau, L, A) {
     } else {
       _em.push({ cls: 'lcac', id: vi, x: v.x, y: y + 2, z, load: sp > 0.5 ? 1 : 0.6, pitch: sp > 0.5 ? 1 : 0.86 });
     }
+  });
+  // The Jump: the four Allisons through the skin
+  if (S.L.planes) for (const sx of [-1, 1]) _em.push({ cls: 'lcac', id: 50 + sx, x: sx * 7.5, y: 3.2, z: -4.6, load: 1, pitch: 1.12 });
+  if (S.L.rides) S.L.rides.forEach((c, ci) => {
+    if (tau < c.t0 - 3 || (c.burnT != null && tau > c.burnT) || (c.crash && tau > c.crash.t + 1.5)) return;
+    carPose(c, tau, _cp); const k = Math.min(1, _cp.v / 30);
+    _em.push({ cls: 'car', id: ci, x: _cp.x, y: _cp.y + 0.8, z: _cp.z, load: 0.35 + 0.65 * k, pitch: 0.55 + 0.75 * k });
   });
   S.L.helos.forEach((h, hi) => { heloPose(h, tau, _hp); if (_hp.dead) return; _em.push({ cls: 'uh60', id: hi, x: _hp.x, y: _hp.y + 2, z: _hp.z, load: 1, pitch: 1 + _hp.pitch * 0.3 }); });
   S.L.gunships.forEach((g, gi) => { gunshipPose(g, tau, _hp); if (!_hp.alive) return; _em.push({ cls: 'gunship', id: gi, x: _hp.x, y: _hp.y, z: _hp.z, load: 1, pitch: _hp.burn ? 0.85 : 1 }); });

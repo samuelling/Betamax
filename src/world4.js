@@ -60,23 +60,7 @@ export function buildSandwich(W) {
     const lm = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
     const a = new THREE.Mesh(merge(yel), lm(0xd8b030)); a.receiveShadow = true; root.add(a);
     const b = new THREE.Mesh(merge(wht), lm(0xd8d8d0)); b.receiveShadow = true; root.add(b); }
-  // ---------- fieldstone walls and picket fences ----------
-  { const stones = [], pickets = [];
-    for (const w of L.walls) {
-      const c = Math.cos(w.rot), s = Math.sin(w.rot);
-      if (w.kind === 'stone') {
-        for (let u = -w.len / 2; u < w.len / 2; u += 0.5 + r() * 0.14) for (let row = 0; row < 2; row++) {
-          const sz = 0.3 + r() * 0.16, lx = u + (row % 2) * 0.24, lz = (r() - 0.5) * 0.22, x = w.x + lx * c, z = w.z - lx * s + lz;
-          const g = new THREE.IcosahedronGeometry(sz, 0); place(g, x, heightAt(x, z) + 0.2 + row * 0.36 + sz * 0.2, z, r() * 3, r() * 3, r() * 3, 1.3, 0.75, 1);
-          stones.push(g);
-        }
-      } else {
-        for (let u = -w.len / 2; u <= w.len / 2; u += 0.16) { const x = w.x + u * c, z = w.z - u * s; pickets.push(box(0.08, 0.95, 0.025, x, heightAt(x, z) + 0.47, z, 0, w.rot, 0)); }
-        for (const yy of [0.3, 0.75]) pickets.push(box(w.len, 0.06, 0.04, w.x, heightAt(w.x, w.z) + yy, w.z, 0, w.rot, 0));
-      }
-    }
-    if (stones.length) { const sm = new THREE.Mesh(merge(stones), std([0.48, 0.45, 0.41], 0.95)); sm.castShadow = sm.receiveShadow = true; root.add(sm); }
-    if (pickets.length) { const pm = new THREE.Mesh(merge(pickets), std([0.92, 0.91, 0.87], 0.7)); pm.castShadow = pm.receiveShadow = true; root.add(pm); } }
+  addWalls(root, L.walls, r);
   // ---------- privet hedges: lumpy, leafy boxes ----------
   { const hs = [];
     for (const h of L.hedges) {
@@ -85,36 +69,11 @@ export function buildSandwich(W) {
       g.computeVertexNormals(); place(g, h.x, heightAt(h.x, h.z) + h.h / 2, h.z, 0, h.rot, 0); hs.push(g);
     }
     if (hs.length) { const m = new THREE.Mesh(merge(hs), std([0.2, 0.3, 0.13], 0.95)); m.castShadow = m.receiveShadow = true; root.add(m); } }
-  // ---------- trees ----------
-  { const kinds = { oak: [], maple: [], pine: [], cedar: [] };
-    for (const t of L.trees) kinds[t.kind].push(t);
-    const bark = std([0.3, 0.25, 0.2], 0.95), pineBark = std([0.38, 0.27, 0.2], 0.95);
-    const make = (list, trunkG, crownG, crownMat, tMat) => {
-      if (!list.length) return;
-      const ti = new THREE.InstancedMesh(trunkG, tMat, list.length), ci = new THREE.InstancedMesh(crownG, crownMat, list.length);
-      list.forEach((t, i) => { _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.3), t.s); _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m); });
-      ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true; root.add(ti, ci);
-    };
-    const blobs = (n, y0, y1, rad, sq) => { const l = []; for (let k = 0; k < n; k++) l.push(place(new THREE.IcosahedronGeometry(rad * (0.7 + r() * 0.5), 1), (r() - 0.5) * rad * 1.6, y0 + r() * (y1 - y0), (r() - 0.5) * rad * 1.6, 0, 0, 0, 1, sq, 1)); return merge(l); };
-    make(kinds.oak, cyl(0.2, 0.32, 5, 7, 0, 2.5, 0), blobs(7, 5, 8.5, 2.2, 0.7), std([0.2, 0.28, 0.14], 0.9), bark);
-    make(kinds.maple, cyl(0.16, 0.26, 4.4, 7, 0, 2.2, 0), blobs(6, 4.4, 7.4, 2.0, 0.75), std([0.25, 0.33, 0.15], 0.9), bark);
-    // pitch pine: a crooked bare trunk and a flat-topped, clumpy crown
-    { const l = []; for (let k = 0; k < 6; k++) l.push(place(new THREE.IcosahedronGeometry(1.2 + r() * 0.6, 1), (r() - 0.5) * 3, 8 + r() * 2.2, (r() - 0.5) * 3, 0, 0, 0, 1, 0.5, 1));
-      make(kinds.pine, merge([cyl(0.13, 0.22, 9, 6, 0, 4.5, 0, 0, 0, 0.05), cyl(0.05, 0.08, 2, 5, 0.6, 7.2, 0, 0, 0, 0.9)]), merge(l), std([0.17, 0.24, 0.13], 0.9), pineBark); }
-    // eastern red cedar: a dark narrow spire
-    make(kinds.cedar, cyl(0.1, 0.16, 2, 6, 0, 1, 0), merge([place(new THREE.ConeGeometry(1.4, 5.5, 8), 0, 3.6, 0), place(new THREE.ConeGeometry(1.0, 3.2, 8), 0, 5.6, 0)]), std([0.13, 0.2, 0.12], 0.9), bark);
-  }
+  addTrees(root, L.trees, r);
   // ---------- cars in the drives and abandoned on 6A ----------
   { const kinds = ['sedan', 'suv', 'pickup', 'wagon', 'hatch', 'sedan', 'suv', 'pickup'];
     W.cars = L.cars.map(([x, z, rot], i) => { const paintHex = PAINT[(i * 5 + 2) % PAINT.length], car = buildCar(kinds[i % kinds.length], paintHex, i + 11); car.paintHex = paintHex; car.root.position.set(x, heightAt(x, z), z); car.root.rotation.y = rot; root.add(car.root); return car; }); }
-  // ---------- utility poles and the wires between them; mailboxes ----------
-  { const parts = [], wires = [];
-    for (const p of L.poles) { const y = heightAt(p.x, p.z); parts.push(cyl(0.13, 0.16, 10, 8, p.x, y + 5, p.z)); parts.push(box(2.2, 0.12, 0.12, p.x, y + 9.3, p.z)); for (const dx of [-0.9, 0, 0.9]) parts.push(cyl(0.05, 0.05, 0.18, 6, p.x + dx, y + 9.45, p.z)); }
-    for (let i = 0; i < L.poles.length - 1; i++) { const a = L.poles[i], b = L.poles[i + 1], ya = heightAt(a.x, a.z) + 9.5, yb = heightAt(b.x, b.z) + 9.5;
-      for (const dx of [-0.9, 0, 0.9]) { const pts = []; for (let k = 0; k <= 12; k++) { const u = k / 12; pts.push(new THREE.Vector3(a.x + (b.x - a.x) * u + dx, ya + (yb - ya) * u - Math.sin(Math.PI * u) * 0.9, a.z + (b.z - a.z) * u)); } wires.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.012, 3)); } }
-    for (const m of L.mailboxes) { const y = heightAt(m.x, m.z); parts.push(box(0.08, 1.05, 0.08, m.x, y + 0.52, m.z, 0, m.rot, 0)); parts.push(place(new THREE.CylinderGeometry(0.11, 0.11, 0.45, 10, 1, false, 0, Math.PI), m.x, y + 1.1, m.z, Math.PI / 2, m.rot, 0)); parts.push(box(0.22, 0.12, 0.45, m.x, y + 1.05, m.z, 0, m.rot, 0)); }
-    const pm = new THREE.Mesh(merge(parts), std([0.36, 0.3, 0.24], 0.9)); pm.castShadow = pm.receiveShadow = true; root.add(pm);
-    if (wires.length) root.add(new THREE.Mesh(merge(wires), std([0.08, 0.08, 0.08], 0.6))); }
+  addPoles(root, L.poles, L.mailboxes);
   // ---------- marsh grass and long meadow grass: instanced cards ----------
   { const tex = TX.makeGrassTex(), mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1, color: new THREE.Color(0.95, 0.9, 0.62) });
     const card = merge([new THREE.PlaneGeometry(1.4, 0.9).translate(0, 0.45, 0), new THREE.PlaneGeometry(1.4, 0.9).translate(0, 0.45, 0).rotateY(Math.PI / 2)]);
@@ -133,4 +92,55 @@ export function buildSandwich(W) {
   // ---------- a scorched, torn clearing where it came down ----------
   { const parts = []; for (let k = 0; k < 14; k++) { const a = r() * 6.28, d = 3 + r() * 9, x = CRASH.x + Math.cos(a) * d, z = CRASH.z + Math.sin(a) * d; parts.push(cyl(0.08 + r() * 0.1, 0.12 + r() * 0.12, 1 + r() * 3, 6, x, heightAt(x, z) + 0.5, z, (r() - 0.5) * 0.8, 0, (r() - 0.5) * 0.8)); }
     const m = new THREE.Mesh(merge(parts), std([0.16, 0.13, 0.11], 0.95)); m.castShadow = true; root.add(m); }
+}
+
+export function addWalls(root, walls, r) {
+  // ---------- fieldstone walls and picket fences ----------
+  { const stones = [], pickets = [];
+    for (const w of walls) {
+      const c = Math.cos(w.rot), s = Math.sin(w.rot);
+      if (w.kind === 'stone') {
+        for (let u = -w.len / 2; u < w.len / 2; u += 0.5 + r() * 0.14) for (let row = 0; row < 2; row++) {
+          const sz = 0.3 + r() * 0.16, lx = u + (row % 2) * 0.24, lz = (r() - 0.5) * 0.22, x = w.x + lx * c, z = w.z - lx * s + lz;
+          const g = new THREE.IcosahedronGeometry(sz, 0); place(g, x, heightAt(x, z) + 0.2 + row * 0.36 + sz * 0.2, z, r() * 3, r() * 3, r() * 3, 1.3, 0.75, 1);
+          stones.push(g);
+        }
+      } else {
+        for (let u = -w.len / 2; u <= w.len / 2; u += 0.16) { const x = w.x + u * c, z = w.z - u * s; pickets.push(box(0.08, 0.95, 0.025, x, heightAt(x, z) + 0.47, z, 0, w.rot, 0)); }
+        for (const yy of [0.3, 0.75]) pickets.push(box(w.len, 0.06, 0.04, w.x, heightAt(w.x, w.z) + yy, w.z, 0, w.rot, 0));
+      }
+    }
+    if (stones.length) { const sm = new THREE.Mesh(merge(stones), std([0.48, 0.45, 0.41], 0.95)); sm.castShadow = sm.receiveShadow = true; root.add(sm); }
+    if (pickets.length) { const pm = new THREE.Mesh(merge(pickets), std([0.92, 0.91, 0.87], 0.7)); pm.castShadow = pm.receiveShadow = true; root.add(pm); } }
+}
+export function addTrees(root, trees, r) {
+  // ---------- trees ----------
+  { const kinds = { oak: [], maple: [], pine: [], cedar: [] };
+    for (const t of trees) kinds[t.kind].push(t);
+    const bark = std([0.3, 0.25, 0.2], 0.95), pineBark = std([0.38, 0.27, 0.2], 0.95);
+    const make = (list, trunkG, crownG, crownMat, tMat) => {
+      if (!list.length) return;
+      const ti = new THREE.InstancedMesh(trunkG, tMat, list.length), ci = new THREE.InstancedMesh(crownG, crownMat, list.length);
+      list.forEach((t, i) => { _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.3), t.s); _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m); });
+      ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true; root.add(ti, ci);
+    };
+    const blobs = (n, y0, y1, rad, sq) => { const l = []; for (let k = 0; k < n; k++) l.push(place(new THREE.IcosahedronGeometry(rad * (0.7 + r() * 0.5), 1), (r() - 0.5) * rad * 1.6, y0 + r() * (y1 - y0), (r() - 0.5) * rad * 1.6, 0, 0, 0, 1, sq, 1)); return merge(l); };
+    make(kinds.oak, cyl(0.2, 0.32, 5, 7, 0, 2.5, 0), blobs(7, 5, 8.5, 2.2, 0.7), std([0.2, 0.28, 0.14], 0.9), bark);
+    make(kinds.maple, cyl(0.16, 0.26, 4.4, 7, 0, 2.2, 0), blobs(6, 4.4, 7.4, 2.0, 0.75), std([0.25, 0.33, 0.15], 0.9), bark);
+    // pitch pine: a crooked bare trunk and a flat-topped, clumpy crown
+    { const l = []; for (let k = 0; k < 6; k++) l.push(place(new THREE.IcosahedronGeometry(1.2 + r() * 0.6, 1), (r() - 0.5) * 3, 8 + r() * 2.2, (r() - 0.5) * 3, 0, 0, 0, 1, 0.5, 1));
+      make(kinds.pine, merge([cyl(0.13, 0.22, 9, 6, 0, 4.5, 0, 0, 0, 0.05), cyl(0.05, 0.08, 2, 5, 0.6, 7.2, 0, 0, 0, 0.9)]), merge(l), std([0.17, 0.24, 0.13], 0.9), pineBark); }
+    // eastern red cedar: a dark narrow spire
+    make(kinds.cedar, cyl(0.1, 0.16, 2, 6, 0, 1, 0), merge([place(new THREE.ConeGeometry(1.4, 5.5, 8), 0, 3.6, 0), place(new THREE.ConeGeometry(1.0, 3.2, 8), 0, 5.6, 0)]), std([0.13, 0.2, 0.12], 0.9), bark);
+  }
+}
+export function addPoles(root, poles, mailboxes) {
+  // ---------- utility poles and the wires between them; mailboxes ----------
+  { const parts = [], wires = [];
+    for (const p of poles) { const y = heightAt(p.x, p.z); parts.push(cyl(0.13, 0.16, 10, 8, p.x, y + 5, p.z)); parts.push(box(2.2, 0.12, 0.12, p.x, y + 9.3, p.z)); for (const dx of [-0.9, 0, 0.9]) parts.push(cyl(0.05, 0.05, 0.18, 6, p.x + dx, y + 9.45, p.z)); }
+    for (let i = 0; i < poles.length - 1; i++) { const a = poles[i], b = poles[i + 1], ya = heightAt(a.x, a.z) + 9.5, yb = heightAt(b.x, b.z) + 9.5;
+      for (const dx of [-0.9, 0, 0.9]) { const pts = []; for (let k = 0; k <= 12; k++) { const u = k / 12; pts.push(new THREE.Vector3(a.x + (b.x - a.x) * u + dx, ya + (yb - ya) * u - Math.sin(Math.PI * u) * 0.9, a.z + (b.z - a.z) * u)); } wires.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.012, 3)); } }
+    for (const m of mailboxes) { const y = heightAt(m.x, m.z); parts.push(box(0.08, 1.05, 0.08, m.x, y + 0.52, m.z, 0, m.rot, 0)); parts.push(place(new THREE.CylinderGeometry(0.11, 0.11, 0.45, 10, 1, false, 0, Math.PI), m.x, y + 1.1, m.z, Math.PI / 2, m.rot, 0)); parts.push(box(0.22, 0.12, 0.45, m.x, y + 1.05, m.z, 0, m.rot, 0)); }
+    const pm = new THREE.Mesh(merge(parts), std([0.36, 0.3, 0.24], 0.9)); pm.castShadow = pm.receiveShadow = true; root.add(pm);
+    if (wires.length) root.add(new THREE.Mesh(merge(wires), std([0.08, 0.08, 0.08], 0.6))); }
 }

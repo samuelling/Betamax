@@ -60,8 +60,12 @@ export function buildCar(variant, paintHex, seed = 1) {
   hood.rotation.x = Math.atan2(V.belt - V.hood, V.L / 2 - V.cab[1]) * 0.6; parts[parts.length - 1].q0 = hood.quaternion.clone();
   if (!V.bed && variant === 'sedan') add(new T.BoxGeometry(V.W - 0.25, 0.03, -V.cab[0] - V.L / 2 + 0.55 + V.L / 2 - 0.3), paint, 'trunk', 0, V.trunk + 0.02, (V.cab[0] - V.L / 2 + 0.25) / 2);
   if (V.bed) { // the pickup's bed
-    const bed = add(new T.BoxGeometry(V.W - 0.1, 0.45, 1.75), plastic, 'bed', 0, V.belt + 0.05, -V.L / 2 + 1.0);
-    for (const sx of [-1, 1]) add(new T.BoxGeometry(0.05, 0.42, 1.8), paint, 'door', sx * (V.W / 2 - 0.03), V.belt + 0.2, -V.L / 2 + 1.0);
+    // an open tub: a ribbed floor on top of the body, side walls, the front wall and a tailgate
+    const bz = (V.cab[0] - 0.06 - V.L / 2) / 2;
+    add(new T.BoxGeometry(V.W - 0.12, 0.04, -V.cab[0] + V.L / 2 - 0.15), plastic, 'bed', 0, V.belt + 0.02, bz);
+    for (const sx of [-1, 1]) add(new T.BoxGeometry(0.06, 0.44, -V.cab[0] + V.L / 2 - 0.12), paint, 'door', sx * (V.W / 2 - 0.03), V.belt + 0.22, bz);
+    add(new T.BoxGeometry(V.W - 0.06, 0.44, 0.06), paint, 'trim', 0, V.belt + 0.22, V.cab[0] - 0.08);
+    add(new T.BoxGeometry(V.W - 0.06, 0.44, 0.06), paint, 'trunk', 0, V.belt + 0.22, -V.L / 2 + 0.03);
   }
   // lights, grille, bumpers, mirrors
   const lamp = std({ color: 0xf4f0e0, roughness: 0.1, emissive: 0x3a3830 }), tail = std({ color: 0x8a1010, roughness: 0.2, emissive: 0x2a0404 });

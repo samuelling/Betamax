@@ -96,39 +96,44 @@ export class Player {
     const sens = 0.0022 * (1 - this.ads * 0.32);
     this.yaw -= inp.lookX * sens; this.pitch -= inp.lookY * sens;
     this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
-    this.crouch += ((inp.crouch ? 1 : 0) - this.crouch) * Math.min(1, dt * 10);
+    this.crouch += ((this.ride ? (inp.crouch ? 1 : this.ride.crouch) : inp.crouch ? 1 : 0) - this.crouch) * Math.min(1, dt * 10);
     this.ads += ((inp.ads && this.reloadT < 0 ? 1 : 0) - this.ads) * Math.min(1, dt * 13);
-    const sprint = inp.sprint && inp.moveZ > 0.3 && this.ads < 0.3 && this.crouch < 0.3;
-    let sp = (sprint ? 6.6 : 4.2) * (this.gun.userData.heavy || 1);
-    sp *= 1 - this.crouch * 0.45; sp *= 1 - this.ads * 0.35;
-    if (this.reloadT >= 0) sp *= 0.8;
-    const gy0 = heightAt(this.pos.x, this.pos.z);
-    if (gy0 < -0.25) sp *= 0.6;
-    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
-    let wx = fx * inp.moveZ + rx * inp.moveX, wz = fz * inp.moveZ + rz * inp.moveX;
-    const l = Math.hypot(wx, wz); if (l > 1) { wx /= l; wz /= l; }
-    const want = Math.hypot(wx, wz) > 0.01;
-    const acc = this.onGround ? (want ? 16 : 22) : 2.5;
-    this.vel.x += (wx * sp - this.vel.x) * Math.min(1, dt * acc);
-    this.vel.z += (wz * sp - this.vel.z) * Math.min(1, dt * acc);
-    this.coyote = this.onGround ? 0.12 : Math.max(0, (this.coyote || 0) - dt);
-    this.jumped = false;
-    if (inp.jump && this.coyote > 0 && this.vel.y <= 0.5) { this.vel.y = 4.8; this.onGround = false; this.coyote = 0; this.jumped = true; }
-    this.vel.y -= 18 * dt;
-    let nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
-    // solid world: slide along walls, hulls, railings; step up stairs and decks (<= ~0.45 m)
-    [nx, nz] = obs.pushOut(nx, nz, 0.34, this.pos.y, tau, -1, this.eyeH + 0.1);
-    let gy = obs.surfaceY(nx, nz, this.pos.y, tau);
-    if (gy > this.pos.y + 0.5 && this.onGround) { nx = this.pos.x; nz = this.pos.z; gy = obs.surfaceY(nx, nz, this.pos.y, tau); }
-    nx = Math.max(ARENA.x0 - 25, Math.min(ARENA.x1 + 25, nx));
-    nz = Math.max(ARENA.z0 - 25, Math.min(ARENA.z1 + 25, nz));
-    this.vel.x = (nx - this.pos.x) / Math.max(dt, 1e-4) * 0.5 + this.vel.x * 0.5;
-    this.vel.z = (nz - this.pos.z) / Math.max(dt, 1e-4) * 0.5 + this.vel.z * 0.5;
-    this.pos.x = nx; this.pos.z = nz;
-    this.pos.y += this.vel.y * dt;
-    if (this.pos.y <= gy) { this.pos.y = gy; this.vel.y = 0; this.onGround = true; }
-    else if (this.pos.y - gy < 0.3 && this.vel.y <= 0) { this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 18); this.onGround = true; }
-    else this.onGround = false;
+    let sprint = false;
+    if (this.ride) {   // riding: the car carries you; you look, crouch behind the bed rail, shoot, reload
+      this.pos.copy(this.ride.pos); this.vel.set(0, 0, 0); this.onGround = true; this.jumped = false;
+    } else {
+      sprint = inp.sprint && inp.moveZ > 0.3 && this.ads < 0.3 && this.crouch < 0.3;
+      let sp = (sprint ? 6.6 : 4.2) * (this.gun.userData.heavy || 1);
+      sp *= 1 - this.crouch * 0.45; sp *= 1 - this.ads * 0.35;
+      if (this.reloadT >= 0) sp *= 0.8;
+      const gy0 = heightAt(this.pos.x, this.pos.z);
+      if (gy0 < -0.25) sp *= 0.6;
+      const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw), rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
+      let wx = fx * inp.moveZ + rx * inp.moveX, wz = fz * inp.moveZ + rz * inp.moveX;
+      const l = Math.hypot(wx, wz); if (l > 1) { wx /= l; wz /= l; }
+      const want = Math.hypot(wx, wz) > 0.01;
+      const acc = this.onGround ? (want ? 16 : 22) : 2.5;
+      this.vel.x += (wx * sp - this.vel.x) * Math.min(1, dt * acc);
+      this.vel.z += (wz * sp - this.vel.z) * Math.min(1, dt * acc);
+      this.coyote = this.onGround ? 0.12 : Math.max(0, (this.coyote || 0) - dt);
+      this.jumped = false;
+      if (inp.jump && this.coyote > 0 && this.vel.y <= 0.5) { this.vel.y = 4.8; this.onGround = false; this.coyote = 0; this.jumped = true; }
+      this.vel.y -= 18 * dt;
+      let nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
+      // solid world: slide along walls, hulls, railings; step up stairs and decks (<= ~0.45 m)
+      [nx, nz] = obs.pushOut(nx, nz, 0.34, this.pos.y, tau, -1, this.eyeH + 0.1);
+      let gy = obs.surfaceY(nx, nz, this.pos.y, tau);
+      if (gy > this.pos.y + 0.5 && this.onGround) { nx = this.pos.x; nz = this.pos.z; gy = obs.surfaceY(nx, nz, this.pos.y, tau); }
+      nx = Math.max(ARENA.x0 - 25, Math.min(ARENA.x1 + 25, nx));
+      nz = Math.max(ARENA.z0 - 25, Math.min(ARENA.z1 + 25, nz));
+      this.vel.x = (nx - this.pos.x) / Math.max(dt, 1e-4) * 0.5 + this.vel.x * 0.5;
+      this.vel.z = (nz - this.pos.z) / Math.max(dt, 1e-4) * 0.5 + this.vel.z * 0.5;
+      this.pos.x = nx; this.pos.z = nz;
+      this.pos.y += this.vel.y * dt;
+      if (this.pos.y <= gy) { this.pos.y = gy; this.vel.y = 0; this.onGround = true; }
+      else if (this.pos.y - gy < 0.3 && this.vel.y <= 0) { this.pos.y += (gy - this.pos.y) * Math.min(1, dt * 18); this.onGround = true; }
+      else this.onGround = false;
+    }
 
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.bob += hs * dt * 1.9;
