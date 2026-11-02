@@ -12,7 +12,7 @@ import { Post } from './post.js';
 import { heightAt, inMinefield, ARENA } from './terrain.js';
 import { vehZ, heloPose } from './layout.js';
 import * as TX from './textures.js';
-import { VCRIntro, drawMenu, MENU_W, MENU_H, PLAY_BOX } from './vcr.js';
+import { VCRIntro, drawMenu, MENU_W, MENU_H, PLAY_BOX, CHAPTERS } from './vcr.js';
 import { Pickups } from './pickups.js';
 import { Home } from './home.js';
 import { pickHouse } from './housetypes.js';
@@ -80,7 +80,7 @@ function boot() {
   G.brass = new THREE.InstancedMesh(brassGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.75, 0.56, 0.26, THREE.SRGBColorSpace), metalness: 1, roughness: 0.3 }), 48);
   G.brass.castShadow = true; G.brass.frustumCulled = false; G.brass.count = 0; scene.add(G.brass);
   G.casings = []; G.props = [];
-  window.BW = G; G.possess = (i) => beginPossess(i); G.camera = camera; G.endingCam = (i) => endingCam(G.S.actors[i]); G.ending = (i) => { G.body = i; G.tau = G.S.actors[i].spawn; beginEnding(); };
+  window.BW = G; G.title = () => showTitle(); G.possess = (i) => beginPossess(i); G.camera = camera; G.endingCam = (i) => endingCam(G.S.actors[i]); G.ending = (i) => { G.body = i; G.tau = G.S.actors[i].spawn; beginEnding(); };
   // debug: look at actor i from distance d (no player control)
   G.studio = (i, tau, d = 3, ang = 0.6, h = 1.2, clean = true) => {
     G.state = 'studio'; G.tau = tau; tick(0.0001, false);
@@ -271,6 +271,32 @@ function showTitle() {
     G.audio.init(); G.audio.play(G.audio.B.clunk, 0.6); G.input.lock();
     $('ovl').classList.add('out'); setTimeout(startTape, 380);
   };
+  // chapters: straight into any recorded tape
+  const tt = $('tt');
+  for (const ch of CHAPTERS) {
+    const [x, y, w, h] = ch.box, e = document.createElement('button'); e.className = 'chap'; e.setAttribute('aria-label', ch.label);
+    Object.assign(e.style, { position: 'absolute', margin: 0, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', left: `${x / MENU_W * 100}%`, top: `${y / MENU_H * 100}%`, width: `${w / MENU_W * 100}%`, height: `${h / MENU_H * 100}%` });
+    e.onmouseenter = () => (e.style.background = 'rgba(244,241,232,.12)'); e.onmouseleave = () => (e.style.background = 'transparent');
+    e.onclick = () => { G.audio.init(); G.audio.play(G.audio.B.clunk, 0.6); G.input.lock(); startChapter(ch.id); };
+    tt.appendChild(e);
+  }
+}
+// start from a chapter: the beach, a recorded middle tape (as one of the beach's Cape Cod defenders), or a home
+function startChapter(id) {
+  if (G.sceneId !== 'beach') useScene('beach');
+  if (id === 'beach') { $('ovl').classList.add('out'); setTimeout(startTape, 380); return; }
+  const S = G.S, a = S.actors.find((q) => q.side === 0 && q.helo >= 0);
+  if (id === 'homeUS' || id === 'homeTX') {
+    const side = id === 'homeTX' ? 1 : 0, b = S.actors.find((q) => q.side === side && q.deathTime > 0) || S.actors.find((q) => q.side === side);
+    G.lives = [lifeOf(b.id)]; goHome(b.id, false); return;
+  }
+  G.lives = [lifeOf(a.id)];
+  const title = { sandwich: 'EAST SANDWICH', bomb: 'THE BOMB', jump: 'THE JUMP' }[id], n = { sandwich: 2, bomb: 3, jump: 4 }[id];
+  overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE ${n} / 5</div><h2 style="margin-top:3em">${title}</h2><p style="opacity:.6">loading&hellip;</p>`, 'blue');
+  setTimeout(() => {
+    loadTape(id, ident(a.id), a.skin);
+    if (id === 'bomb') startBomb(); else if (id === 'jump') startJump(); else startSandwich();
+  }, 80);
 }
 
 function startTape() {

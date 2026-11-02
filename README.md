@@ -16,6 +16,8 @@ Open `index.html` (a single self-contained file), or enable GitHub Pages on `mai
 
 Reversed bullets still hurt. The edges of the beach are mined.
 
+The title menu also lets you start from any recorded chapter: the beach, East Sandwich, The Bomb, The Jump, or the last tape at home (Cape Cod or Texas).
+
 ## How it works
 - `src/sim.js`: a deterministic forward simulation of the whole battle: about 330 Texan troops in six waves of AAVs and LCAC hovercraft, about 60 Cape Cod defenders from two helicopter insertions with M250 gunners, two Texan gunships (one shot down into the bay), rocket artillery, naval guns, drone swarms, smoke screens, Javelin kills and burning houses. Recorded at 10 Hz.
 - `src/playback.js`: renders the recording at any tape position `tau`. Every effect (tracers, impacts, smoke, explosions, wrecks) is a pure function of `tau`, so rewind, fast-forward and checkpoints all come for free.
