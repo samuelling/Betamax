@@ -24,6 +24,8 @@ const M = {
   ranger: new THREE.MeshStandardMaterial({ color: sRGB(0.3, 0.31, 0.24), roughness: 0.75, metalness: 0.05 }),
   pouch: new THREE.MeshStandardMaterial({ color: sRGB(0.42, 0.38, 0.28), roughness: 0.95 }),
   shell: new THREE.MeshStandardMaterial({ color: sRGB(0.32, 0.06, 0.05), roughness: 0.55 }),
+  m2park: new THREE.MeshStandardMaterial({ color: sRGB(0.2, 0.21, 0.19), roughness: 0.45, metalness: 0.55 }),
+  m2od: new THREE.MeshStandardMaterial({ color: sRGB(0.3, 0.32, 0.22), roughness: 0.7, metalness: 0.15 }),
 };
 const GRIP = new THREE.Vector3(0.012, -0.095, 0.065);
 
@@ -147,6 +149,54 @@ function buildLMG(id, inv) {
     makeMag, magSize: 100, rpm: inv ? 720 : 650, dmg: 46, head: 200, spread: 1.5, kick: 0.024, cal: 2, rate: inv ? 0.96 : 1.0, gainK: 1.15, reloadScale: 1.9, adsFov: 50, heavy: 0.85 });
 }
 
+// M2HB .50 on a pedestal mount: the gun in the bed of the truck on The Bomb. Spade grips at the back, the butterfly
+// trigger between them, the perforated barrel support, a heavy barrel with its carrying handle, the leaf sight, the
+// ammo can on the left feeding a belt of big rounds, the cradle and the post going down into the bed.
+function buildM2() {
+  const g = new THREE.Group(), park = M.m2park, od = M.m2od;
+  add(g, rb(0.18, 0.21, 0.6, 0.012), park, 0, 0.02, -0.32);                    // receiver
+  add(g, rb(0.165, 0.035, 0.4, 0.01), park, 0, 0.145, -0.33);                  // feed cover
+  add(g, rb(0.05, 0.03, 0.06, 0.008), M.steel, 0, 0.17, -0.15);                 // cover latch
+  for (let k = 0; k < 3; k++) add(g, rb(0.186, 0.012, 0.02, 0.003), M.black, 0, -0.03 + k * 0.05, -0.08 - k * 0.002);   // side-plate rivet rows
+  for (let k = 0; k < 6; k++) for (const sx of [-1, 1]) add(g, cylZ(0.008, 0.008, 0.006, 8), M.steel, sx * 0.093, 0.06, -0.12 - k * 0.08, 0, Math.PI / 2, 0);
+  add(g, rb(0.2, 0.2, 0.035, 0.008), park, 0, 0.02, 0.0);                       // back plate
+  const ch = add(g, rb(0.022, 0.03, 0.1, 0.006), M.steel, 0.105, 0.03, -0.24);  // charging handle (retracting slide), right
+  add(g, rb(0.06, 0.012, 0.012, 0.004), M.steel, 0.12, 0.03, -0.2);
+  // spade grips and the butterfly trigger
+  for (const sx of [-1, 1]) {
+    add(g, rb(0.03, 0.03, 0.09, 0.008), park, sx * 0.085, 0.0, 0.055);
+    const h = add(g, new THREE.CylinderGeometry(0.021, 0.021, 0.15, 12), M.rubber, sx * 0.112, 0.0, 0.1);
+    add(g, new THREE.CylinderGeometry(0.024, 0.024, 0.012, 12), M.black, sx * 0.112, 0.08, 0.1); void h;
+  }
+  add(g, rb(0.09, 0.05, 0.012, 0.006), M.steel, 0, 0.02, 0.06, -0.4);           // butterfly trigger
+  // sights: folding leaf at the back, post at the front of the receiver
+  add(g, rb(0.05, 0.08, 0.012, 0.003), M.black, 0, 0.2, -0.12); add(g, rb(0.012, 0.03, 0.012, 0.002), M.steel, 0, 0.255, -0.12);
+  add(g, rb(0.01, 0.06, 0.012, 0.002), M.black, 0, 0.2, -0.6);
+  // barrel support (perforated jacket), barrel, carrying handle, flash hider
+  add(g, cylZ(0.052, 0.052, 0.26, 18), park, 0, 0.03, -0.75);
+  for (let k = 0; k < 4; k++) for (let j = 0; j < 6; j++) { const a = j / 6 * Math.PI * 2; add(g, new THREE.CylinderGeometry(0.009, 0.009, 0.012, 8), M.black, Math.cos(a) * 0.05, 0.03 + Math.sin(a) * 0.05, -0.66 - k * 0.055, 0, 0, a + Math.PI / 2); }
+  add(g, cylZ(0.028, 0.03, 0.92, 16), M.steel, 0, 0.03, -1.34);
+  add(g, cylZ(0.034, 0.03, 0.06, 16), M.black, 0, 0.03, -0.92);
+  add(g, cylZ(0.045, 0.033, 0.13, 16), M.black, 0, 0.03, -1.84);                // flash hider
+  add(g, rb(0.022, 0.07, 0.022, 0.006), M.black, 0, 0.085, -0.98); add(g, rb(0.022, 0.07, 0.022, 0.006), M.black, 0, 0.085, -1.1);
+  add(g, rb(0.026, 0.024, 0.16, 0.01), M.rubber, 0, 0.125, -1.04);             // carrying handle
+  // cradle, traverse-and-elevation, and the post down into the bed
+  add(g, rb(0.24, 0.06, 0.34, 0.01), od, 0, -0.12, -0.36);
+  for (const sx of [-1, 1]) add(g, rb(0.02, 0.12, 0.08, 0.005), od, sx * 0.11, -0.07, -0.36);
+  add(g, new THREE.CylinderGeometry(0.05, 0.06, 1.0, 14), od, 0, -0.66, -0.36);
+  add(g, new THREE.CylinderGeometry(0.075, 0.075, 0.06, 14), M.black, 0, -0.18, -0.36);
+  add(g, rb(0.05, 0.22, 0.05, 0.008), M.black, 0, -0.26, -0.08);                 // T&E screw to the back
+  // the can, and the belt climbing out of it into the feed tray (left side)
+  const makeMag = () => { const c = new THREE.Group(); add(c, rb(0.12, 0.21, 0.3, 0.01), od, 0, -0.105, 0); add(c, rb(0.125, 0.015, 0.305, 0.006), M.black, 0, 0.0, 0); add(c, rb(0.08, 0.02, 0.03, 0.006), M.black, 0, 0.015, 0); return c; };
+  const mag = makeMag(); mag.position.set(-0.2, -0.04, -0.33); g.add(mag);
+  for (let k = 0; k < 7; k++) { const u = k / 6, x = -0.2 + u * 0.12, y = -0.03 + Math.sin(u * Math.PI * 0.5) * 0.15, z = -0.33;
+    add(g, new THREE.CylinderGeometry(0.0105, 0.0105, 0.1, 8), M.brass, x, y, z - 0.015, Math.PI / 2, 0, 0); add(g, new THREE.ConeGeometry(0.0105, 0.035, 8), M.steel, x, y, z - 0.082, -Math.PI / 2, 0, 0); add(g, rb(0.016, 0.02, 0.03, 0.003), M.black, x, y + 0.012, z + 0.04); }
+  const ret = new THREE.Object3D(); g.add(ret);
+  return finish(g, { id: 'm2', sightY: 0.245, eyeZ: 0.32, muzzleZ: -1.9, mag, makeMag, chargeHandle: ch, reticle: ret,
+    grip: new THREE.Vector3(0.112, -0.02, 0.1), support: new THREE.Vector3(-0.112, -0.02, 0.1), magwell: new THREE.Vector3(-0.2, -0.04, -0.33), charge: new THREE.Vector3(0.12, 0.03, -0.22),
+    hip: new THREE.Vector3(0.0, -0.34, -0.36), magSize: 100, rpm: 520, dmg: 160, head: 400, spread: 0.65, kick: 0.03, cal: 3, rate: 1.2, gainK: 1.4, reloadScale: 2.4, adsFov: 46, heavy: 1, mounted: true });
+}
+
 function buildMP7() {
   const g = new THREE.Group();
   add(g, rb(0.046, 0.07, 0.22, 0.01), M.poly, 0, 0.0, -0.06);              // receiver shell
@@ -257,6 +307,7 @@ export const WEAPONS = {
   m7: { name: 'SIG M7', cal: '6.8×51', build: m7 },
   x95: { name: 'IWI TAVOR X95', cal: '5.56', build: x95 },
   m250: { name: 'SIG M250', cal: '6.8×51 belt', build: () => buildLMG('m250', false) },
+  m2: { name: 'M2HB · PEDESTAL MOUNT', cal: '.50 BMG', build: buildM2 },
   ng7: { name: 'IWI NEGEV NG7', cal: '7.62 belt', build: () => buildLMG('ng7', true) },
   hk416: { name: 'HK416 A5', cal: '5.56', build: buildHK416 },
   mp7: { name: 'HK MP7A2', cal: '4.6×30', build: buildMP7 },

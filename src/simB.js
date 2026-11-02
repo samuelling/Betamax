@@ -30,15 +30,18 @@ export function simulateBomb(seed = 3, opts = {}) {
   // ---------- who sits where ----------
   // yours: sedan (4) + pickup driver and three in the bed → the Cape (helicopter 0); SUV (5) + two from the pickup → the fleet
   // (helicopter 1); the wagon's four don't make it. You: in the pickup bed, facing back.
-  const plan = [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 3, 1], [1, 4, 1], [2, 0, 0], [2, 1, 1], [2, 2, 0], [2, 3, 0], [2, 4, 0], [2, 5, 1], [3, 0, -1], [3, 1, -1], [3, 2, -1], [3, 3, -1]];
+  const plan = [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 3, 1], [1, 4, 1], [2, 0, 0], [2, 1, 1], [2, 2, 0], [2, 3, 0], [2, 4, 0], [2, 5, 1], [2, 6, 0], [3, 0, -1], [3, 1, -1], [3, 2, -1], [3, 3, -1]];
   for (const [ci, si, hel] of plan) { const a = base(0); a.car = ci; a.seat = si; a.helo = hel; a.spawn = 1 + r() * 2; actors.push(a); }
   for (const ci of [4, 5, 6, 7, 8]) R[ci].seats.forEach((_, si) => { const a = base(1); a.car = ci; a.seat = si; a.helo = -1; a.spawn = R[ci].t0 - 2.5; actors.push(a); });
-  const me0 = actors.find((a) => a.car === 2 && a.seat === 2), me1 = actors.find((a) => a.car === 2 && a.seat === 5);   // the Cape's helicopter; the fleet's
+  const me0 = actors.find((a) => a.car === 2 && a.seat === 6), me1 = actors.find((a) => a.car === 1 && a.seat === 4);   // the Cape's helicopter: on the .50 in the pickup; the fleet's: the M250 out of the SUV's back
   const me = opts.group === 1 ? me1 : me0; me0.me = true; me0.hp = 1e9; me1.me = true; me1.hp = 1e9;
-  actors.forEach((a) => { a.mg = a.side ? (a.car === 4 || a.car === 8) && a.seat === 2 : a.car === 2 && a.seat === 3; a.driver = a.seat === 0; });
+  actors.forEach((a) => { a.mg = a.seat === 6 || a === me1; a.gun = a.seat === 6; a.driver = a.seat === 0; });   // every pickup is a technical: a gun on a post in the bed
   actors.forEach((a) => { a.id_ = makeIdentity(a.side, a.id + 3000); });
   if (opts.ident) me.id_ = opts.ident;
   const other = me === me0 ? me1 : me0;
+  // the wrecks you made: in the seconds before each Texan car goes off the road, your gun is on its driver.
+  // (In rewind: the wreck burns, your rounds come back out of it, and it un-crashes into the chase.)
+  const FOCUS = [{ by: me0, car: 5 }, { by: me0, car: 6 }, { by: me1, car: 7 }].map((f) => ({ ...f, t: R[f.car].crash.t, drv: actors.find((b) => b.car === f.car && b.seat === 0) }));
   // where each of yours comes out of the trees, and which door they run for
   actors.filter((a) => a.side === 0).forEach((a, k) => { a.from = { x: L.trail.x + (k % 4 - 1.5) * 1.6, z: L.trail.z + Math.floor(k / 4) * 1.4 }; });
 
@@ -72,7 +75,7 @@ export function simulateBomb(seed = 3, opts = {}) {
     const t = s * DT; curT = t;
     for (let i = pending.length - 1; i >= 0; i--) {
       const h = pending[i]; if (h.t > t) continue; pending.splice(i, 1);
-      const tg = actors[h.target]; if (!tg.alive || tg.riding) continue;
+      const tg = actors[h.target]; if (!tg.alive || (tg.riding && h.dmg < 400)) continue;
       tg.hp -= h.dmg; tg.hitFlinch = t; if (tg.hp <= 0) kill(tg, h.t, h.shooter, h.dx, h.dz, 'shot');
     }
     for (const e of explosions) {
@@ -111,7 +114,7 @@ export function simulateBomb(seed = 3, opts = {}) {
   }
   function seated(a, t) {
     const c = R[a.car]; seatPose(c, a.seat, t, sp);
-    a.x = sp.sx; a.y = sp.sy; a.z = sp.sz; a.speed = 0; a.crouchT = a.crouch = 1; a.mode = MODE.GROUND; a.riding = true;
+    a.x = sp.sx; a.y = sp.sy; a.z = sp.sz; a.speed = 0; a.crouchT = a.crouch = a.gun ? 0.12 : 1; a.mode = MODE.GROUND; a.riding = true;
     if (a.target < 0 || a.driver) { a.yaw = a.driver ? sp.yaw : sp.syaw; a.pitch = 0; }
   }
   function update(a, t) {
@@ -180,6 +183,18 @@ export function simulateBomb(seed = 3, opts = {}) {
     });
   }
   function combat(a, t, riding = false) {
+    const fc = a.me && FOCUS.find((f) => f.by === a && t > f.t - 2.6 && t <= f.t && f.drv.alive);
+    if (fc) {
+      const b = fc.drv; a.target = b.id;
+      const dx = b.x - a.x, dz = b.z - a.z, dh = Math.hypot(dx, dz); turn(a, Math.atan2(dx, dz), 12);
+      const my = a.y + lerp(1.45, 0.95, a.crouch), aimY = b.y + 1.0; a.pitch = Math.atan2(aimY - my, dh);
+      if (t < a.nextShot) return;
+      const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), mx = a.x + fx * 0.75, mz = a.z + fz * 0.75, tf = Math.min(t, Math.max(t - DT + 1e-3, a.nextShot));
+      const last = t > fc.t - 0.45, shot = { fireT: tf, shooter: a.id, target: last ? b.id : -1, fx: mx, fy: my, fz: mz, ix: b.x + (last ? 0 : (r() - 0.5) * 1.4), iy: aimY + (last ? 0 : (r() - 0.5) * 0.6), iz: b.z + (last ? 0 : (r() - 0.5) * 1.4), kind: last ? 3 : 4 };
+      shot.impT = tf + Math.hypot(shot.ix - mx, shot.iy - my, shot.iz - mz) / BULLET_SPEED; shots.push(shot);
+      if (last) pending.push({ t: shot.impT, target: b.id, dmg: 400, shooter: a.id, dx, dz });
+      a.nextShot = tf + (a.gun ? 0.115 : 0.075); a.burst = 0; return;
+    }
     if (t >= a.retarget) {
       a.retarget = t + 0.6 + r() * 0.6; tgtList.length = 0;
       for (const b of actors) { if (b.side === a.side || !b.alive || b.mode !== MODE.GROUND) continue; const d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 170) tgtList.push([d, b.id]); }

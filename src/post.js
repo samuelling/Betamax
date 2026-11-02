@@ -107,11 +107,11 @@ const RAYS = {
 const CEL = {
   uniforms: {
     tDiffuse: { value: null }, tDepth: { value: null }, uRes: { value: new THREE.Vector2(1, 1) },
-    uNear: { value: 0.05 }, uFar: { value: 5000 }, uBands: { value: 4 }, uInk: { value: 1 }, uOn: { value: 1 },
+    uNear: { value: 0.05 }, uFar: { value: 5000 }, uBands: { value: 0 }, uInk: { value: 1 }, uOn: { value: 1 }, uSat: { value: 1.14 },
   },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uBands, uInk, uOn;
+    uniform sampler2D tDiffuse, tDepth; uniform vec2 uRes; uniform float uNear, uFar, uBands, uInk, uOn, uSat;
     varying vec2 vUv;
     float linZ(vec2 uv){ float d = texture2D(tDepth, uv).x; float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
     void main(){
@@ -119,15 +119,19 @@ const CEL = {
       if (uOn < 0.5) { gl_FragColor = base; return; }
       vec3 c = base.rgb;
       // bands
-      float lum = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
-      float p = pow(lum, 1.0 / 2.2) * uBands;
-      float q = (floor(p) + smoothstep(0.42, 0.58, fract(p))) / uBands;
-      vec3 col = c * pow(max(q, 0.0), 2.2) / lum;
+      // the light is banded in the materials now (Ashland's ramp); here only a little extra colour
+      vec3 col = c;
+      if (uBands > 0.5) { float lum = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-5); float p = pow(lum, 1.0 / 2.2) * uBands; float q = (floor(p) + smoothstep(0.42, 0.58, fract(p))) / uBands; col = c * pow(max(q, 0.0), 2.2) / lum; }
       float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = max(mix(vec3(g), col, 1.18), 0.0);
-      // ink
-      vec2 px = 1.0 / uRes;
+      col = max(mix(vec3(g), col, uSat), 0.0);
+      // ink: Ashland's — a darker, plummier tint of whatever it outlines, not black
+      vec2 px = 1.5 / uRes;
       float z0 = linZ(vUv);
+      // a soldier's side, coded in alpha by the soldier material (0.9 Cape Cod, 0.8 Texas): their ink is their colour
+      float tc = 0.0;
+      for (int i = 0; i < 4; i++) { vec2 o = i == 0 ? vec2(px.x, 0.0) : i == 1 ? vec2(-px.x, 0.0) : i == 2 ? vec2(0.0, px.y) : vec2(0.0, -px.y);
+        float a = texture2D(tDiffuse, vUv + o * 1.4).a; if (a > 0.85 && a < 0.95) tc = 1.0; else if (a > 0.75 && a < 0.85 && tc < 0.5) tc = 2.0; }
+      if (base.a > 0.85 && base.a < 0.95) tc = 1.0; else if (base.a > 0.75 && base.a < 0.85) tc = 2.0;
       if (z0 < uFar * 0.98 && base.a > 0.75) {
         float w0 = 1.0 / z0;
         float wl = 1.0 / linZ(vUv - vec2(px.x, 0.0)), wr = 1.0 / linZ(vUv + vec2(px.x, 0.0));
@@ -136,7 +140,8 @@ const CEL = {
         float sil = max(max(abs(wl - w0), abs(wr - w0)), max(abs(wd - w0), abs(wu - w0)));
         float e = max(smoothstep(0.02, 0.05, lap / w0), smoothstep(0.1, 0.2, sil / w0));
         float fade = 1.0 - smoothstep(60.0, 260.0, z0);
-        col = mix(col, vec3(0.025, 0.02, 0.018), e * fade * uInk);
+        vec3 ink = tc > 1.5 ? vec3(0.42, 0.035, 0.02) : tc > 0.5 ? vec3(0.02, 0.07, 0.42) : col * vec3(0.34, 0.27, 0.31) * 0.85 + vec3(0.004, 0.003, 0.004);
+        col = mix(col, ink, e * (tc > 0.5 ? 1.0 : fade) * uInk);
       }
       gl_FragColor = vec4(col, 1.0);
     }`,

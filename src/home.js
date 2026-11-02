@@ -205,7 +205,7 @@ export class Home {
     const H = buildHouse(this.C, r); s.add(H.g); this.cols = H.A.cols; this.windows = H.A.windows;
     this.A = furnish(this.C, H.g, this.cols, r);
     const Y = buildYard(this.C, r, this.cols, o.low); s.add(Y.g); this.Y = Y.A; this.Yg = Y.g;
-    this.expo0 = r.toneMappingExposure; r.toneMappingExposure = 1.05;
+    this.expo0 = r.toneMappingExposure; this.tm0 = r.toneMapping; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;   // home keeps its own, softer picture
     this.post = new Post(r, s, cam, o.Q); this.post.setSize(innerWidth, innerHeight, o.Q.pr); this.post.cel.uniforms.uFar.value = 400;
     const pu = this.post.u; for (const k of ['uRew', 'uFF', 'uPause', 'uDesat', 'uDamage', 'uFlash', 'uStuck']) if (pu[k]) pu[k].value = 0; if (pu.uAmt) pu.uAmt.value = 1;
     // you
@@ -222,7 +222,7 @@ export class Home {
     for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = 'hidden'; }
     this.say(this.us ? 'An afternoon off.' : 'Saturday. Going to be a hot one.', '', 4);
   }
-  dispose() { if (this.story) { this.story.dispose(); this.audio.loop('radioStatic', false); } for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = ''; } this.o.renderer.toneMappingExposure = this.expo0 || 0.85; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
+  dispose() { if (this.story) { this.story.dispose(); this.audio.loop('radioStatic', false); } for (const id of ['mode', 'counter', 'sp']) { const e = $(id); if (e) e.style.visibility = ''; } this.o.renderer.toneMappingExposure = this.expo0 || 1.0; if (this.tm0 != null) this.o.renderer.toneMapping = this.tm0; this.audio.loop && Object.keys(this.audio.loops || {}).forEach((k) => this.audio.loop(k, false)); if (this.audio.bus) this.audio.bus.gain.setTargetAtTime(0, this.audio.ctx.currentTime, 0.3); }
   resize() { this.cam.aspect = innerWidth / innerHeight; this.cam.updateProjectionMatrix(); this.post.setSize(innerWidth, innerHeight, this.o.Q.pr); }
   say(a, b = '', dur = 4) { const c = $('sub'); c.innerHTML = a + (b ? `<br><em style="opacity:.75">${b}</em>` : ''); c.style.opacity = 1; clearTimeout(this._sayT); this._sayT = setTimeout(() => (c.style.opacity = 0), dur * 1000); }
 

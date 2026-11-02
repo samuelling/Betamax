@@ -3,9 +3,11 @@
 // pine with stone walls round the pastures, cars dead on the shoulders where the pulse caught them, a fuel tanker,
 // the hayfield with its round bales. And to the east, over Boston, the cloud.
 import * as THREE from 'three';
+import { autumn } from './toon.js';
 import { heightAt } from './terrain.js';
 import { roadAt, roadZ0, sAtX, ROAD_LEN, ROAD_HALF, S_TOWN, S_FIELD, TOWN, FIELD, fieldMask, townMask, openAt } from './terrainB.js';
-import { buildCar, PAINT, planBlast, poseBlast } from './cars.js';
+import { buildCar, PAINT, planBlast, poseBlast, markCar } from './cars.js';
+import { weaponProp } from './arsenal.js';
 import { carPose, DTC, T_CAR } from './layoutB.js';
 import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
@@ -138,7 +140,7 @@ export function addWoods(root, trees, r, hi) {
     const sel = list.filter((t, i) => t.kind === kind && (((t.x * 7.3 + t.z * 3.1) | 0) % 3 + 3) % 3 === v); if (!sel.length) continue;
     const ti = new THREE.InstancedMesh(K.trunk, barkM[kind], sel.length), ci = new THREE.InstancedMesh(K.crowns[v], leafM, sel.length);
     sel.forEach((t, i) => { const lean = (r() - 0.5) * 0.06; _e.set(lean, t.rot, (r() - 0.5) * 0.06); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); const sc = t.s * (kind === 'pine' ? 1.05 : 0.95); _s.set(sc, sc * (0.88 + r() * 0.3), sc); _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m);
-      const v2 = 0.85 + r() * 0.3, y2 = r(); ci.setColorAt(i, col.setRGB(K.col[0] * v2 * (1 + y2 * 0.25), K.col[1] * v2, K.col[2] * v2 * (1 - y2 * 0.2))); });
+      ci.setColorAt(i, autumn(kind, r, col)); });
     ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true; ti.computeBoundingSphere(); ci.computeBoundingSphere(); root.add(ti, ci);
   }
 }
@@ -309,6 +311,9 @@ export function buildBomb(W) {
   // ---------- the convoy ----------
   W.rideCars = L.rides.map((c, i) => {
     const car = buildCar(c.kind, c.paint, 300 + i); car.paintHex = c.paint; root.add(car.root);
+    markCar(car, c.side);
+    // every pickup is a technical: a .50 on a post in the bed, turned by whoever's on it
+    if (c.kind === 'pickup') { const pv = new THREE.Group(); pv.position.set(0, 2.17, -1.76); car.root.add(pv); const gun = weaponProp('m2'); gun.position.set(0, 0, 0.36); gun.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) m.userData.vm = true; }); pv.add(gun); car.mount = pv; }
     // windows down / glass you can see through: who is in there, who is shooting
     car.glass.transparent = true; car.glass.opacity = 0.28; car.glass.depthWrite = false;
     const dist = new Float32Array(Math.round(T_CAR / DTC) + 1); for (let k = 1; k < dist.length; k++) dist[k] = dist[k - 1] + c.track[k * 7 + 6] * DTC;

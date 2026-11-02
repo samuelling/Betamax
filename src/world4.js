@@ -2,6 +2,7 @@
 // hedges, pitch pines and oaks, cedars at the edge of the marsh, the salt marsh itself and the bay beyond, utility
 // poles with their wires, mailboxes, cars in the drives. The houses are the beach's breakable Capes.
 import * as THREE from 'three';
+import { autumn } from './toon.js';
 import { heightAt } from './terrain.js';
 import { road6A, laneX, sandRoadX, roadInfo, MARSH_Z, LZ, CRASH, ROAD_W } from './terrain4.js';
 import { buildCar, PAINT } from './cars.js';
@@ -11,6 +12,7 @@ import { place, box, cyl, merge, std } from './world.js';
 import { planStructure, Megastructures } from './megastruct.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+const _col = new THREE.Color();
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 // ground colour for the terrain vertices
@@ -125,20 +127,20 @@ export function addTrees(root, trees, r) {
   { const kinds = { oak: [], maple: [], pine: [], cedar: [] };
     for (const t of trees) kinds[t.kind].push(t);
     const bark = std([0.3, 0.25, 0.2], 0.95), pineBark = std([0.38, 0.27, 0.2], 0.95);
-    const make = (list, trunkG, crownG, crownMat, tMat) => {
+    const make = (list, trunkG, crownG, crownMat, tMat, kind) => {
       if (!list.length) return;
       const ti = new THREE.InstancedMesh(trunkG, tMat, list.length), ci = new THREE.InstancedMesh(crownG, crownMat, list.length);
-      list.forEach((t, i) => { _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.3), t.s); _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m); });
+      list.forEach((t, i) => { _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.3), t.s); _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m); if (kind) ci.setColorAt(i, autumn(kind, r, _col)); });
       ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true; root.add(ti, ci);
     };
     const blobs = (n, y0, y1, rad, sq) => { const l = []; for (let k = 0; k < n; k++) l.push(place(new THREE.IcosahedronGeometry(rad * (0.7 + r() * 0.5), 1), (r() - 0.5) * rad * 1.6, y0 + r() * (y1 - y0), (r() - 0.5) * rad * 1.6, 0, 0, 0, 1, sq, 1)); return merge(l); };
-    make(kinds.oak, cyl(0.2, 0.32, 5, 7, 0, 2.5, 0), blobs(7, 5, 8.5, 2.2, 0.7), std([0.2, 0.28, 0.14], 0.9), bark);
-    make(kinds.maple, cyl(0.16, 0.26, 4.4, 7, 0, 2.2, 0), blobs(6, 4.4, 7.4, 2.0, 0.75), std([0.25, 0.33, 0.15], 0.9), bark);
+    make(kinds.oak, cyl(0.2, 0.32, 5, 7, 0, 2.5, 0), blobs(7, 5, 8.5, 2.2, 0.7), std([1, 1, 1], 0.9), bark, 'oak');
+    make(kinds.maple, cyl(0.16, 0.26, 4.4, 7, 0, 2.2, 0), blobs(6, 4.4, 7.4, 2.0, 0.75), std([1, 1, 1], 0.9), bark, 'maple');
     // pitch pine: a crooked bare trunk and a flat-topped, clumpy crown
     { const l = []; for (let k = 0; k < 6; k++) l.push(place(new THREE.IcosahedronGeometry(1.2 + r() * 0.6, 1), (r() - 0.5) * 3, 8 + r() * 2.2, (r() - 0.5) * 3, 0, 0, 0, 1, 0.5, 1));
-      make(kinds.pine, merge([cyl(0.13, 0.22, 9, 6, 0, 4.5, 0, 0, 0, 0.05), cyl(0.05, 0.08, 2, 5, 0.6, 7.2, 0, 0, 0, 0.9)]), merge(l), std([0.17, 0.24, 0.13], 0.9), pineBark); }
+      make(kinds.pine, merge([cyl(0.13, 0.22, 9, 6, 0, 4.5, 0, 0, 0, 0.05), cyl(0.05, 0.08, 2, 5, 0.6, 7.2, 0, 0, 0, 0.9)]), merge(l), std([1, 1, 1], 0.9), pineBark, 'pine'); }
     // eastern red cedar: a dark narrow spire
-    make(kinds.cedar, cyl(0.1, 0.16, 2, 6, 0, 1, 0), merge([place(new THREE.ConeGeometry(1.4, 5.5, 8), 0, 3.6, 0), place(new THREE.ConeGeometry(1.0, 3.2, 8), 0, 5.6, 0)]), std([0.13, 0.2, 0.12], 0.9), bark);
+    make(kinds.cedar, cyl(0.1, 0.16, 2, 6, 0, 1, 0), merge([place(new THREE.ConeGeometry(1.4, 5.5, 8), 0, 3.6, 0), place(new THREE.ConeGeometry(1.0, 3.2, 8), 0, 5.6, 0)]), std([1, 1, 1], 0.9), bark, 'cedar');
   }
 }
 export function addPoles(root, poles, mailboxes) {

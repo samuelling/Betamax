@@ -21,7 +21,7 @@ function zone(scene, x, y, z, spd) {
   switch (scene) {
     case 'beach': return z > -14 ? 'THE SAND' : z > -66 ? (Math.abs(x) > 70 ? 'THE HOUSES' : 'THE CREST') : z > -84 ? 'THE BACK DUNE' : 'THE LOT';
     case 'sandwich': { const lz = Math.hypot(x + 58, z - 56), cr = Math.hypot(x - 40, z + 74); return lz < 34 ? 'THE MEADOW' : cr < 38 ? 'THE WRECK' : Math.abs(z) < 16 ? 'ROUTE 6A' : 'THE YARDS'; }
-    case 'bomb': return spd > 7 ? 'ROUTE 9' : x > 1100 ? 'THE HAYFIELD' : x < -1300 ? 'THE COMMON' : 'THE ROADSIDE';
+    case 'bomb': return spd > 7 ? 'ROUTE 135' : x > 1100 ? 'THE HAYFIELD' : x < -1300 ? 'THE COMMON' : 'THE ROADSIDE';
     case 'port': return y > 9 ? 'THE CRANES' : z > 62 ? 'THE QUAY' : z < -100 ? 'THE GATE' : 'THE BOX YARD';
     case 'ship': return y > 19 ? 'THE FLIGHT DECK' : x > 95 ? 'THE WELL DECK' : y > 8 ? 'THE STAIRS' : 'THE HANGAR';
     case 'ash': { if (Math.hypot(x + 62, z + 92) < 36 || Math.hypot(x - 22, z + 140) < 36) return 'THE CAMP'; if (Math.hypot(x - 92, z + 36) < 42) return 'THE LOT'; if (Math.hypot(x + 40, z - 70) < 122) return 'THE SHORE'; return 'THE WOODS'; }
@@ -76,7 +76,7 @@ export class Gameplay {
     this.stats = { caught: 0, total: 0, clean: 0, segs: 0, trkSum: 0, trkN: 0, takes: 0 };
     this.judged = new Set(); this.face = new Map(); this.aware = new Map(); this.hits = [];
     this.lastMiss = -9; this.real = 0; this.segOn = -1; this.segDone = new Set(); this.segStat = new Map();
-    this.cue = new Set(); this.wasLull = false; this.bres = new Map();
+    this.cue = new Set(); this.wasLull = false; this.bres = new Map(); this.cineUntil = -1;
   }
   setTape(S, scene) {
     this.S = S; this.scene = scene;
@@ -106,7 +106,7 @@ export class Gameplay {
         if (ft - A[lo] > 1.3 || (tg !== cur.target && tg >= 0 && cur.target >= 0) || far > 4.5) cur = null;
       }
       if (!cur) { cur = { shots: [], t0: ft, t1: it, target: tg, last: si, kill: false }; b.push(cur); }
-      cur.shots.push(si); cur.last = si; cur.t1 = Math.max(cur.t1, it);
+      cur.shots.push(si); cur.last = si; cur.t1 = Math.max(cur.t1, it); if (cur.target < 0 && tg >= 0) cur.target = tg;
     }
     for (const u of b) { const d = u.target >= 0 && this.D.deathBy.get(u.target); u.kill = !!(d && d.killer === id && d.t >= u.t0 - 0.05 && d.t <= u.t1 + 0.35); }
     this.D.bursts.set(id, b);
@@ -276,7 +276,9 @@ export class Gameplay {
       const ring = off ? 0 : 20 + lead * 26;
       const ri = e.querySelector('i'); ri.style.width = ri.style.height = ring + 'px'; ri.style.display = off ? 'none' : '';
       const rr = this.bres.get(b), left = b.shots.length - (rr ? rr.n : 0);
-      e.querySelector('span').textContent = (b.kill ? 'KILL ' : '') + (left > 1 ? '×' + left : '');
+      const wreck = b.kill && this.scene === 'bomb' && S.actors[b.target] && S.actors[b.target].car >= 0;
+      e.querySelector('span').textContent = (wreck ? 'UN-WRECK ' : b.kill ? 'KILL ' : '') + (left > 1 ? '×' + left : '');
+      if (wreck && live) this.cineUntil = this.real + 0.25;   // the tape slows itself for the wrecks you made
       e.style.display = ''; e.style.left = x + 'px'; e.style.top = y + 'px';
       if (!this.cue.has(b)) { this.cue.add(b); this.h.sound('cue'); if (!this.taught.catch) { this.taught.catch = true; this.h.teach('Your rounds are coming home. Aim where they landed as they leave &mdash; <em>catch them</em> back into the magazine.'); } }
     }
@@ -384,8 +386,8 @@ export class Gameplay {
         const ss = this.segStat.get(this.body * 100 + on) || { c: 0, n: 0 };
         const tot = this.myBursts.filter((b) => b.t1 <= sg[on].t1 + 0.01 && b.t0 >= sg[on].t0 - 0.01).length;
         html = `&#9664; ${sg[on].name} <small>${sg.length - on}/${sg.length}</small><br><small>${tot ? `CATCH ${ss.c}/${tot} &middot; ` : 'SURVIVE &middot; '}${fmt((tau - sg[on].t0) / (this.rate || 1))}</small>`;
-      } else if (next >= 0) html = `<small>${inLull ? '&#9664;&#9664; &times;2 &middot; ' : ''}NEXT: ${sg[next].name} IN ${fmt(toNext / (this.rate || 1))}</small>`;
-      else html = `<small>${inLull ? '&#9664;&#9664; &times;2 &middot; ' : ''}HOME</small>`;
+      } else if (next >= 0) html = `<small>${this.autoX > 1 ? '&#9664;&#9664; &times;2 &middot; ' : ''}NEXT: ${sg[next].name} IN ${fmt(toNext / (this.rate || 1))}</small>`;
+      else html = `<small>${this.autoX > 1 ? '&#9664;&#9664; &times;2 &middot; ' : ''}HOME</small>`;
       this.objEl.innerHTML = html;
     }
     return this.hits;

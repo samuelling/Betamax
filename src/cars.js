@@ -121,3 +121,27 @@ export function poseBlast(car, a) {
   }
 }
 export { PAINT };
+
+// ID markings, so you can tell whose a car is at a glance: Texas paints a white lone star on a red square (doors, hood,
+// tailgate); the Cape's commandeered cars carry a white anchor on blue
+const markTex = {};
+function markTexture(side) {
+  if (markTex[side]) return markTex[side];
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = side ? '#c42a1c' : '#1f58c8'; g.fillRect(4, 4, 120, 120);
+  g.strokeStyle = '#f4f1e8'; g.lineWidth = 6; g.strokeRect(10, 10, 108, 108);
+  g.fillStyle = '#f4f1e8';
+  if (side) { g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 19 : 46; g.lineTo(64 + Math.cos(a) * r, 66 + Math.sin(a) * r); } g.closePath(); g.fill(); }
+  else { g.strokeStyle = '#f4f1e8'; g.lineWidth = 9; g.lineCap = 'round'; g.beginPath(); g.arc(64, 30, 9, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(64, 40); g.lineTo(64, 104); g.moveTo(42, 52); g.lineTo(86, 52); g.stroke(); g.beginPath(); g.arc(64, 72, 32, 0.25, Math.PI - 0.25); g.stroke();
+    g.beginPath(); g.moveTo(32, 80); g.lineTo(24, 72); g.lineTo(38, 70); g.closePath(); g.fill(); g.beginPath(); g.moveTo(96, 80); g.lineTo(104, 72); g.lineTo(90, 70); g.closePath(); g.fill(); }
+  const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; t.anisotropy = 4;
+  return (markTex[side] = new T.MeshStandardMaterial({ map: t, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2 }));
+}
+export function markCar(car, side) {
+  const mat = markTexture(side), V = car.V;
+  for (const p of car.parts) {
+    if (p.kind === 'door') { const sx = Math.sign(p.m.position.x) || 1, s = Math.min(0.52, (V.belt - V.ground - 0.3) * 0.85); const d = new T.Mesh(new T.PlaneGeometry(s, s), mat); d.rotation.y = sx * Math.PI / 2; d.position.set(sx * 0.018, 0.02, 0); d.userData.noOutline = true; p.m.add(d); }
+    if (p.kind === 'hood') { const d = new T.Mesh(new T.PlaneGeometry(0.75, 0.75), mat); d.rotation.x = -Math.PI / 2; d.position.set(0, 0.018, 0); d.userData.noOutline = true; p.m.add(d); }
+    if (p.kind === 'trunk' && V.bed) { const d = new T.Mesh(new T.PlaneGeometry(0.36, 0.36), mat); d.rotation.y = Math.PI; d.position.set(0, 0, -0.034); d.userData.noOutline = true; p.m.add(d); }
+  }
+}

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { outline, toonify } from './toon.js';
 import { heightAt, ARENA } from './terrain.js';
 import { Arms, evalReload, pathPoint, reloadDuration } from './weapons.js';
 import { WEAPONS, primaryOf, sidearmOf } from './arsenal.js';
@@ -31,6 +32,8 @@ export class Player {
     const g = WEAPONS[id].build(), ud = g.userData;
     g.visible = false;
     g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.frustumCulled = false; } });
+    g.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) m.userData.vm = true; });
+    outline(g, { maxThick: 0.004 }); toonify(g);
     this.vm.add(g);
     ud.handMag = ud.makeMag(); ud.handMag.visible = false; ud.handMag.position.set(0, 0.06, -0.03);
     ud.handMag.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
@@ -47,7 +50,7 @@ export class Player {
   setBody(a) { this.setLoadout(a.side, primaryOf(a), sidearmOf(a.side)); }
   setSide(side) { this.setLoadout(side, side === 0 ? 'm7' : 'x95', sidearmOf(side)); }
   setLoadout(side, primary, sidearm, slots) {
-    this.side = side;
+    this.side = side; this.mountedFrom = null;
     this.arms.forEach((a, i) => (a.g.visible = i === side));
     const full = (id) => WEAPONS[id] && (this.model(id).userData.magSize + (this.model(id).userData.tube ? 0 : 1));
     this.slots = slots ? JSON.parse(JSON.stringify(slots)) : { primary: { id: primary, ammo: full(primary) }, sidearm: { id: sidearm, ammo: full(sidearm) } };
@@ -62,9 +65,21 @@ export class Player {
     this.mag = ud.magSize; this.ammo = sl.ammo; this.reloadT = -1;
     ud.mag.visible = true;
   }
+  // on a mounted gun (the .50 in the bed of the truck): your own guns wait, and come back when you climb down
+  mount(id) {
+    if (this.mountedFrom) return;
+    this.slots[this.cur].ammo = this.ammo;
+    this.mountedFrom = { slots: JSON.parse(JSON.stringify(this.slots)), cur: this.cur };
+    this.slots = { primary: { id, ammo: this.model(id).userData.magSize }, sidearm: this.slots.sidearm };
+    this.cur = 'primary'; this.swapT = -1; this.swapTo = null; this.equip(); this.events.push('rack');
+  }
+  unmount() {
+    if (!this.mountedFrom) return;
+    const f = this.mountedFrom; this.mountedFrom = null; this.slots = f.slots; this.cur = f.cur; this.swapT = -1; this.swapTo = null; this.equip();
+  }
   // 1 / 2 / wheel: lower one gun and bring up the other
   switchTo(slot) {
-    if (slot === this.cur || this.swapT >= 0) return false;
+    if (slot === this.cur || this.swapT >= 0 || this.mountedFrom) return false;
     this.swapTo = slot; this.swapT = 0; this.reloadT = -1; return true;
   }
   // take a gun off the ground into the primary slot; returns what you put down

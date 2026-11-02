@@ -12,7 +12,7 @@ export const SEATS = {
   sedan: [[0.42, 0.3, 0.3, 0], [-0.42, 0.3, 0.3, -1.2], [0.42, 0.3, -0.75, 1.4], [-0.42, 0.3, -0.75, -1.4]],
   wagon: [[0.42, 0.3, 0.35, 0], [-0.42, 0.3, 0.35, -1.2], [0.42, 0.3, -0.7, 1.4], [-0.42, 0.3, -0.7, -1.4]],
   suv: [[0.45, 0.42, 0.35, 0], [-0.45, 0.42, 0.35, -1.2], [0.45, 0.42, -0.7, 1.5], [-0.45, 0.42, -0.7, -1.5], [0, 0.42, -1.55, Math.PI]],
-  pickup: [[0.45, 0.45, 0.55, 0], [-0.45, 0.45, 0.55, -1.2], [0.52, 1.13, -1.15, Math.PI - 0.5], [-0.52, 1.13, -1.15, Math.PI + 0.5], [0.5, 1.13, -2.15, Math.PI - 0.2], [-0.5, 1.13, -2.15, Math.PI + 0.2]],
+  pickup: [[0.45, 0.45, 0.55, 0], [-0.45, 0.45, 0.55, -1.2], [0.52, 1.13, -1.15, Math.PI - 0.5], [-0.52, 1.13, -1.15, Math.PI + 0.5], [0.5, 1.13, -2.15, Math.PI - 0.2], [-0.5, 1.13, -2.15, Math.PI + 0.2], [0, 1.13, -0.95, Math.PI]],   // 6: on the gun
 };
 
 let cached = null;
@@ -32,12 +32,12 @@ export function buildBombLayout() {
     { side: 0, kind: 'pickup', paint: '#8a1e1a', s0: S_TOWN - 6, lat0: 5.5, t0: 16.2, vmax: 27, acc: 3.9, stop: S_FIELD - 2, weave: 0.7 },
     { side: 0, kind: 'wagon', paint: '#b8a888', s0: S_TOWN - 24, lat0: 5.5, t0: 16.8, vmax: 26.5, acc: 3.8, stop: S_FIELD - 16, weave: 0.8, crash: { t: 96, dir: 1, roll: false, spin: 2.6 } },
     // theirs: out of the woods road behind you, gaining
-    { side: 1, kind: 'pickup', paint: '#4a4e3e', s0: SIDE_ROAD.s, lat0: -9, t0: 40.0, vmax: 33.5, acc: 5.2, weave: 1.2, follow: [3, 2], gap: 26, stop: S_FIELD - 70 },
-    { side: 1, kind: 'sedan', paint: '#2a3e5a', s0: SIDE_ROAD.s - 18, lat0: -9, t0: 41.2, vmax: 34, acc: 5.4, weave: 1.4, crash: { t: 64, dir: -1, roll: true, spin: 1.2 } },
-    { side: 1, kind: 'suv', paint: '#e8e6e0', s0: SIDE_ROAD.s - 36, lat0: -9, t0: 42.4, vmax: 33.5, acc: 5.0, weave: 1.0, crash: { t: 113, dir: 1, roll: false, spin: 3.2, tanker: true } },
-    { side: 1, kind: 'pickup', paint: '#6a5a3a', s0: SIDE_ROAD.s - 54, lat0: -9, t0: 43.6, vmax: 33, acc: 5.0, weave: 1.1, stop: S_FIELD - 86, crash: { t: 112.2, dir: -1, roll: true, spin: 0.8, late: true } },
+    { side: 1, kind: 'pickup', paint: '#8a7350', s0: SIDE_ROAD.s, lat0: -9, t0: 40.0, vmax: 33.5, acc: 5.2, weave: 1.2, follow: [3, 2], gap: 26, stop: S_FIELD - 70 },
+    { side: 1, kind: 'sedan', paint: '#94805a', s0: SIDE_ROAD.s - 18, lat0: -9, t0: 41.2, vmax: 34, acc: 5.4, weave: 1.4, crash: { t: 64, dir: -1, roll: true, spin: 1.2 } },
+    { side: 1, kind: 'suv', paint: '#7d6a4c', s0: SIDE_ROAD.s - 36, lat0: -9, t0: 42.4, vmax: 33.5, acc: 5.0, weave: 1.0, crash: { t: 113, dir: 1, roll: false, spin: 3.2, tanker: true } },
+    { side: 1, kind: 'pickup', paint: '#86704e', s0: SIDE_ROAD.s - 54, lat0: -9, t0: 43.6, vmax: 33, acc: 5.0, weave: 1.1, stop: S_FIELD - 86, crash: { t: 112.2, dir: -1, roll: true, spin: 0.8, late: true } },
     // and one more, late, out of a farm drive past the tanker: an MG in the bed, still firing as the helicopters lift
-    { side: 1, kind: 'pickup', paint: '#5a5040', s0: S_FIELD - 720, lat0: -9, t0: 121.5, vmax: 30, acc: 5.0, weave: 0.9, stop: S_FIELD - 48 },
+    { side: 1, kind: 'pickup', paint: '#7a6648', s0: S_FIELD - 720, lat0: -9, t0: 121.5, vmax: 30, acc: 5.0, weave: 0.9, stop: S_FIELD - 48 },
   ];
   L.rides.forEach((c, i) => { c.i = i; c.seats = SEATS[c.kind]; c.track = trackFor(c, L.rides, r); });
   // keep the lead Texan truck behind the last of your cars still on the road

@@ -318,39 +318,49 @@ const PALETTE_GLSL = /* glsl */`
   float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
     return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
                mix(mix(h3(i+vec3(0,0,1)), h3(i+vec3(1,0,1)), f.x), mix(h3(i+vec3(0,1,1)), h3(i+vec3(1,1,1)), f.x), f.y), f.z); }
+  // the two sides read apart at a glance: Cape Cod in Atlantic blue-greys with blue ID tape;
+  // Texas in coyote tan with red ID tape (helmet band, upper arms, a patch front and back)
+  vec3 idCol(float side){ return side < 0.5 ? vec3(0.16, 0.44, 0.92) : vec3(0.88, 0.2, 0.13); }
   vec3 camo(vec3 p, float side){
-    if (side < 0.5) { // multi-terrain blotches
+    if (side < 0.5) { // Atlantic blotches: slate, navy, fog grey
       float a = n3(p*7.0) * 0.65 + n3(p*17.0) * 0.35;
       float b = n3(p*9.0 + 13.1) * 0.6 + n3(p*23.0) * 0.4;
-      vec3 c = vec3(0.54,0.49,0.37);
-      c = mix(c, vec3(0.40,0.40,0.27), step(0.56, a));
-      c = mix(c, vec3(0.42,0.33,0.22), step(0.62, b));
-      c = mix(c, vec3(0.66,0.61,0.47), step(0.72, n3(p*13.0 + 5.0)));
-      c = mix(c, vec3(0.20,0.18,0.13), step(0.79, n3(p*21.0 + 9.0)));
+      vec3 c = vec3(0.40,0.46,0.54);
+      c = mix(c, vec3(0.27,0.33,0.42), step(0.56, a));
+      c = mix(c, vec3(0.50,0.54,0.58), step(0.62, b));
+      c = mix(c, vec3(0.20,0.25,0.33), step(0.72, n3(p*13.0 + 5.0)));
+      c = mix(c, vec3(0.13,0.16,0.22), step(0.79, n3(p*21.0 + 9.0)));
       return c;
     }
-    vec3 q = floor(p * 45.0) / 45.0; // digital
+    vec3 q = floor(p * 45.0) / 45.0; // digital coyote
     float a = n3(q*6.0) * 0.7 + n3(q*15.0)*0.3;
-    vec3 c = vec3(0.27,0.30,0.28);
-    c = mix(c, vec3(0.18,0.21,0.19), step(0.52, a));
-    c = mix(c, vec3(0.36,0.38,0.33), step(0.66, n3(q*9.0+3.0)));
-    c = mix(c, vec3(0.10,0.11,0.10), step(0.74, n3(q*12.0+7.0)));
+    vec3 c = vec3(0.66,0.55,0.40);
+    c = mix(c, vec3(0.54,0.43,0.30), step(0.52, a));
+    c = mix(c, vec3(0.76,0.67,0.52), step(0.66, n3(q*9.0+3.0)));
+    c = mix(c, vec3(0.38,0.29,0.20), step(0.74, n3(q*12.0+7.0)));
     return c;
+  }
+  bool idTape(int m, vec3 p){
+    if (m == 3) return p.y > 1.688 && p.y < 1.716;                                   // band round the helmet
+    if (m == 0) return abs(p.x) > 0.205 && p.y > 1.24 && p.y < 1.31;                 // upper arms
+    if (m == 1) return abs(p.x) < 0.075 && p.y > 1.34 && p.y < 1.43 && abs(p.z) > 0.16; // plate-carrier patch, front and back
+    return false;
   }
   vec3 skinTone(float t){ return mix(mix(vec3(0.86,0.66,0.53), vec3(0.62,0.44,0.32), smoothstep(0.0,0.5,t)), vec3(0.32,0.21,0.15), smoothstep(0.5,1.0,t)); }
   vec3 matColor(out float rough, out float metal){
     int m = int(vMat + 0.5); metal = 0.0; rough = 0.88;
     bool inv = vSide > 0.5;
+    if (idTape(m, vBind)) { rough = 0.7; return idCol(vSide); }
     if (m == 0) return camo(vBind, vSide);
-    if (m == 1) { rough = 0.82; return inv ? vec3(0.13,0.14,0.13) : mix(vec3(0.42,0.40,0.30), camo(vBind*1.3, 0.0), 0.35); }
+    if (m == 1) { rough = 0.82; return inv ? vec3(0.56,0.46,0.33) : mix(vec3(0.30,0.35,0.42), camo(vBind*1.3, 0.0), 0.35); }
     if (m == 2) { rough = 0.6; return inv ? vec3(0.08) : skinTone(vTone); }
-    if (m == 3) { rough = 0.7; return inv ? vec3(0.10,0.11,0.11) : vec3(0.40,0.38,0.30); }
+    if (m == 3) { rough = 0.7; return inv ? vec3(0.6,0.5,0.36) : vec3(0.33,0.38,0.45); }
     if (m == 4) { rough = 0.75; return inv ? vec3(0.05) : vec3(0.40,0.33,0.24); }
     if (m == 5) { rough = 0.8; return inv ? vec3(0.06) : vec3(0.30,0.27,0.21); }
     if (m == 6) { rough = 0.42; metal = 0.6; return vec3(0.06,0.065,0.07); }
-    if (m == 7) { rough = 0.85; return inv ? vec3(0.16,0.18,0.16) : vec3(0.44,0.41,0.30); }
+    if (m == 7) { rough = 0.85; return inv ? vec3(0.5,0.41,0.29) : vec3(0.32,0.36,0.4); }
     if (m == 8) { // face: invaders wear balaclavas with an eye slit
-      if (inv) { float slit = step(abs(vBind.y - 1.648), 0.017) * step(0.06, vBind.z); rough = 0.85; return mix(vec3(0.07), skinTone(vTone*0.6+0.2), slit); }
+      if (inv) { float slit = step(abs(vBind.y - 1.648), 0.017) * step(0.06, vBind.z); rough = 0.85; return mix(vec3(0.42,0.34,0.25), skinTone(vTone*0.6+0.2), slit); }
       rough = 0.55; return skinTone(vTone);
     }
     if (m == 9) { rough = 0.6; return inv ? vec3(0.08) : vec3(0.35,0.32,0.25); }
@@ -372,7 +382,8 @@ export function makeSoldierMaterial(bonesTex) {
       .replace('#include <common>', '#include <common>\n' + PALETTE_GLSL)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'float mRough, mMetal; vec3 mCol = matColor(mRough, mMetal); vec4 diffuseColor = vec4(pow(mCol, vec3(2.2)), opacity);')
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mRough;')
-      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = mMetal;');
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = mMetal;')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n gl_FragColor.a = vSide > 0.5 ? 0.8 : 0.9;');   // which side, for the ink pass: their outline is in their colour
   };
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (sh) => {

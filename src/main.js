@@ -29,9 +29,10 @@ import { QUAY_Z as P_QUAY, DECK as P_DECK } from './terrainP.js';
 import { JT } from './layoutJ.js';
 import { CABIN as J_CABIN } from './terrainJ.js';
 import { seatPose, carPose } from './layoutB.js';
-import { FIELD as B_FIELD, roadAt as bRoadAt, S_TOWN as B_TOWN } from './terrainB.js';
+import { FIELD as B_FIELD, roadAt as bRoadAt, S_TOWN as B_TOWN, S_FIELD as B_SFIELD, sAtX as bSAtX } from './terrainB.js';
 import { LZ, CRASH, road6A } from './terrain4.js';
 import { Gameplay } from './gameplay.js';
+import { toonify, toonSync, outline, toonShared } from './toon.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -46,8 +47,8 @@ renderer.setPixelRatio(Q.pr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.85;
+renderer.toneMapping = THREE.NeutralToneMapping;   // Ashland's colours: keep the hues, don't wash them
+renderer.toneMappingExposure = 1.0;
 document.body.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -82,6 +83,7 @@ function boot() {
   G = { world, S, sol, pb, player, input, audio, post };
   G.pick = new Pickups(scene, S, sol);
   G.sceneId = 'beach'; G.scenes = { beach: { world, S, sol, pb, pick: G.pick } };
+  heroOutlines(world); toonShared.resY.value = innerHeight * Q.pr;
   // brass casings + dropped magazines live in forward time
   const brassGeo = new THREE.CylinderGeometry(0.0065, 0.0065, 0.05, 8).rotateZ(Math.PI / 2);
   G.brass = new THREE.InstancedMesh(brassGeo, new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.75, 0.56, 0.26, THREE.SRGBColorSpace), metalness: 1, roughness: 0.3 }), 48);
@@ -241,7 +243,7 @@ function boot() {
 
 function onResize() {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight); G.post.setSize(innerWidth, innerHeight, Q.pr);
+  renderer.setSize(innerWidth, innerHeight); G.post.setSize(innerWidth, innerHeight, Q.pr); toonShared.resY.value = innerHeight * Q.pr;
   if (G.vcr) G.vcr.onResize();
   if (G.home) G.home.resize();
 }
@@ -709,6 +711,24 @@ function useScene(id) {
   Object.assign(G, { world: nx.world, S: nx.S, sol: nx.sol, pb: nx.pb, pick: nx.pick });
   G.enemyHp = new Float32Array(nx.S.N).fill(100); G.overrides.clear(); nx.pb.hitShots.clear(); nx.pb.whizzed.clear(); nx.pick.reset();
   if (G.gp) G.gp.setTape(nx.S, id);
+  G.gunners = null;
+}
+// the cel look: vehicles and aircraft get Ashland's hull outline (everything else is inked from the depth buffer)
+// whose a vehicle is shows in its outline too: Cape Cod's in blue ink, Texas's in red (civilian cars stay plain)
+const INK_CAPE = new THREE.Color(0.02, 0.07, 0.42), INK_TX = new THREE.Color(0.42, 0.035, 0.02);
+function heroOutlines(world) {
+  const groups = [];
+  for (const v of world.vehicles || []) groups.push([v.grp, INK_TX]);
+  for (const h of world.helos || []) groups.push([h.grp, INK_CAPE]);
+  for (const g of world.gunships || []) groups.push([g.grp, INK_TX]);
+  for (const c of world.cars || []) groups.push([c.root || c.g || c, null]);
+  for (const c of world.rideCars || []) groups.push([c.root, c.c.side ? INK_TX : INK_CAPE]);
+  for (const c of world.craft || []) groups.push([c.g, INK_TX]);
+  for (const a of world.aavs || []) groups.push([a.g, INK_TX]);
+  for (const h of world.herks || []) groups.push([h.g, INK_CAPE]);
+  for (const p of world.planes || []) groups.push([p.g, INK_CAPE]);
+  for (const [g, tint] of groups) if (g && g.isObject3D) outline(g, { maxThick: 0.09, minSize: 0.12, tint });
+  toonify(world.root);
 }
 function loadSandwich(who, skin) { loadTape('sandwich', who, skin); }
 function loadBomb(who, skin) { loadTape('bomb', who, skin); }
@@ -724,6 +744,7 @@ function loadTape(id, who, skin, group = 0) {
     sol.prepare(pb);
     const pick = new Pickups(scene, S, sol);
     world.setActive(false); sol.mesh.visible = false;
+    heroOutlines(world);
     G.scenes[id] = { world, S, sol, pb, pick };
     setScene(prev); if (G.scenes[prev]) G.scenes[prev].world.setActive(true);
   }
@@ -859,13 +880,15 @@ function rideCheck(p, st) {
   if (inCar && !p.ride) {
     const c = G.S.L.rides[st.car]; seatPose(c, st.seat, G.tau, _sp);
     const d = Math.hypot(p.pos.x - _sp.sx, p.pos.z - _sp.sz);
-    p.ride = { car: st.car, seat: st.seat, c, pos: p.pos.clone(), from: p.pos.clone(), k: d < 0.6 ? 1 : 0, lastYaw: _sp.yaw, crouch: c.kind === 'pickup' && st.seat >= 2 ? 0.75 : 1 };
+    const gun = c.kind === 'pickup' && st.seat === 6;
+    p.ride = { car: st.car, seat: st.seat, c, pos: p.pos.clone(), from: p.pos.clone(), k: d < 0.6 ? 1 : 0, lastYaw: _sp.yaw, crouch: gun ? 0 : c.kind === 'pickup' && st.seat >= 2 ? 0.75 : 1, gun };
+    if (gun) { p.mount('m2'); if (!G.taughtChase) { G.taughtChase = true; sub(st.side ? '<em>On the .50.</em> Your truck was chasing theirs west to the helicopters. On the tape it all runs back.' : '<em>ROUTE 135, rewinding.</em> You were running west for the helicopters, and they were chasing you. On the tape it runs back: their wrecks un-crash and fall in behind you again. Catch the .50\'s rounds coming home out of them.', 9); } }
     if (d >= 0.6) { G.audio.play(G.audio.B.tug, 0.5); sub(st.seat >= 2 && c.kind === 'pickup' ? 'Into the bed of the truck. Hold on.' : 'Back in the car.', 2.5); }
   } else if (!inCar && p.ride) {
     // out the door you got in by
     const c = p.ride.c, cs = c.seats[p.ride.seat], sd = cs[0] > 0 ? 1 : -1; seatPose(c, p.ride.seat, G.tau, _sp);
     p.pos.set(_sp.sx + Math.cos(_sp.yaw) * 1.5 * sd, 0, _sp.sz - Math.sin(_sp.yaw) * 1.5 * sd); p.pos.y = heightAt(p.pos.x, p.pos.z); p.vel.set(0, 0, 0);
-    p.ride = null;
+    p.ride = null; p.unmount();
   }
 }
 function rideCarry(p, dt) {
@@ -877,10 +900,40 @@ function rideCarry(p, dt) {
   R.pos.set(_sp.sx, _sp.sy, _sp.sz); if (e < 1) { R.pos.lerpVectors(R.from, R.pos, e); R.pos.y += Math.sin(e * Math.PI) * 0.8; }
   let dy = _sp.yaw - R.lastYaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
   p.yaw += dy; R.lastYaw = _sp.yaw;
+  if (R.gun && p.mountedFrom) {   // the mount turns about 115° either side of straight back, and only so far up and down
+    const face = _sp.syaw + Math.PI; let d = p.yaw - face; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+    if (Math.abs(d) > 2.0) p.yaw = face + Math.sign(d) * 2.0; p.pitch = Math.max(-0.38, Math.min(0.5, p.pitch));
+  }
   p.pos.copy(R.pos);
   // the road through the springs
   const v = Math.min(1, _sp.v / 30); p.shake = Math.max(p.shake || 0, 0.02 + v * 0.06);
   if (G.state === 'play') { camera.position.set(p.pos.x, p.pos.y + p.eyeH + (Math.sin(G.real * 13.7) * 0.6 + Math.sin(G.real * 23.1) * 0.4) * 0.018 * v, p.pos.z); camera.rotation.y += dy; }
+}
+// the guns on the technicals turn with whoever is on them (and the one you're on is yours, so it's hidden)
+const _cp = {};
+function bombGuns() {
+  const W = G.world, S = G.S; if (!W.rideCars) return;
+  if (!G.gunners) G.gunners = W.rideCars.map((c, i) => S.actors.findIndex((a) => a.car === i && a.seat === 6));
+  W.rideCars.forEach((car, i) => {
+    if (!car.mount) return;
+    const gi = G.gunners[i]; car.mount.visible = !(gi === G.body && G.player.mountedFrom && G.state === 'play');
+    if (gi < 0 || !car.mount.visible) return;
+    const s = G.pb.sample(gi, G.tau, _sp2); carPose(car.c, G.tau, _cp);
+    let y = s.yaw - _cp.yaw - Math.PI; while (y > Math.PI) y -= 2 * Math.PI; while (y < -Math.PI) y += 2 * Math.PI;
+    car.mount.rotation.set(Math.max(-0.3, Math.min(0.45, s.pitch)), Math.max(-2.0, Math.min(2.0, y)), 0, 'YXZ');
+  });
+}
+// a strip along the top: the road from Ashland to the hayfield, who is where on it, and which way the tape is running
+function bombStrip(show) {
+  let el = $('road');
+  if (!el) { el = document.createElement('div'); el.id = 'road'; el.style.cssText = 'position:absolute;left:50%;top:4.6%;transform:translateX(-50%);width:min(46vw,420px);font-size:clamp(13px,1.5vw,17px);opacity:.92;display:none'; el.innerHTML = '<div style="display:flex;justify-content:space-between"><span>ASHLAND</span><span id="roadDir"></span><span>HAYFIELD</span></div><div id="roadBar" style="position:relative;height:14px;border-top:2px solid rgba(244,241,232,.7);margin-top:3px"></div>'; $('hud').appendChild(el); }
+  el.style.display = show ? '' : 'none'; if (!show) return;
+  const bar = $('roadBar'), S = G.S, L = S.L, s0 = B_TOWN - 60, s1 = B_SFIELD + 40;
+  if (!bar.children.length) for (let i = 0; i < L.rides.length; i++) { const d = document.createElement('i'); d.style.cssText = 'position:absolute;top:-8px;width:9px;height:9px;transform:translateX(-50%) rotate(45deg);font-style:normal'; bar.appendChild(d); }
+  const myCar = S.actors[G.body].car;
+  L.rides.forEach((c, i) => { const d = bar.children[i]; carPose(c, G.tau, _cp); const u = (bSAtX(_cp.x) - s0) / (s1 - s0); d.style.left = (Math.max(0, Math.min(1, u)) * 100) + '%';
+    const wreck = c.crash && G.tau > c.crash.t + 1; d.style.background = wreck ? 'transparent' : c.side ? '#e0453a' : '#4d86ff'; d.style.border = wreck ? '2px solid ' + (c.side ? '#e0453a' : '#4d86ff') : 'none'; d.style.boxShadow = i === myCar ? '0 0 0 2px #f4f1e8' : 'none'; d.style.top = i === myCar ? '-10px' : '-8px'; });
+  $('roadDir').textContent = (Math.floor(G.real * 2) % 2 ? '\u25C0\u25C0' : '\u25C0 ') + ' TAPE \u00B7 THEY CHASED YOU WEST \u25B6';
 }
 function bombBeats(t0, t1, p) {
   const B = G.S.L.blast, boomT = B.t + 102;   // 35 km at the speed of sound
@@ -1106,7 +1159,7 @@ function tick(dt, draw = true) {
       showHud = true; spreadShow = true;
       if (inp.touchLook && G.input.settings.assist) aimAssist(inp, dt);
       rideCheck(p, S.actors[G.body]);
-      const fast = !G.forward && !G.gp.slowOn ? Math.max(G.rewX || 1, G.gp.autoX) : 1;   // at ×2 your body runs the fast tape too, so the world keeps its shape around you
+      const fast = !G.forward && !G.gp.slowOn && !(G.gp.real < G.gp.cineUntil) ? Math.max(G.rewX || 1, G.gp.autoX) : 1;   // at ×2 your body runs the fast tape too, so the world keeps its shape around you
       let jumped2 = false;
       if (fast > 1) { p.update(dt, inp, S.obstacles, G.tau); jumped2 = p.jumped; if (jumped2) G.input.consumeJump(); }
       const out = p.update(dt, fast > 1 && jumped2 ? Object.assign({}, inp, { jump: false }) : inp, S.obstacles, G.tau - (fast > 1 ? dt : 0));
@@ -1133,7 +1186,8 @@ function tick(dt, draw = true) {
       if (!G.forward && G.tau <= S.actors[G.body].spawn + 0.02) beginEnding();
       if (!G.forward) {
         const rx = Math.max(G.rewX || 1, G.gp.autoX);
-        if (G.gp.slowOn) { tauRate = 0.3; osd = Math.sin(G.real * 5) > -0.3 ? '\u25C0 SLOW' : ''; muffle = 1600; desat = 0.25; rew = 0.25; }
+        if (G.gp.real < G.gp.cineUntil) { tauRate = 0.35; osd = '\u25C0 SLOW \u00B7 UN-WRECK'; muffle = 2200; rew = 0.25; }
+        else if (G.gp.slowOn) { tauRate = 0.3; osd = Math.sin(G.real * 5) > -0.3 ? '\u25C0 SLOW' : ''; muffle = 1600; desat = 0.25; rew = 0.25; }
         else if (rx > 1) { tauRate = rx; osd = (G.rewX || 1) > 1 ? '\u25C0\u25C0 REW \u00D72' : '\u25C0\u25C0 \u00D72 \u00B7 LULL'; muffle = 6000; }   // the fast rewind: same tape, half the wait
       }
       G.gp.rate = tauRate;
@@ -1189,10 +1243,13 @@ function tick(dt, draw = true) {
     }
   }
 
+  if (((G.toonN = (G.toonN || 0) + 1) % 40) === 1) toonify(scene);   // new and swapped materials take the cel look too
+  toonSync();
   const tauPrev = G.tau;
   G.tau = Math.max(0, G.tau - dt * tauRate);
   if (p.ride) rideCarry(p, dt);
-  if (G.sceneId === 'bomb') bombBeats(tauPrev, G.tau, p);
+  if (G.sceneId === 'bomb') { bombBeats(tauPrev, G.tau, p); bombGuns(); }
+  bombStrip(G.sceneId === 'bomb' && G.state === 'play');
   if (G.sceneId === 'jump') jumpBeats(tauPrev, G.tau, p);
   megaBeats(tauPrev, G.tau, p);
   if (G.state === 'ending') { // place the camera against the aircraft at the tape time it will be drawn at

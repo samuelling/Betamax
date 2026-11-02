@@ -2,6 +2,7 @@
 // hands as the body gets up). Walk over one and you can swap it for what you're holding; what you put down stays
 // put — that part of the world runs forward, like you.
 import * as THREE from 'three';
+import { outline, toonify } from './toon.js';
 import { primaryOf, weaponProp, WEAPONS } from './arsenal.js';
 
 const SHOW_R = 32, MAX = 18, REACH = 2.1;
@@ -20,7 +21,7 @@ export class Pickups {
   free(key) { const o = this.pool.get(key); if (o) { this.scene.remove(o); this.pool.delete(key); } }
   place(key, id, d) {
     let o = this.pool.get(key);
-    if (!o || o.userData.id !== id) { if (o) this.scene.remove(o); o = weaponProp(id); o.userData.id = id; this.scene.add(o); this.pool.set(key, o); }
+    if (!o || o.userData.id !== id) { if (o) this.scene.remove(o); o = weaponProp(id); o.traverse((q) => { if (q.isMesh) for (const m of [].concat(q.material)) m.userData.vm = true; }); outline(o, { maxThick: 0.02 }); toonify(o); o.userData.id = id; this.scene.add(o); this.pool.set(key, o); }
     o.position.set(d.x, d.y + 0.03, d.z); o.rotation.set(0, d.yaw, d.roll, 'YXZ'); o.visible = true;
     return o;
   }

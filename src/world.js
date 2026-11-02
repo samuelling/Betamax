@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Birds } from './birds.js';
+import { BackCues } from './backcues.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { heightAt, grassMask, crestD, lotMask, onLot, WATERLINE_Z, ARENA, LOT } from './terrain.js';
@@ -251,7 +252,7 @@ export class World {
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
     this.sun = sun;
-    this.hemi = new THREE.HemisphereLight(new THREE.Color(0.55, 0.62, 0.78), new THREE.Color(0.45, 0.38, 0.3), 0.55);
+    this.hemi = new THREE.HemisphereLight(new THREE.Color(0.62, 0.7, 0.82), new THREE.Color(0.52, 0.42, 0.28), 1.35);   // the cel materials take no sky reflection: the hemisphere carries the fill, as in Ashland
     this.scene.add(this.hemi);
   }
 
@@ -499,7 +500,7 @@ export class World {
     const col = new THREE.Color();
     // the fighting positions are trampled flat: a man lying in one can see over the lip, not into a wall of blades
     const pc = new Map(); for (const q of this.L.positions || []) { const key = Math.floor(q.x / 4) * 1000 + Math.floor(q.z / 4); (pc.get(key) || pc.set(key, []).get(key)).push(q); }
-    const trampled = (x, z) => { const cx = Math.floor(x / 4), cz = Math.floor(z / 4); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const l = pc.get((cx + i) * 1000 + cz + j); if (l) for (const q of l) { const dx = x - q.x, dz = z - q.z; if (dx * dx + dz * dz < (dz > 0 ? 7.5 : 3.2)) return true; } } return false; };
+    const trampled = (x, z) => { const cx = Math.floor(x / 4), cz = Math.floor(z / 4); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const l = pc.get((cx + i) * 1000 + cz + j); if (l) for (const q of l) { const dx = x - q.x, dz = z - q.z; if (dx * dx + dz * dz < (dz > 0 ? 30 : 3.2)) return true; } } return false; };
     while (k < count && tries < count * 30) {
       tries++;
       const x = (r() - 0.5) * 340, z = -(20 + r() * 160);
@@ -661,6 +662,7 @@ export class World {
   // each vertex knows its piece, and a float texture holds one matrix per piece, so blown-off pieces fly, tumble
   // and land — and in rewind lift back into place
   buildBreakableHouses(D) {
+    this.D = D;
     const sh = TX.makeShingleTex(); sh.wrapS = sh.wrapT = THREE.RepeatWrapping;
     const M = {
       siding: new THREE.MeshStandardMaterial({ map: sh, roughness: 0.95 }), roof: std([0.2, 0.2, 0.22], 0.85), trim: std([0.92, 0.92, 0.88], 0.6),
@@ -949,6 +951,7 @@ export class World {
     if (this.shipUpdate) this.shipUpdate(tau, cam);
     if (this.ashUpdate) this.ashUpdate(tau, cam);
     if (['beach', 'sandwich', 'bomb', 'ash'].includes(this.kind)) { if (!this.birds) this.birds = new Birds(this.root, this.kind); this.birds.update(tau, cam); }
+    if (['beach', 'sandwich', 'bomb', 'ash', 'port'].includes(this.kind)) { if (!this.cues) this.cues = new BackCues(this, this.kind); this.cues.update(tau, cam); }
     // sun shadow follows camera
     const s = this.sun;
     const tx = Math.round(cam.position.x / 4) * 4, tz = Math.round(cam.position.z / 4) * 4;

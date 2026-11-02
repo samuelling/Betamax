@@ -84,6 +84,52 @@ export class Playback {
     return out;
   }
 
+  // Brass: every casing the soldiers near you ejected is lying where it fell, and as the tape reaches the shot it
+  // leaps off the ground and back into the gun. Footfalls: each step's little burst of sand or dust gathers back
+  // in under the boot.
+  backCues(tau, ctx, cp, sm, gl) {
+    const S = this.S, A = S.shots, n = S.nShots, R = S.rec, body = ctx.bodyId;
+    const lo = lowerBound(A, SHOT_F, 0, tau - 9, n), hi = lowerBound(A, SHOT_F, 0, tau, n);
+    let cnt = 0;
+    for (let si = hi - 1; si >= lo && cnt < 140; si--) {
+      const o = si * SHOT_F, sh = A[o + 8]; if (sh < 0 || sh === body) continue;
+      const fx = A[o + 2], fy = A[o + 3], fz = A[o + 4];
+      const dx = fx - cp.x, dz = fz - cp.z; if (dx * dx + dz * dz > 520) continue;
+      const age = tau - A[o]; cnt++;
+      const yaw = Math.atan2(A[o + 5] - fx, A[o + 7] - fz), sy = Math.sin(yaw), cy = Math.cos(yaw), h = hash1(si);
+      const vx = -cy * (2.0 + h * 1.2) - sy * 0.4, vz = sy * (2.0 + h * 1.2) - cy * 0.4, vy = 2.2 + hash1(si * 7) * 1.4;
+      const x0 = fx - sy * 0.45, z0 = fz - cy * 0.45, y0 = fy - 0.05, deck = S.scene === 'ship' || S.scene === 'jump', gy = deck ? fy - 1.4 : Math.max(heightAt(x0, z0), -0.05);
+      let tf = (vy + Math.sqrt(vy * vy + 2 * G * Math.max(0, y0 - gy))) / G;   // time to the ground
+      let x, y, z;
+      if (age < tf) { x = x0 + vx * age; z = z0 + vz * age; y = y0 + vy * age - 0.5 * G * age * age; }
+      else { const roll = Math.min(0.35, (age - tf) * 1.2); x = x0 + vx * (tf + roll * 0.4); z = z0 + vz * (tf + roll * 0.4); y = gy + 0.02; }
+      const a = age > 7.5 ? Math.max(0, 1 - (age - 7.5) / 1.5) : 1;
+      sm.push(x, y, z, 0.045, 0.95, 0.72, 0.3, 0.95 * a, si);
+      if (age < tf && Math.sin(age * 40 + si) > 0.6) gl.push(x, y, z, 0.05, 1.4, 1.1, 0.6, 0.5, si);   // a glint as it turns over
+    }
+    // footfalls on soft ground
+    if (S.scene === 'ship' || S.scene === 'port' || S.scene === 'jump') return;
+    const dust = S.scene === 'beach' ? [0.86, 0.79, 0.63] : S.scene === 'sandwich' ? [0.6, 0.55, 0.45] : [0.62, 0.56, 0.44];
+    const k0 = Math.floor(tau * HZ);
+    let fc = 0;
+    for (let i = 0; i < S.N && fc < 26; i++) {
+      const hh = this.hit[i]; if (!hh.ok) continue;
+      const ddx = hh.pos.x - cp.x, ddz = hh.pos.z - cp.z; if (ddx * ddx + ddz * ddz > 900) continue;
+      fc++;
+      for (let k = 0; k < 9; k++) {
+        const s1 = k0 - k, s0 = s1 - 1; if (s0 < 0) break;
+        const o1 = (i * S.steps + s1) * F, o0 = (i * S.steps + s0) * F;
+        if (R[o1 + 8] !== MODE.GROUND || R[o1 + 6] < 1.6) continue;
+        const c0 = Math.floor(R[o0 + 7] / Math.PI), c1 = Math.floor(R[o1 + 7] / Math.PI); if (c0 === c1) continue;
+        const age = tau - s1 / HZ; if (age < 0 || age > 0.9) continue;
+        const side = (c1 & 1) ? 0.14 : -0.14, yw = R[o1 + 3];
+        const x = R[o1] + Math.cos(yw) * side, z = R[o1 + 2] - Math.sin(yw) * side, y = R[o1 + 1];
+        const u = age / 0.9, sp = 0.6 + R[o1 + 6] * 0.12;
+        sm.push(x - Math.sin(yw) * age * 0.4, y + 0.06 + age * 0.25, z - Math.cos(yw) * age * 0.4, (0.14 + age * 0.75) * sp, dust[0], dust[1], dust[2], 0.32 * (1 - u) * (1 - u), i + k);
+      }
+    }
+  }
+
   // is actor i a valid living target at tau?
   alive(i, tau) {
     const st = this.S.actors[i];
@@ -227,6 +273,9 @@ export class Playback {
         sm.push(ix, iy + age * 0.3, iz, 0.25 + age * 1.2, 0.32, 0.05, 0.04, 0.55 * (1 - age / 0.45), si);
       }
     }
+
+    // ---------------- small things running backward ----------------
+    if (cp) { this.backCues(tau, ctx, cp, sm, gl); if (this.world && this.world.cues && this.world.cues.stoves.length) this.world.cues.pushSmoke(sm, tau, cp); }
 
     // ---------------- strikes ----------------
     const lightCand = [];

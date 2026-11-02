@@ -69,7 +69,7 @@ export function buildShipWorld(W) {
     for (const d of L.islandDoors) root.add(new THREE.Mesh(box(1.4, 2.2, 0.08, d.x, D + 1.1, I.z0 - 0.02), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.9, 0.12, 0.08), toneMapped: false })));
     const rad = new THREE.Mesh(box(4.6, 2.2, 0.3, 0, 0, 0), dark); rad.position.set(cx + 8, D + 41, cz); root.add(rad); W.radar = rad;
     root.add(new THREE.Mesh(place(new THREE.PlaneGeometry(7, 10), cx - 18, D + 12, I.z0 - 0.06, 0, Math.PI, 0), new THREE.MeshBasicMaterial({ map: canvasTex(128, 180, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#d8d8d0'; g.font = 'bold 170px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('7', w / 2, h / 2 + 8); }, false), transparent: true })));
-    W.deckFlood = new THREE.PointLight(new THREE.Color(1, 0.85, 0.6), 220, 70, 1.4); W.deckFlood.position.set(cx - 20, D + 14, I.z0 - 3); root.add(W.deckFlood); }
+    W.deckFlood = new THREE.PointLight(new THREE.Color(1, 0.85, 0.6), 110, 70, 1.5); W.deckFlood.position.set(cx - 20, D + 14, I.z0 - 3); root.add(W.deckFlood); }
   // ---------- aircraft parked along the port side: tiltrotors, one heavy helicopter; deck tractors ----------
   W.craft = L.craft.map((c) => { const g = new THREE.Group(); g.position.set(c.x, D, c.z); g.rotation.y = c.rot; root.add(g); const mat = std([0.32, 0.34, 0.36], 0.6, 0.3), mats = [mat];
     const add = (geo) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
@@ -154,7 +154,7 @@ function updateShip(W, tau, cam) {
   // flares: the two most recent burning ones
   { let n = 0; for (let i = W.flareSched.length - 1; i >= 0 && n < 2; i--) { const f = W.flareSched[i], a = tau - f.t; if (a < 0 || a > 32) continue;
       const l = W.flares[n++], k = Math.min(1, a / 1.2) * Math.min(1, (32 - a) / 4) * (0.85 + 0.15 * Math.sin(tau * 23 + i));
-      l.position.set(f.x + Math.sin(a * 0.9 + i) * 6 + a * 1.2, 150 - a * 3.6, f.z + Math.cos(a * 0.7 + i) * 4); l.intensity = 900 * k; l.visible = true; }
+      l.position.set(f.x + Math.sin(a * 0.9 + i) * 6 + a * 1.2, 150 - a * 3.6, f.z + Math.cos(a * 0.7 + i) * 4); l.intensity = 420 * k; l.visible = true; }
     for (; n < 2; n++) { W.flares[n].intensity = 0; W.flares[n].visible = false; }
     const E = W.L.escort; W.fireLight.intensity = tau > E.hit ? (tau > E.blast ? 2600 * Math.max(0.4, Math.exp(-(tau - E.blast) / 80)) : 900) * (0.85 + 0.15 * Math.sin(tau * 7)) : 0; }
   // general quarters from the moment the helicopter is heard
