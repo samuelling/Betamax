@@ -22,7 +22,7 @@ function zone(scene, x, y, z, spd) {
     case 'beach': return z > -14 ? 'THE SAND' : z > -66 ? (Math.abs(x) > 70 ? 'THE HOUSES' : 'THE CREST') : z > -84 ? 'THE BACK DUNE' : 'THE LOT';
     case 'sandwich': { const lz = Math.hypot(x + 58, z - 56), cr = Math.hypot(x - 40, z + 74); return lz < 34 ? 'THE MEADOW' : cr < 38 ? 'THE WRECK' : Math.abs(z) < 16 ? 'ROUTE 6A' : 'THE YARDS'; }
     case 'bomb': return spd > 7 ? 'ROUTE 135' : x > 1100 ? 'THE HAYFIELD' : x < -1300 ? 'THE COMMON' : 'THE ROADSIDE';
-    case 'port': return y > 9 ? 'THE CRANES' : z > 62 ? 'THE QUAY' : z < -100 ? 'THE GATE' : 'THE BOX YARD';
+    case 'port': return y > 40 ? 'UNDER THE CANOPY' : y > 9 ? 'THE CRANES' : z > 62 ? 'THE QUAY' : z < -100 ? 'THE GATE' : 'THE BOX YARD';
     case 'ship': return y > 19 ? 'THE FLIGHT DECK' : x > 95 ? 'THE WELL DECK' : y > 8 ? 'THE STAIRS' : 'THE HANGAR';
     case 'ash': { if (Math.hypot(x + 62, z + 92) < 36 || Math.hypot(x - 22, z + 140) < 36) return 'THE CAMP'; if (Math.hypot(x - 92, z + 36) < 42) return 'THE LOT'; if (Math.hypot(x + 40, z - 70) < 122) return 'THE SHORE'; return 'THE WOODS'; }
     case 'jump': return 'THE HOLD';
@@ -169,9 +169,7 @@ export class Gameplay {
       const spd = Math.hypot(pos[b - 1][0] - pos[a][0], pos[b - 1][2] - pos[a][2]) / c;
       return { t0: T0 + a, t1: T0 + b, name: zone(this.scene, mx, my, mz, spd) };
     });
-    // the same place twice gets a numeral (counted in the order you'll play them: backward)
-    const seen = {};
-    for (let k = sg.length - 1; k >= 0; k--) { const nm = sg[k].name; seen[nm] = (seen[nm] || 0) + 1; if (seen[nm] > 1) sg[k].name = nm + ROMAN[Math.min(6, seen[nm])]; }
+    for (const q of sg) q.base = q.name;
     this.D.segs.set(id, sg);
     return sg;
   }
@@ -182,6 +180,8 @@ export class Gameplay {
     for (const si of this.myShots) if (this.S.shots[si * SHOT_F] >= tau) this.judged.add(si);
     this.segOn = -1;
     for (let k = 0; k < this.mySegs.length; k++) if (this.mySegs[k].t0 >= tau) this.segDone.add(id * 100 + k);
+    // the same place twice gets a numeral, counted in the order you'll play them (backward) from where you came in
+    { const seen = {}; for (let k = this.mySegs.length - 1; k >= 0; k--) { const q = this.mySegs[k]; if (q.t0 >= tau) continue; seen[q.base] = (seen[q.base] || 0) + 1; q.name = q.base + (seen[q.base] > 1 ? ' ' + ['', '', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][Math.min(8, seen[q.base])] : ''); } }
     this.aware.clear(); this.face.clear();
   }
   onTake(friendly) { this.stats.takes++; this.trk = Math.max(this.trk, 65); this.bump(friendly ? -10 : 5); this.slow = Math.min(1, this.slow + 0.06); }
@@ -350,7 +350,7 @@ export class Gameplay {
     const hostileNear = this.hostileWithin(28, tau, p.pos);
     const toNext = next >= 0 ? tau - sg[next].t1 : tau - me.spawn;
     const inLull = playing && on < 0 && toNext > 7 && !hostileNear && this.real - (v.lastHit || -9) > 3 && !show.length;
-    const wantX = inLull && this.lullAuto && this.scene !== 'jump' ? 2 : 1;   // the jump is a set piece: it plays at its own pace
+    const wantX = inLull && this.lullAuto ? 2 : 1;
     if (wantX !== this.autoX) { this.autoX = wantX; if (wantX === 1 && this.wasLull && next >= 0) this.h.sound('contact'); }
     this.wasLull = inLull;
     if (inLull && wantX > 1 && !this.taught.lull) { this.taught.lull = true; this.h.teach('Nothing on the tape here. It skims at &times;2 &mdash; or <em>take a body that’s still fighting</em> &#9670;'); }

@@ -213,11 +213,12 @@ export class Playback {
       // tracer in flight
       if (tau >= fireT && tau <= impT) {
         this.shotPos(o, tau, pa);
-        this.shotPos(o, tau + 0.022, pb);
-        const bright = si % 3 === 0 || veh;
+        this.shotPos(o, tau + (A[o + 6] - A[o + 3] > 25 ? 0.05 : 0.022), pb);
+        const bright = si % 3 === 0 || veh || A[o + 6] - A[o + 3] > 25;   // anything climbing into the sky is all tracer (the AA)
         const c = side === 0 ? [3.2, 1.0, 0.35] : [0.7, 3.0, 0.9];
         const a = bright ? 1 : 0.22;
-        tr.push(pb.x, pb.y, pb.z, veh ? 0.05 : 0.025, pa.x, pa.y, pa.z, veh ? 0.07 : 0.035, c[0], c[1], c[2], a);
+        const up = A[o + 6] - A[o + 3] > 25, w = up ? Math.max(0.16, (cp ? Math.hypot(pa.x - cp.x, pa.y - cp.y, pa.z - cp.z) : 50) * 0.0042) : 0.025;   // AA tracer reads at any range
+        tr.push(pb.x, pb.y, pb.z, w, pa.x, pa.y, pa.z, w * 1.4, c[0] * (up ? 1.4 : 1), c[1] * (up ? 1.4 : 1), c[2] * (up ? 1.4 : 1), a);
         // near-miss whiz
         if (ctx.playerAlive && !this.whizzed.has(si)) {
           const dx = pa.x - pp.x, dy = pa.y - (pp.y + 1.2), dz = pa.z - pp.z;
@@ -322,6 +323,7 @@ export class Playback {
           sm.push(p.x + a * 0.7, p.y + a * 0.25, p.z, 0.45 + a * 0.8, 0.85, 0.84, 0.82, 0.32 * (1 - a / 7), k);
         }
       }
+      if (e.air && e.t <= tauPrev && e.t > tau && ctx.playerAlive) { const d = Math.hypot(e.ix - pp.x, e.iy - pp.y - 1, e.iz - pp.z); if (d < 50) ev.shake = Math.max(ev.shake, 1.2 * (1 - d / 50)); }   // flak at your height
       if (e.t <= tauPrev && e.t > tau && ctx.playerAlive && !e.air) {
         const d = Math.hypot(e.ix - pp.x, e.iz - pp.z);
         const rad = e.big > 1.5 ? 9 : 6.5 * e.big;
@@ -333,6 +335,14 @@ export class Playback {
         ev.shake = Math.max(ev.shake, Math.max(0, 1 - d / (60 * Math.min(2, e.big))));
       }
       if (age < 0) return;
+      if (e.kind === 'flak') {   // an airburst: a hard white-orange flash, a ring of fragments, and a dirty puff that hangs
+        if (age < 0.35) { gl.push(e.ix, e.iy, e.iz, 9 * (1 - age / 0.35) + 2, 4.5, 3.0, 1.6, 1, ei); lightCand.push([age, e]); }
+        if (age < 0.5) for (let k = 0; k < 14; k++) { const ax = hash2(ei, k) - 0.5, ay = hash2(k, ei) - 0.5, az = hash2(ei * 7, k) - 0.5, l = Math.hypot(ax, ay, az) || 1, r0 = age * 70, r1 = Math.max(0, age - 0.05) * 70;
+          tr.push(e.ix + ax / l * r1, e.iy + ay / l * r1, e.iz + az / l * r1, 0.04, e.ix + ax / l * r0, e.iy + ay / l * r0, e.iz + az / l * r0, 0.06, 3.5, 2.2, 1.0, 1 - age / 0.5); }
+        if (age < 22) for (let k = 0; k < 7; k++) { const hx = hash2(ei, k + 30) - 0.5, hy = hash2(k + 30, ei) - 0.5, hz = hash2(ei * 3, k + 30) - 0.5;
+          sm.push(e.ix + hx * 4 + age * 0.8, e.iy + hy * 3 - age * 0.15, e.iz + hz * 4, 2.4 + age * 0.35 + Math.min(age, 0.4) * 6, 0.42, 0.36, 0.3, 0.55 * Math.min(1, age * 4) * Math.max(0, 1 - age / 22), k); }
+        return;
+      }
       const big = e.big;
       const wet = !e.air && e.iy <= 0.15 && heightAt(e.ix, e.iz) < 0.05 && e.iz > 5;
       if (age < 0.4) lightCand.push([age, e]);

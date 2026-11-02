@@ -42,8 +42,21 @@ export function simulatePort(seed = 7, opts = {}) {
     const a = base(0, { role: 'para', stick, spawn: t0, tIn: t0, tOut: t0 + fall, land: { x: lx, z: lz }, drift, alt: 190, squad: stick });
     a.mg = j === 2; actors.push(a); paras.push(a);
   }
+  // ---------- the stick out of the lead Hercules: The Jump's men, from the door all the way down ----------
+  // Static line: off the ramp at the aircraft's speed, three seconds of falling while the canopy is pulled out and
+  // fills, then nearly a minute under it, drifting down over the yard through the tracer and the flak
+  const HX = (t) => 600 - (t - (PT.drop0 - 2)) * 67, HY = DECK + 330, HZ0 = -60;
+  const jumpers = [];
+  for (let j = 0; j < 6; j++) {
+    const tIn = 21 + j * 0.9, side = j % 2 ? 1 : -1, ex = HX(tIn) + 9, ey = HY - 1.5, ez = HZ0 + side * 1.9;
+    const x1 = ex - 67 * (1 - Math.exp(-1.4 * 3.2)) / 1.4, y1 = ey - 38.2, z1 = ez + side * 3;
+    const land = { x: x1 + 26 + (r() - 0.5) * 18, z: -50 + (r() - 0.5) * 14 }, fall = 3.2 + (y1 - DECK) / (5.4 + r() * 0.4);
+    const a = base(0, { role: 'para', jump: true, stick: 4, k: j, spawn: tIn, tIn, tOut: tIn + fall, land, drift: { x: 0.9, z: 0.3 }, alt: y1 - DECK, ex, ey, ez, x1, y1, z1, dside: side, squad: 4 });
+    a.mg = j === 4; actors.push(a); paras.push(a); jumpers.push(a);
+  }
+  const jm = jumpers[2]; jm.hp = 1e9; jm.jumpMe = true;
   actors.forEach((a) => { a.id_ = makeIdentity(a.side, a.id + 7000); });
-  if (opts.ident) me.id_ = opts.ident;
+  if (opts.ident) { me.id_ = opts.ident; jm.id_ = opts.ident; }
 
   // ---------- ordnance ----------
   const explosions = [], ex = (o) => explosions.push(Object.assign({ done: false, big: 1, side: 0, sy: 30 }, o));
@@ -55,6 +68,12 @@ export function simulatePort(seed = 7, opts = {}) {
   // the AA trucks, one by one, from the paratroopers' rockets
   L.aa.forEach((g, gi) => { const t = 86 + gi * 8.5 + r() * 3, sx = g.x + 60 * Math.cos(gi * 2.1), sz = g.z - 40 - 30 * Math.sin(gi * 1.7);
     ex({ launchT: t - 0.9, t, sx, sy: DECK + 1.4, sz, ix: g.x, iy: DECK + 1, iz: g.z, kind: 'rocket', big: 1.5, side: 0, car: gi, aaGun: gi }); });
+  // the 40 mm and the 23 mm bursting around the stick on the way down
+  for (const a of jumpers) for (let k = 0; k < (a === jm ? 12 : 4); k++) {
+    const t = a.tIn + 5 + k * ((a.tOut - a.tIn - 14) / (a === jm ? 12 : 4)) + r() * 3, u = clamp((t - a.tIn - 3.2) / (a.tOut - a.tIn - 3.2), 0, 1);
+    const sc = a === jm ? 0.55 : 1, x = lerp(a.x1, a.land.x, u) + (r() - 0.5) * 50 * sc, y = DECK + (a.y1 - DECK) * (1 - u) + (r() - 0.2) * 30 * sc, z = lerp(a.z1, a.land.z, u) + (r() - 0.5) * 50 * sc;
+    if (y > DECK + 40) ex({ launchT: t - 0.1, t, sx: x, sy: y, sz: z, ix: x, iy: y, iz: z, kind: 'flak', big: 1.1, side: 1, air: true });
+  }
   explosions.sort((p, q) => p.t - q.t);
   const D = computeDestruction(L, explosions); O.setDestruction(D);
   const nav = makeNav(O, A, { walkable: (x, z) => z < QUAY_Z - 0.6 });
@@ -66,7 +85,7 @@ export function simulatePort(seed = 7, opts = {}) {
     const t = s * DT; curT = t;
     for (let i = pending.length - 1; i >= 0; i--) { const h = pending[i]; if (h.t > t) continue; pending.splice(i, 1); const tg = actors[h.target]; if (!tg.alive || tg.state === 'air') continue; tg.hp -= h.dmg; tg.hitFlinch = t; if (tg.hp <= 0) kill(tg, h.t, h.shooter, h.dx, h.dz, 'shot'); }
     for (const e of explosions) { if (e.done || e.t > t) continue; e.done = true;
-      for (const a of actors) { if (!a.alive || a.mode !== MODE.GROUND || a.me || a.state === 'air') continue; const d = Math.hypot(a.x - e.ix, a.z - e.iz); if (d < 2.6 * e.big) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind); }
+      for (const a of actors) { if (!a.alive || a.mode !== MODE.GROUND || a.me || a.jumpMe || a.state === 'air') continue; const d = Math.hypot(a.x - e.ix, a.z - e.iz); if (d < 2.6 * e.big) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind); }
       if (e.aaGun != null) L.aa[e.aaGun].deadT = e.t; }
     for (const a of actors) { if (!a.alive) { a.speed = 0; continue; } update(a, t); a.crouch += clamp(a.crouchT - a.crouch, -4 * DT, 4 * DT); }
     aaGuns(t);
@@ -105,10 +124,10 @@ export function simulatePort(seed = 7, opts = {}) {
     if (go(a, spot.x, spot.z, a.speedRun)) { a.speed = 0; a.crouchT = a.burst > 0 ? 0.3 : 0.9; combat(a, t); } else { a.crouchT = 0.25; if (r() < 0.02) combat(a, t); }
   }
   function update(a, t) {
-    if (t < a.spawn) { a.mode = MODE.HIDDEN; if (a.role === 'para') placeAir(a, a.spawn); return; }
+    if (t < a.spawn) { a.mode = MODE.HIDDEN; if (a.role === 'para') (a.jump ? placeJump : placeAir)(a, a.spawn); return; }
     a.mode = MODE.GROUND;
     if (a.role === 'para') {
-      if (t < a.tOut) { a.state = 'air'; placeAir(a, t); a.crouch = a.crouchT = 0; a.speed = 0; a.pitch = -0.3; return; }
+      if (t < a.tOut) { a.state = 'air'; a.crouch = a.crouchT = 0; a.speed = 0; if (a.jump) { placeJump(a, t); a.pitch = -0.5; if (t > a.tIn + 5) combat(a, t); } else { placeAir(a, t); a.pitch = -0.3; } return; }
       if (a.state === 'air') { a.state = 'shed'; a.shedT = t; a.y = DECK; }
       if (a.state === 'shed') { a.crouchT = 0.8; a.speed = 0; if (t > a.shedT + 3 + r() * 0.1) a.state = 'assault'; combat(a, t); return; }
       // the sticks: two for the guns, two for the quay
@@ -144,6 +163,13 @@ export function simulatePort(seed = 7, opts = {}) {
     if (!a.spot || t > a.reSpot) { a.spot = cover(a, { x: 10 + a.bus * 30 + (a.k - 4) * 4, z: -60 + a.k * 3 }, 50); a.reSpot = t + 18 + r() * 14; }
     fight(a, t, a.spot);
   }
+  function placeJump(a, t) {   // out of the door, the static line, the canopy, and down
+    const tt = t - a.tIn;
+    if (tt < 3.2) { const k = Math.max(0, tt); a.x = a.ex - 67 * (1 - Math.exp(-1.4 * k)) / 1.4; a.y = a.ey - 4.9 * Math.min(k, 2.4) ** 2 - Math.max(0, k - 2.4) * 12.5; a.z = a.ez + a.dside * 3 * Math.min(1, k / 3.2); a.yaw = -Math.PI / 2 + a.dside * 0.3; return; }
+    const u = clamp((t - a.tIn - 3.2) / (a.tOut - a.tIn - 3.2), 0, 1), e = u * u * (3 - 2 * u);
+    a.x = lerp(a.x1, a.land.x, e) + Math.sin(t * 0.7 + a.id) * 1.6 * (1 - u); a.z = lerp(a.z1, a.land.z, e) + Math.cos(t * 0.5 + a.id) * 1.1 * (1 - u); a.y = DECK + (a.y1 - DECK) * (1 - u);
+    if (a.target < 0) a.yaw = Math.atan2(a.land.x - a.x1, a.land.z - a.z1) + Math.sin(t * 0.4 + a.id) * 0.5;
+  }
   function placeAir(a, t) {   // hanging under the canopy: sliding down the wind to the landing point
     const u = clamp((t - a.tIn) / (a.tOut - a.tIn), 0, 1), left = (a.tOut - t);
     a.x = a.land.x + a.drift.x * left * 1.0 + Math.sin(t * 0.7 + a.id) * 1.2 * (1 - u); a.z = a.land.z + a.drift.z * left; a.y = DECK + a.alt * (1 - u) * (1 - u * 0.15) + Math.max(0, 1 - u) * 0;
@@ -155,8 +181,8 @@ export function simulatePort(seed = 7, opts = {}) {
       if (t < PT.aa || (g.deadT && t > g.deadT)) return;
       const st = g.st || (g.st = { next: PT.aa + gi * 0.7, burst: 0, ax: 0, ay: 0, az: 0 });
       if (t < st.next) return;
-      if (st.burst <= 0) { const air = paras.filter((p) => p.state === 'air' && p.alive); if (air.length && r() < 0.8) { const p = air[Math.floor(r() * air.length)]; st.ax = p.x + (r() - 0.5) * 40; st.ay = p.y + 10 + (r() - 0.5) * 50; st.az = p.z + (r() - 0.5) * 40; } else { st.ax = g.x + (r() - 0.5) * 500; st.ay = DECK + 260 + r() * 200; st.az = g.z + (r() - 0.5) * 500; } st.burst = 12 + Math.floor(r() * 18); }
-      const mx = g.x, my = DECK + 2.4, mz = g.z, ix = st.ax + (r() - 0.5) * 12, iy = st.ay + (r() - 0.5) * 12, iz = st.az + (r() - 0.5) * 12;
+      if (st.burst <= 0) { const air = paras.filter((p) => p.state === 'air' && p.alive), js = air.filter((p) => p.jump); if (js.length && r() < 0.7) { const p = js[Math.floor(r() * js.length)]; st.ax = p.x + (r() - 0.5) * 22; st.ay = p.y + 4 + (r() - 0.5) * 24; st.az = p.z + (r() - 0.5) * 22; } else if (air.length && r() < 0.8) { const p = air[Math.floor(r() * air.length)]; st.ax = p.x + (r() - 0.5) * 40; st.ay = p.y + 10 + (r() - 0.5) * 50; st.az = p.z + (r() - 0.5) * 40; } else { st.ax = g.x + (r() - 0.5) * 500; st.ay = DECK + 260 + r() * 200; st.az = g.z + (r() - 0.5) * 500; } st.burst = 12 + Math.floor(r() * 18); }
+      const mx = g.x, my = DECK + 2.4, mz = g.z, k = 1.35, ix = mx + (st.ax + (r() - 0.5) * 12 - mx) * k, iy = my + (st.ay + (r() - 0.5) * 12 - my) * k, iz = mz + (st.az + (r() - 0.5) * 12 - mz) * k;   // on past you, into the dark
       shots.push({ fireT: t, impT: t + Math.hypot(ix - mx, iy - my, iz - mz) / 900, fx: mx, fy: my, fz: mz, ix, iy, iz, shooter: -300 - gi, target: -1, kind: 1 });
       st.burst--; st.ax += (r() - 0.5) * 6; st.next = st.burst > 0 ? t + 0.07 : t + 1.2 + r() * 2.5;
     });
@@ -164,7 +190,7 @@ export function simulatePort(seed = 7, opts = {}) {
   function combat(a, t) {
     if (t >= a.retarget) {
       a.retarget = t + 0.6 + r() * 0.7; tgtList.length = 0;
-      for (const b of actors) { if (b.side === a.side || !b.alive || b.mode !== MODE.GROUND || b.state === 'air' || b.state === 'gone') continue; const d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 140) tgtList.push([d, b.id]); }
+      for (const b of actors) { if (b.side === a.side || !b.alive || b.mode !== MODE.GROUND || b.state === 'gone') continue; if (b.state === 'air' && !(b.jump && a.side === 1 && a.state !== 'air' && b.y - a.y > 30)) continue; const d = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z); if (d < (b.state === 'air' || a.state === 'air' ? 320 : 140)) tgtList.push([d * (b.state === 'air' ? 1.6 : 1), b.id]); }
       tgtList.sort((p, q) => p[0] - q[0]); const vis = [];
       for (let k = 0; k < tgtList.length && k < 8 && vis.length < 3; k++) { const b = actors[tgtList[k][1]]; if (O.segment(a.x, a.y + 1.2, a.z, b.x, b.y + 1.1, b.z, t, -1) < 0) vis.push(b.id); }
       a.target = vis.length ? vis[Math.floor(r() * vis.length)] : -1;
@@ -178,12 +204,12 @@ export function simulatePort(seed = 7, opts = {}) {
     if (t < a.nextShot) return;
     const fx = Math.sin(a.yaw), fz = Math.cos(a.yaw), mx = a.x + fx * 0.75, mz = a.z + fz * 0.75, tf = Math.min(t, Math.max(t - DT + 1e-3, a.nextShot));
     const shot = { fireT: tf, shooter: a.id, target: -1, fx: mx, fy: my, fz: mz };
-    const hitP = (a.side === 0 ? 0.08 : 0.018) * clamp(30 / dh, 0.15, 1.3) * (b.crouch > 0.6 ? 0.35 : 0.85) * (b.me ? 0 : 1);
+    const air = a.state === 'air' || b.state === 'air', hitP = (air ? 0.004 : (a.side === 0 ? 0.08 : 0.018) * clamp(30 / dh, 0.15, 1.3) * (b.crouch > 0.6 ? 0.35 : 0.85)) * (b.me || b.jumpMe ? 0 : 1);
     if (r() < hitP) { shot.ix = b.x; shot.iy = aimY; shot.iz = b.z; shot.kind = 3; shot.target = b.id; shot.impT = tf + Math.hypot(shot.ix - mx, shot.iy - my, shot.iz - mz) / BULLET_SPEED; pending.push({ t: shot.impT, target: b.id, dmg: 34 + r() * 50, shooter: a.id, dx, dz }); }
-    else { const k = 1.1 + r() * 0.4; shot.ix = mx + (b.x + (r() - 0.5) * 1.6 - mx) * k; shot.iz = mz + (b.z + (r() - 0.5) * 1.6 - mz) * k; shot.iy = Math.max(DECK + 0.05, my + (aimY + (r() - 0.5) * 0.8 - my) * k); shot.kind = 1; shot.impT = tf + Math.hypot(shot.ix - mx, shot.iy - my, shot.iz - mz) / BULLET_SPEED; }
+    else { const k = 1.1 + r() * 0.4, sp = b.state === 'air' ? 6 : 1.6; shot.ix = mx + (b.x + (r() - 0.5) * sp - mx) * k; shot.iz = mz + (b.z + (r() - 0.5) * sp - mz) * k; shot.iy = Math.max(DECK + 0.05, my + (aimY + (r() - 0.5) * sp * 0.6 - my) * k); shot.kind = 1; shot.impT = tf + Math.hypot(shot.ix - mx, shot.iy - my, shot.iz - mz) / BULLET_SPEED; }
     shots.push(shot);
-    a.burst--; a.mag--; a.nextShot = tf + (a.mg ? 0.075 : 0.09 + r() * 0.06);
-    if (a.burst <= 0) a.pauseUntil = t + 0.6 + r() * 1.8;
+    a.burst--; a.mag--; a.nextShot = tf + (a.state === 'air' ? 0.28 + r() * 0.3 : a.mg ? 0.075 : 0.09 + r() * 0.06);   // under a canopy you take your time
+    if (a.burst <= 0) a.pauseUntil = t + (a.state === 'air' ? 1.5 + r() * 2.5 : 0.6 + r() * 1.8);
     if (a.mag <= 0) { a.reloadUntil = t + 2.6; a.mag = 30; a.burst = 0; a.reloads.push(t); }
   }
 
@@ -194,7 +220,7 @@ export function simulatePort(seed = 7, opts = {}) {
   const T_START = Math.min((me.boardT || PT.board + 10) - 0.6, T_SIM - 0.1);
   const statics = actors.map((a) => ({
     id: a.id, side: a.side, spawn: a.spawn, deathTime: a.deathTime, fallSign: a.fallSign, killer: a.killer, cause: a.cause, veh: -1, helo: -1, mg: a.mg, te: 0, ident: a.id_,
-    reloads: Float32Array.from(a.reloads), skin: a.me && opts.skin != null ? opts.skin : r(), role: a.role, para: a.role === 'para', tIn: a.tIn ?? -1, tOut: a.tOut ?? 1e9, boardT: a.boardT ?? -1, from: a.from || null, bus: a.bus ?? -1, gun: a.gun ?? -1, house: -1,
+    reloads: Float32Array.from(a.reloads), skin: a.me && opts.skin != null ? opts.skin : r(), role: a.role, para: a.role === 'para', jump: !!a.jump, tIn: a.tIn ?? -1, tOut: a.tOut ?? 1e9, boardT: a.boardT ?? -1, from: a.from || null, bus: a.bus ?? -1, gun: a.gun ?? -1, house: -1,
   }));
-  return { scene: 'port', L, N, steps, rec, obstacles: O, destruction: D, missiles: [], shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: me.id, T_START };
+  return { scene: 'port', L, N, steps, rec, obstacles: O, destruction: D, missiles: [], shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: me.id, T_START, starts: { 0: [me.id, T_START], jump: [jm.id, Math.min(T_SIM - 0.1, jm.tOut + 6)] } };
 }

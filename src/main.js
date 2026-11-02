@@ -71,7 +71,7 @@ function boot() {
   const sol = new Soldiers(scene, S);
   const smoke = new Billboards(scene, 11000, TX.makeSoftTex(), false, world.fogColor);
   const glow = new Billboards(scene, 5000, TX.makeFlashTex(), true, world.fogColor);
-  const tracers = new Tracers(scene, 2500);
+  const tracers = new Tracers(scene, 2500); Tracers.camera = camera;
   const pb = new Playback(S, world, sol, smoke, glow, tracers, scene);
   { const t0 = performance.now(); sol.prepare(pb); console.log("ragdolls ms", Math.round(performance.now() - t0)); }
   const flashTex = TX.makeFlashTex();
@@ -340,6 +340,7 @@ function startChapter(id) {
   overlay(`<div class="ttl">&#9654; PLAY</div><div class="ttr">TAPE ${n} / 5</div><h2 style="margin-top:3em">${title}</h2><p style="opacity:.6">loading&hellip;</p>`, 'blue');
   setTimeout(() => {
     if (id === 'ash' || id === 'ashTX') { loadTape('ash', ident(a.id), a.skin, id === 'ashTX' ? 1 : 0); startAsh(); return; }
+    if (id === 'jump') { startJumpDescent(ident(a.id), a.skin); return; }
     loadTape(id, ident(a.id), a.skin);
     if (id === 'bomb') startBomb(); else if (id === 'jump') startJump(); else if (id === 'port') startPort(); else if (id === 'ship') startShip(); else startSandwich();
   }, 80);
@@ -612,6 +613,7 @@ function beginDeath(cause) {
   sub(cause === 'mine' ? 'You stepped off the edge of the tape.' : cause === 'snap' ? 'The tape snapped. You lost your past. Fast-forwarding to the last body you took.' : `${short(G.body)} dies twice. Fast-forwarding to the last body you took.`, 3);
 }
 function beginEnding() {
+  if (G.sceneId === 'port' && G.S.actors[G.body].para) { jumpCut(); return; }   // up under the canopy and into the door: the same tape goes on inside the aircraft
   G.state = 'ending'; G.stateT = 0;
   { const g = G.gp.finishTape(); G.gp.autoX = 1; G.gp.slowOn = false; feed(`TAPE QUALITY ${g}`); }
   G.end = { from: camera.position.clone(), fromQ: camera.quaternion.clone() };
@@ -730,9 +732,30 @@ function heroOutlines(world) {
   for (const [g, tint] of groups) if (g && g.isObject3D) outline(g, { maxThick: 0.09, minSize: 0.12, tint });
   toonify(world.root);
 }
+// The Jump opens on the ground at the port, where you came down: in rewind you rise back up under the canopy through
+// the tracer and the flak, the canopy pulls back into its pack, you fly back up to the door, and the tape cuts inside
+function startJumpDescent(who, skin) {
+  loadTape('port', who, skin, 'jump');
+  startSandwich(); card('THE JUMP', 3); G.player.ride = null;
+  setTimeout(() => ensureScene('jump', who, skin), 2500);   // the aircraft, ready for when you reach the door
+}
+function jumpCut() {
+  const st = G.S.actors[G.body], who = ident(G.body), skin = st.skin;
+  G.audio.play(G.audio.B.clunk, 0.6); G.flash = 0.9;
+  loadTape('jump', who, skin);
+  const S = G.S; G.tau = S.T_START; G.body = S.startId;
+  G.player.setBody(S.actors[S.startId]); beginPlayFromBody(G.body, G.tau); saveCheckpoint();
+  G.state = 'play'; G.stateT = 0; hud(true);
+  sub('Back in through the door.', 3);
+}
 function loadSandwich(who, skin) { loadTape('sandwich', who, skin); }
 function loadBomb(who, skin) { loadTape('bomb', who, skin); }
 function loadTape(id, who, skin, group = 0) {
+  ensureScene(id, who, skin, group);
+  { const S = G.scenes[id].S; if (S.starts && S.starts[group]) { S.startId = S.starts[group][0]; S.T_START = S.starts[group][1]; } S.actors[S.startId].ident = who; if (skin != null) S.actors[S.startId].skin = skin; }   // The Bomb has two: the Cape's helicopter, and the fleet's; the port has the Jump's man
+  useScene(id);
+}
+function ensureScene(id, who, skin, group = 0) {
   if (!G.scenes[id]) {
     const prev = G.sceneId; setScene(id);
     const world = new World(renderer, scene, Q, id);
@@ -748,8 +771,6 @@ function loadTape(id, who, skin, group = 0) {
     G.scenes[id] = { world, S, sol, pb, pick };
     setScene(prev); if (G.scenes[prev]) G.scenes[prev].world.setActive(true);
   }
-  { const S = G.scenes[id].S; if (S.starts && S.starts[group]) { S.startId = S.starts[group][0]; S.T_START = S.starts[group][1]; } S.actors[S.startId].ident = who; if (skin != null) S.actors[S.startId].skin = skin; }   // The Bomb has two: the Cape's helicopter, and the fleet's
-  useScene(id);
 }
 // East Sandwich opens on the meadow: the extraction on the grass, you a few steps from the door
 function startSandwich() {
@@ -1092,6 +1113,8 @@ function tick(dt, draw = true) {
           const h = G.pb.hit[G.body], a = G.real * 0.02, cx = h ? h.pelvis.x : 0, cz = h ? h.pelvis.z : 0; camera.position.set(cx - 30 + Math.sin(a) * 4, heightAt(cx - 30, cz + 18) + 14, cz + 18); camera.lookAt(cx, heightAt(cx, cz) + 1.5, cz);
         } else if (G.introK === undefined && G.sceneId === 'ship') {   // wide: from the open stern gate, forward into the well deck and the boats
           const a = G.real * 0.02; camera.position.set(S_HULL.x1 - 3, S_WELL.floor + 9.5 + Math.sin(a) * 0.4, 5.6); camera.lookAt(104, S_WELL.floor + 1.2, -1);
+        } else if (G.introK === undefined && G.sceneId === 'port' && st.jump) {   // wide: from above, where you came down in the yard, the canopy spent beside you
+          const a = 0.6 + G.real * 0.03; camera.position.set(h.pelvis.x + Math.sin(a) * 26, h.pelvis.y + 18, h.pelvis.z + Math.cos(a) * 26); camera.lookAt(h.pelvis.x, h.pelvis.y + 1, h.pelvis.z);
         } else if (G.introK === undefined && G.sceneId === 'port') {   // wide: the wharf from the quay edge, the gangway and the ship, fires beyond
           const a = 0.3 + G.real * 0.02; camera.position.set(-40 + Math.sin(a) * 10, P_DECK + 11, P_QUAY - 30); camera.lookAt(16, P_DECK + 8, P_QUAY - 2);
         } else if (G.introK === undefined && G.sceneId === 'jump') {   // wide: from the front of the hold, down the two lines to the open doors

@@ -174,7 +174,7 @@ export function simulate(seed = 7) {
   const deaths = [];
 
   const tgtList = [];
-  const rc = mulberry32(seed * 613 + 11), COWARD_T = 330 + rc() * 4; let coward = null;   // after the second act
+  const rc = mulberry32(seed * 613 + 11), COWARD_T = 296 + rc() * 4; let coward = null;   // as the last hovercraft wave comes in
   // the one who becomes your first body came in with the second lift and lasts the whole morning, both acts
   const hero = actors.filter((a) => a.side === 0 && a.helo === 4).sort((p, q) => Math.abs(p.exitX) - Math.abs(q.exitX))[0]; if (hero) hero.hp = 1e7;
   function updateCoward(a, t) {
@@ -219,7 +219,7 @@ export function simulate(seed = 7) {
         if ((a.coward && !e.opener) || (a === hero && !coward)) continue;
         const d = Math.hypot(a.x - e.ix, a.z - e.iz);
         // dug-in defenders crouched behind sandbags are much harder to kill
-        const cover = a.side === 0 && a.state === 'defend' && a.crouch > 0.6 ? 0.55 : 1;
+        const cover = a.side === 0 && a.state === 'defend' && a.crouch > 0.6 && !a.coward ? 0.55 : 1;
         const kr = (e.big > 2 ? 9 : e.big > 1.5 ? 4.5 : 2.3 * e.big) * cover, wr = (e.big > 2 ? 20 : e.big > 1.5 ? 10 : 6 * e.big) * cover;
         if (d < kr) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind);
         else if (d < wr) { a.hp -= 60 * (1 - d / wr); if (a.hp <= 0) kill(a, e.t, -1, a.x - e.ix, a.z - e.iz, e.kind); }
@@ -581,7 +581,7 @@ export function simulate(seed = 7) {
   // choose the opening body: a defender who dies late in the battle, near the middle
   let start = null;
   const cw = actors.find((a) => a.coward && a.deathTime > 0);
-  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 320 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
+  const lateDef = actors.filter((a) => a.side === 0 && a.deathTime > 290 && a.deathTime < T_SIM - 4 && a.cause === 'shot');
   lateDef.sort((p, q) => Math.abs(p.fp.x) - Math.abs(q.fp.x));
   if (cw) start = cw;
   else if (lateDef.length) start = lateDef[0];
