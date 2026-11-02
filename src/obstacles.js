@@ -2,6 +2,7 @@
 // (boardwalk deck, beach stairs, side steps, sandbag tops), and moving/wrecked vehicles at any tape time.
 // Pure JS so the simulation (node or browser) and the renderer share exactly the same geometry.
 import { heightFast as heightAt } from './terrain.js';
+import { SC } from './scenes.js';
 import { vehZ, heloPose, lcacDeckY } from './layout.js';
 import { carPose } from './layoutB.js';
 const CAR_DIM = { sedan: [0.92, 2.35, 1.45], wagon: [0.92, 2.4, 1.46], hatch: [0.9, 2.08, 1.48], suv: [0.97, 2.38, 1.78], pickup: [0.98, 2.7, 1.85] };
@@ -105,7 +106,7 @@ export class Obstacles {
         d.push({ x: v.x, z: z + 12.4, c: 1, s: 0, hx: 7.2, hz: 1.0, y0: g - 1, y1: g + 6.5, kind: 'veh', vi, walk: false });
       }
     });
-    for (const b of this.L.dynBoxes || []) if (t < b.until) d.push(b);
+    for (const b of this.L.dynBoxes || []) if (t < (b.until ?? 1e9) && t >= (b.from ?? -1e9)) d.push(b);
     // The Bomb: the cars, moving or wrecked
     for (const c of this.L.rides || []) {
       const p = carPose(c, t, _cp), dm = CAR_DIM[c.kind] || CAR_DIM.sedan;
@@ -169,7 +170,7 @@ export class Obstacles {
 
   // height of the walkable surface under (x,z) for someone whose feet are at yPrev (steps up to ~0.45 m)
   surfaceY(x, z, yPrev = 1e9, t = null) {
-    let y = Math.max(heightAt(x, z) + (t != null && this.D ? this.D.craters.delta(x, z, t) : 0), -0.9);
+    let y = Math.max(heightAt(x, z) + (t != null && this.D ? this.D.craters.delta(x, z, t) : 0), SC.id === 'beach' || SC.id === 'sandwich' ? -0.9 : -1e4);   // off a ship, or out of an aircraft, you fall
     const L = this.L, bw = L.boardwalk || [];
     const ax = bw.length ? Math.abs(x - BW_X) : 99;
     const step = (h) => { if (h > y && h <= yPrev + 0.48) y = h; };

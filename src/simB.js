@@ -33,10 +33,12 @@ export function simulateBomb(seed = 3, opts = {}) {
   const plan = [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 3, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1], [1, 3, 1], [1, 4, 1], [2, 0, 0], [2, 1, 1], [2, 2, 0], [2, 3, 0], [2, 4, 0], [2, 5, 1], [3, 0, -1], [3, 1, -1], [3, 2, -1], [3, 3, -1]];
   for (const [ci, si, hel] of plan) { const a = base(0); a.car = ci; a.seat = si; a.helo = hel; a.spawn = 1 + r() * 2; actors.push(a); }
   for (const ci of [4, 5, 6, 7, 8]) R[ci].seats.forEach((_, si) => { const a = base(1); a.car = ci; a.seat = si; a.helo = -1; a.spawn = R[ci].t0 - 2.5; actors.push(a); });
-  const me = actors.find((a) => a.car === 2 && a.seat === 2); me.me = true; me.hp = 1e9;
+  const me0 = actors.find((a) => a.car === 2 && a.seat === 2), me1 = actors.find((a) => a.car === 2 && a.seat === 5);   // the Cape's helicopter; the fleet's
+  const me = opts.group === 1 ? me1 : me0; me0.me = true; me0.hp = 1e9; me1.me = true; me1.hp = 1e9;
   actors.forEach((a) => { a.mg = a.side ? (a.car === 4 || a.car === 8) && a.seat === 2 : a.car === 2 && a.seat === 3; a.driver = a.seat === 0; });
   actors.forEach((a) => { a.id_ = makeIdentity(a.side, a.id + 3000); });
   if (opts.ident) me.id_ = opts.ident;
+  const other = me === me0 ? me1 : me0;
   // where each of yours comes out of the trees, and which door they run for
   actors.filter((a) => a.side === 0).forEach((a, k) => { a.from = { x: L.trail.x + (k % 4 - 1.5) * 1.6, z: L.trail.z + Math.floor(k / 4) * 1.4 }; });
 
@@ -53,6 +55,10 @@ export function simulateBomb(seed = 3, opts = {}) {
   // the last technical, at the gate: a rocket from the field
   { const c = at(4, R[4].burnT), sx = L.FIELD.x - 6, sz = L.FIELD.z - 20; ex({ launchT: R[4].burnT - 0.9, t: R[4].burnT, sx, sy: heightAt(sx, sz) + 1.4, sz, ix: c.x, iy: c.y + 0.8, iz: c.z, kind: 'rocket', big: 1.6, side: 0 });
     ex({ launchT: R[4].burnT, t: R[4].burnT + 0.15, sx: c.x, sy: 0, sz: c.z, ix: c.x, iy: c.y + 0.6, iz: c.z, kind: 'crash', big: 1.0, side: 0, persist: true }); }
+  // the cruise missiles into the Telechron works, from the east, low
+  for (const m of L.megas) for (let k = 0; k < 3; k++) { const c = Math.cos(m.rot), sn = Math.sin(m.rot), lx = (k - 1) * 22, ix = m.x + lx * c, iz = m.z - lx * sn;
+    ex({ launchT: m.T - 2.2 + k * 0.25, t: m.T - 0.5 + k * 0.25, sx: ix - 420, sy: 70, sz: iz - 60, ix, iy: m.y + 4 + k * 3, iz, kind: 'rocket', big: 2.6, side: 1 });
+    ex({ launchT: m.T, t: m.T + 1 + k * 0.4, sx: ix, sy: 0, sz: iz, ix, iy: m.y + 1, iz, kind: 'crash', big: 1.4, side: 1, persist: true }); }
   explosions.sort((p, q) => p.t - q.t);
   const D = computeDestruction(L, explosions);
   O.setDestruction(D);
@@ -213,11 +219,11 @@ export function simulateBomb(seed = 3, opts = {}) {
   const S = new Float32Array(shots.length * SHOT_F);
   shots.forEach((s, i) => { const o = i * SHOT_F; S[o] = s.fireT; S[o + 1] = s.impT; S[o + 2] = s.fx; S[o + 3] = s.fy; S[o + 4] = s.fz; S[o + 5] = s.ix; S[o + 6] = s.iy; S[o + 7] = s.iz; S[o + 8] = s.shooter; S[o + 9] = s.target; S[o + 10] = s.kind; });
   const byImpact = Uint32Array.from(shots.map((_, i) => i).sort((p, q) => S[p * SHOT_F + 1] - S[q * SHOT_F + 1]));
-  const T_START = Math.min((me.boardT || H0.tLift - 2) - 0.6, T_SIM - 0.1);
+  const T_START = Math.min((me.boardT || H0.tLift - 2) - 0.6, T_SIM - 0.1), T_OTHER = Math.min((other.boardT || H1.tLift - 2) - 0.6, T_SIM - 0.1);
   const statics = actors.map((a) => ({
     id: a.id, side: a.side, spawn: a.spawn, deathTime: a.deathTime, fallSign: a.fallSign, killer: a.killer, cause: a.cause,
     veh: -1, helo: a.helo, mg: a.mg, te: 0, ident: a.id_, reloads: Float32Array.from(a.reloads), skin: a.me && opts.skin != null ? opts.skin : r(),
     car: a.car, seat: a.seat, tIn: a.tIn ?? -1, tOut: a.tOut ?? 1e9, boardT: a.boardT ?? -1, from: a.from, house: -1,
   }));
-  return { scene: 'bomb', L, N, steps, rec, obstacles: O, destruction: D, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: me.id, T_START };
+  return { scene: 'bomb', L, N, steps, rec, obstacles: O, destruction: D, missiles, shots: S, nShots: shots.length, byImpact, explosions, deaths, actors: statics, startId: me.id, T_START, starts: { [me === me0 ? 0 : 1]: [me.id, T_START], [me === me0 ? 1 : 0]: [other.id, T_OTHER] } };
 }

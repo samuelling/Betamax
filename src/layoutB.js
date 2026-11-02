@@ -2,6 +2,7 @@
 // landing craft are: a pure function of tape time, worked out once here and shared by the simulation, the
 // collisions and the renderer, so they rewind exactly — through the chase, the crashes and the stop at the field.
 import { mulberry32 } from './rng.js';
+import { planStructure, structureBoxes } from './megastruct.js';
 import { heightAt, ARENA } from './terrain.js';
 import { roadAt, roadZ0, sAtX, ROAD_LEN, S_TOWN, S_FIELD, TOWN, FIELD, SIDE_ROAD, ROAD_HALF, openAt } from './terrainB.js';
 
@@ -96,13 +97,18 @@ export function buildBombLayout() {
     L.blocks.push({ x: sx, z: sz, hx: 5, hz: 4, rot: tmp.yaw, h: 4.2, kind: 'store' });
     for (const u of [-3.2, 3.2]) { const px = g.x + Math.sin(tmp.yaw) * u, pz = g.z + Math.cos(tmp.yaw) * u; L.blocks.push({ x: px, z: pz, hx: 0.5, hz: 0.9, rot: tmp.yaw, h: 1.7, kind: 'pump' }); } }
   { const T = L.tanker; L.blocks.push({ x: T.x, z: T.z, hx: 1.3, hz: 8.2, rot: T.rot, h: 3.6, kind: 'tanker' }); }
+  // the Telechron works: five storeys of brick mill along Main Street with its clock tower. A Texan cruise missile
+  // salvo takes it down just as your convoy passes it on the way out of town
+  { roadAt(S_TOWN + 92, tmp); const x = tmp.x + tmp.nx * 50, z = tmp.z + tmp.nz * 50;
+    L.megas = [{ x, z, y: heightAt(x, z), rot: tmp.yaw - Math.PI / 2, w: 72, d: 20, floors: 5, fh: 4.6, bay: 4.5, T: 22.4, seed: 1912, style: 'brick', clock: true, clockSide: -1, lean: [0.15, 1], cut: 1.6, name: 'TELECHRON' }];
+    L.megaPlans = L.megas.map(planStructure); L.dynBoxes = L.megaPlans.flatMap(structureBoxes); }
   // the common: a bandstand, the flagpole, the war memorial
   { roadAt(S_TOWN - 55, tmp); L.bandstand = { x: tmp.x - tmp.nx * 19, z: tmp.z - tmp.nz * 19 }; L.blocks.push({ x: L.bandstand.x, z: L.bandstand.z, hx: 3.2, hz: 3.2, rot: 0, h: 1.1, kind: 'bandstand' });
     roadAt(S_TOWN - 22, tmp); L.flag = { x: tmp.x - tmp.nx * 12, z: tmp.z - tmp.nz * 12 }; roadAt(S_TOWN - 36, tmp); L.memorial = { x: tmp.x - tmp.nx * 10, z: tmp.z - tmp.nz * 10, rot: tmp.yaw }; }
   // barns by some of the farmhouses
   L.barns = []; L.houses.forEach((h, i) => { if (h.town || i % 3) return; const c = Math.cos(h.rot), sn = Math.sin(h.rot), lx = h.w / 2 + 9, lz = -6, x = h.x + lx * c + lz * sn, z = h.z - lx * sn + lz * c;
     L.barns.push({ x, z, rot: h.rot }); L.blocks.push({ x, z, hx: 4, hz: 6, rot: h.rot, h: 8, kind: 'barn' }); });
-  L.trees = L.trees.filter((t) => !L.blocks.some((b) => Math.hypot(b.x - t.x, b.z - t.z) < Math.max(b.hx, b.hz) + 6) && !(Math.abs(sAtX(t.x) - L.rail) < 7));
+  L.trees = L.trees.filter((t) => !L.megas.some((m) => Math.hypot(m.x - t.x, m.z - t.z) < 60)).filter((t) => !L.blocks.some((b) => Math.hypot(b.x - t.x, b.z - t.z) < Math.max(b.hx, b.hz) + 6) && !(Math.abs(sAtX(t.x) - L.rail) < 7));
   // cover at the field for the last fight: the walls, the parked cars, round bales
   L.bales = [];
   for (let k = 0; k < 9; k++) L.bales.push({ x: FIELD.x - 60 + r() * 120, z: FIELD.z - 50 + r() * 100, rot: r() * 6.28 });

@@ -23,6 +23,11 @@
   #todo { position: absolute; left: 5%; bottom: 12%; font-size: clamp(15px, 1.9vw, 21px); opacity: .7; line-height: 1.35; display: none; }
   #todo small { opacity: .7; }
   #ammo .wn { font-size: .5em; opacity: .75; letter-spacing: 2px; }
+  #wp { position: absolute; left: 0; top: 0; display: none; text-align: center; transform: translate(-50%, -50%); font-size: clamp(19px, 2.3vw, 27px); line-height: 1; white-space: nowrap; opacity: .9; }
+  #wp i { display: block; font-style: normal; font-size: 1.25em; color: #ffd36a; }
+  #wp b { display: none; font-size: 1.4em; color: #ffd36a; }
+  #wp.edge i { display: none; } #wp.edge b { display: block; }
+  #wp span { display: block; margin-top: 2px; font-size: .9em; }
   #pick { position: absolute; left: 50%; top: 54.5%; transform: translateX(-50%); font-size: clamp(20px, 2.6vw, 30px); opacity: 0; transition: opacity .15s; white-space: nowrap; }
   #pick small { opacity: .7; font-size: .7em; }
   #bSwap { right: calc(var(--u)*3.1); bottom: calc(var(--u)*2.0); width: calc(var(--u)*1.0); height: calc(var(--u)*1.0); display: none; }
@@ -109,6 +114,7 @@
   <div id="card"></div>
   <div id="sub"></div>
   <div id="pick"></div>
+  <div id="wp"><i>&#9670;</i><b>&#9650;</b><span></span></div>
   <div id="todo"></div>
 </div>
 <div id="touch"><div id="stick"><div id="knob"></div></div>

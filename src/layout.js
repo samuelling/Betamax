@@ -197,6 +197,7 @@ export function vehSpeed(v, t) { return (vehZ(v, t - 0.05) - vehZ(v, t + 0.05)) 
 export function heloPose(h, t, out) {
   if (h.kind === 'crash') return crashPose(h, t, out);
   if (h.kind === 'extract') return extractPose(h, t, out);
+  if (h.kind === 'insert') return insertPose(h, t, out);
   const u = h.tTouch - t;
   out.x = h.x; out.z = h.z; out.y = h.y; out.yaw = 0; out.pitch = 0;
   if (u > 0) {
@@ -255,6 +256,24 @@ function extractPose(h, t, out) {
     const fw = Math.max(0, w - 3), d = fw * fw * 2.6 + fw * 6;
     out.x = h.x + d * dx; out.z = h.z + d * dz;
     out.pitch = 0.18 * smoothstep(3, 5, w);
+  }
+  return out;
+}
+
+// The Night Before: in low over the stern, a hover while the ropes go, away over the bow — and, if it's hit, rolling
+// off into the sea
+function insertPose(h, t, out) {
+  out.roll = 0; out.dead = false; out.spin = 1; out.pitch = 0; out.yaw = -Math.PI / 2;
+  const u = h.tHover - t;
+  if (u > 0) { const far = Math.max(0, u - 4), flare = Math.min(u, 4), d = far * 52 + flare * flare * 2.4;
+    out.x = h.x + d; out.z = h.z + far * 3; out.y = h.y + flare * 0.9 + Math.min(far * 0.8, 12); out.pitch = u < 4 ? -0.22 * smoothstep(0, 3, flare) : 0.1; return out; }
+  if (t < h.tLeave) { out.x = h.x + Math.sin(t * 0.8) * 0.5; out.y = h.y + Math.sin(t * 1.1) * 0.35; out.z = h.z + Math.sin(t * 0.6) * 0.4; out.roll = Math.sin(t * 0.9) * 0.02; return out; }
+  const k = t - h.tLeave; out.x = h.x - 3 * k * k - 4 * k; out.y = h.y + 1.6 * k; out.z = h.z - 0.6 * k * k; out.pitch = Math.min(0.2, 0.08 * k);
+  if (h.tHit && t > h.tHit) {
+    const kk = t - h.tHit, k0 = h.tHit - h.tLeave, x0 = h.x - 3 * k0 * k0 - 4 * k0, y0 = h.y + 1.6 * k0, z0 = h.z - 0.6 * k0 * k0, v = 6 * k0 + 4;
+    out.x = x0 - v * kk * 0.8; out.z = z0 - kk * 6 - kk * kk * 1.5; out.y = Math.max(-1.5 - Math.max(0, kk - 4) * 1.2, y0 - 4.9 * kk * kk * 0.6);
+    out.roll = -Math.min(1.6, kk * 0.6); out.pitch = 0.3; out.yaw = -Math.PI / 2 - kk * 0.9; out.spin = Math.max(0, 1 - kk * 0.15);
+    out.dead = out.y < 0.5; if (out.y < -6) out.y = -40;
   }
   return out;
 }

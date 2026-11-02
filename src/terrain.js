@@ -6,11 +6,14 @@ import { SC, onScene } from './scenes.js';
 import { heightSandwich, ARENA_SANDWICH } from './terrain4.js';
 import { heightBomb, ARENA_BOMB } from './terrainB.js';
 import { heightJump, ARENA_JUMP } from './terrainJ.js';
+import { heightPort, ARENA_PORT } from './terrainP.js';
+import { heightShip, ARENA_SHIP } from './terrainS.js';
 
 export const WATERLINE_Z = 140;
 export const ARENA = { x0: -125, x1: 125, z0: -138, z1: 132 };
 const ARENA_BEACH = { ...ARENA };
-onScene((id) => { Object.assign(ARENA, id === 'sandwich' ? ARENA_SANDWICH : id === 'bomb' ? ARENA_BOMB : id === 'jump' ? ARENA_JUMP : ARENA_BEACH); Object.assign(HG, HGC[id] || HGC.beach); HG.d = HG.cache[id] || null; });
+const sceneHook = (id) => { Object.assign(ARENA, id === 'sandwich' ? ARENA_SANDWICH : id === 'bomb' ? ARENA_BOMB : id === 'jump' ? ARENA_JUMP : id === 'port' ? ARENA_PORT : id === 'ship' ? ARENA_SHIP : ARENA_BEACH); Object.assign(HG, HGC[id] || HGC.beach); HG.d = HG.cache[id] || null; };
+onScene(sceneHook);
 export const LOT = { x0: -48, x1: 48, z0: -128, z1: -70, y: 3.6 };
 
 export function crestD(x) {
@@ -31,6 +34,8 @@ export function heightAt(x, z) {
   if (SC.id === 'sandwich') return heightSandwich(x, z);
   if (SC.id === 'bomb') return heightBomb(x, z);
   if (SC.id === 'jump') return heightJump(x, z);
+  if (SC.id === 'port') return heightPort(x, z);
+  if (SC.id === 'ship') return heightShip(x, z);
   if (z > WATERLINE_Z + 20) {
     const f = flats(x, WATERLINE_Z + 20);
     return f - (z - WATERLINE_Z - 20) * 0.03;
@@ -83,9 +88,11 @@ export function inMinefield(x, z) {
 
 // Fast bilinear lookup over the playable area (1 m grid), exact function elsewhere.
 // the fast grid covers the playable ground: 1 m cells at the beach and East Sandwich, 2 m along the whole road out of Ashland
-const HGC = { beach: { x0: -170, z0: -210, nx: 341, nz: 441, c: 1 }, sandwich: { x0: -170, z0: -210, nx: 341, nz: 441, c: 1 }, bomb: { x0: -1700, z0: -340, nx: 1701, nz: 341, c: 2 }, jump: { x0: -4, z0: -9, nx: 81, nz: 211, c: 0.1 } };
+const HGC = { beach: { x0: -170, z0: -210, nx: 341, nz: 441, c: 1 }, sandwich: { x0: -170, z0: -210, nx: 341, nz: 441, c: 1 }, bomb: { x0: -1700, z0: -340, nx: 1701, nz: 341, c: 2 }, jump: { x0: -4, z0: -9, nx: 81, nz: 211, c: 0.1 }, port: { x0: -260, z0: -200, nx: 261, nz: 151, c: 2 }, ship: { x0: -95, z0: -24, nx: 551, nz: 97, c: 0.5 } };
 const HG = { ...HGC.beach, d: null, cache: {} };
+if (SC.id !== 'beach') sceneHook(SC.id);   // a scene chosen before this module loaded (node tests)
 export function heightFast(x, z) {
+  if (SC.id === 'ship' || SC.id === 'jump') return heightAt(x, z);   // stepped decks: the exact function is cheap, and a grid would smear the edges
   if (!HG.d) {
     HG.d = new Float32Array(HG.nx * HG.nz);
     for (let j = 0; j < HG.nz; j++) for (let i = 0; i < HG.nx; i++) HG.d[j * HG.nx + i] = heightAt(HG.x0 + i * HG.c, HG.z0 + j * HG.c);

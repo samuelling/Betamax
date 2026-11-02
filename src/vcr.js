@@ -58,8 +58,11 @@ const SCREEN_GLSL = /* glsl */`
 // the menu, as the set shows it — and the full-screen title is this very picture, so the two can't differ
 export const MENU_W = 1024, MENU_H = 768, PLAY_BOX = [362, 392, 300, 86];   // all of it inside the band a 16:9 window shows (the title is cover-fit)
 // chapter select along the foot of the menu: [id, label]; each gets an equal slot
-export const CHAPTERS = [['beach', '1 \u00B7 THE BEACH'], ['sandwich', '2 \u00B7 SANDWICH'], ['bomb', '3 \u00B7 THE BOMB'], ['jump', 'THE JUMP'], ['homeUS', 'HOME \u00B7 CAPE'], ['homeTX', 'HOME \u00B7 TEXAS']]
-  .map(([id, label], i, l) => { const sw = 148, x0 = (MENU_W - sw * l.length) / 2; return { id, label, box: [x0 + i * sw + 4, 596, sw - 8, 44] }; });
+// two rows: the Cape Cod track and the Texas track, each in tape order
+export const CHAPTERS = [
+  [0, 'beach', '1 \u00B7 THE BEACH'], [0, 'sandwich', '2 \u00B7 SANDWICH'], [0, 'bomb', '3 \u00B7 THE BOMB'], [0, 'jump', '4 \u00B7 THE JUMP'], [0, 'homeUS', '5 \u00B7 HOME'],
+  [1, 'ship', '2 \u00B7 THE SHIP'], [1, 'port', '3 \u00B7 THE PORT'], [1, 'homeTX', '5 \u00B7 HOME'],
+].map(([row, id, label], i, l) => { const inRow = l.filter((q) => q[0] === row), k = inRow.findIndex((q) => q[1] === id && q[2] === label), sw = 150, x0 = (MENU_W - sw * inRow.length) / 2 + 52; return { id, label, row, box: [x0 + k * sw + 4, 574 + row * 46, sw - 8, 38] }; });
 export function drawMenu(g, w = MENU_W, h = MENU_H) {
   g.save();
   const gr = g.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, 700); gr.addColorStop(0, '#2e2a22'); gr.addColorStop(1, '#0b0a08');
@@ -72,10 +75,13 @@ export function drawMenu(g, w = MENU_W, h = MENU_H) {
   g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(bx, by, bw, bh);
   g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25B6 PLAY', w / 2, by + 64);
   g.globalAlpha = 0.55; g.font = '26px "VT323", "Courier New", monospace';
-  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 528);
-  g.globalAlpha = 0.7; g.font = '22px "VT323", "Courier New", monospace'; g.fillText('\u2014 OR START FROM A CHAPTER \u2014', w / 2, 580);
+  g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP', w / 2, 516);
+  g.globalAlpha = 0.7; g.font = '22px "VT323", "Courier New", monospace'; g.fillText('\u2014 OR START FROM A CHAPTER \u2014', w / 2, 558);
   g.globalAlpha = 0.9; g.font = '24px "VT323", "Courier New", monospace'; g.lineWidth = 2;
-  for (const c of CHAPTERS) { const [x, y, cw, ch] = c.box; g.strokeRect(x, y, cw, ch); g.fillText(c.label, x + cw / 2, y + 29); }
+  for (const c of CHAPTERS) { const [x, y, cw, ch] = c.box; g.strokeRect(x, y, cw, ch); g.fillText(c.label, x + cw / 2, y + 27); }
+  g.textAlign = 'right'; g.font = '22px "VT323", "Courier New", monospace'; g.globalAlpha = 0.7;
+  for (const [row, name] of [[0, 'CAPE COD'], [1, 'TEXAS']]) { const first = CHAPTERS.find((c) => c.row === row); g.fillText(name, first.box[0] - 12, first.box[1] + 26); }
+  g.textAlign = 'center';
   g.globalAlpha = 1; g.textAlign = 'left';
   g.font = '40px "VT323", "Courier New", monospace'; g.fillText('\u25C0\u25C0 REW', 150, 150);
   g.restore();

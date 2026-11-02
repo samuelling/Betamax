@@ -11,6 +11,7 @@ import { mulberry32, fbm, smoothstep } from './rng.js';
 import * as TX from './textures.js';
 import { place, box, cyl, merge, std, SUN_DIR } from './world.js';
 import { addPoles } from './world4.js';
+import { Megastructures } from './megastruct.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _v = new THREE.Vector3();
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -347,6 +348,8 @@ export function buildBomb(W) {
       roofs.push(place(new THREE.ExtrudeGeometry(sh, { depth: 12.6, bevelEnabled: false }).translate(0, 0, -6.3), x, y + 5, z, 0, rot, 0)); }
     if (parts.length) { const m = new THREE.Mesh(merge(parts), red); m.castShadow = m.receiveShadow = true; root.add(m); const rm = new THREE.Mesh(merge(roofs), std([0.3, 0.3, 0.32], 0.7, 0.3)); rm.castShadow = true; root.add(rm); } }
 
+  // ---------- the Telechron works, standing (until the missiles) ----------
+  W.megas = new Megastructures(root, L.megaPlans);
   // ---------- the cloud over Boston ----------
   buildCloud(W);
   // ---------- the flash: a light from the east for a few seconds ----------
@@ -432,6 +435,7 @@ function buildCloud(W) {
 
 function updateBomb(W, tau, cam) {
   const L = W.L;
+  W.megas.update(tau);
   // the convoy
   for (const car of W.rideCars) {
     const c = car.c, p = carPose(c, tau, car.pose), h = c.kind === 'pickup' ? 2.6 : 2.3;

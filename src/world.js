@@ -14,6 +14,10 @@ import { buildBomb, buildBombTerrain, bombGround } from './worldB.js';
 import { buildBombLayout } from './layoutB.js';
 import { buildJump } from './worldJ.js';
 import { buildJumpLayout } from './layoutJ.js';
+import { buildPort } from './worldP.js';
+import { buildPortLayout } from './layoutP.js';
+import { buildShipWorld } from './worldS.js';
+import { buildShipLayout } from './layoutS.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.9, 0.26, 0.28).normalize();
 
@@ -92,9 +96,25 @@ function groundGrain() {
 export class World {
   constructor(renderer, scene, quality, kind = 'beach') {
     this.scene = scene; this.renderer = renderer; this.q = quality; this.kind = kind;
-    this.L = kind === 'sandwich' ? buildSandwichLayout() : kind === 'bomb' ? buildBombLayout() : kind === 'jump' ? buildJumpLayout() : buildLayout();
+    this.L = kind === 'sandwich' ? buildSandwichLayout() : kind === 'bomb' ? buildBombLayout() : kind === 'jump' ? buildJumpLayout() : kind === 'port' ? buildPortLayout() : kind === 'ship' ? buildShipLayout() : buildLayout();
     this.uTau = { value: 0 };
     this.root = new THREE.Group(); scene.add(this.root);
+    if (kind === 'ship') {   // night at sea
+      this.coreRect = [-100, 180, -30, 30];
+      this.crU = { uCrG: { value: null }, uCr: { value: null }, uCrRect: { value: new THREE.Vector4() }, uCrNZ: { value: 1 } };
+      buildShipWorld(this);
+      this.vehicles = []; this.gunships = []; this.tracks = [];
+      this.buildHelos(); this.buildDecals(); this.toonPrep();
+      return;
+    }
+    if (kind === 'port') {   // night on the wharf
+      this.coreRect = [-260, 260, -200, 90];
+      this.crU = { uCrG: { value: null }, uCr: { value: null }, uCrRect: { value: new THREE.Vector4() }, uCrNZ: { value: 1 } };
+      buildPort(this);
+      this.vehicles = []; this.gunships = []; this.tracks = []; this.helos = [];
+      this.buildDecals(); this.toonPrep();
+      return;
+    }
     if (kind === 'jump') {   // night, in the air: its own sky and light
       this.coreRect = [-20, 20, -20, 20];
       this.crU = { uCrG: { value: null }, uCr: { value: null }, uCrRect: { value: new THREE.Vector4() }, uCrNZ: { value: 1 } };
@@ -906,6 +926,8 @@ export class World {
     this.updatePieces(tau);
     if (this.bombUpdate) this.bombUpdate(tau, cam);
     if (this.jumpUpdate) this.jumpUpdate(tau, cam);
+    if (this.portUpdate) this.portUpdate(tau, cam);
+    if (this.shipUpdate) this.shipUpdate(tau, cam);
     // sun shadow follows camera
     const s = this.sun;
     const tx = Math.round(cam.position.x / 4) * 4, tz = Math.round(cam.position.z / 4) * 4;

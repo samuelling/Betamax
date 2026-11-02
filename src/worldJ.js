@@ -88,12 +88,12 @@ function stencil(lines, w = 512, h = 128, fg = '#d8d4c4', bg = 'rgba(0,0,0,0)') 
 }
 
 // ---------------------------------------------------------------- the night: sky, moon, sea, and the world's lighting
-function buildNight(W) {
+export function buildNight(W, o = {}) {
   const moon = SUN_DIR.clone();
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uMoon: { value: moon }, uGlow: { value: 0 }, uFlash: { value: 0 } }, side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { uMoon: { value: moon }, uGlow: { value: o.glow || 0 }, uFlash: { value: 0 }, uGlowDir: { value: o.glowDir || new THREE.Vector3(0, 0, -1) } }, side: THREE.BackSide, depthWrite: false, fog: false,
     vertexShader: 'varying vec3 vD; void main(){ vD = normalize((modelMatrix*vec4(position,1.0)).xyz - cameraPosition); vec4 p = projectionMatrix*viewMatrix*modelMatrix*vec4(position,1.0); gl_Position = p.xyww; }',
-    fragmentShader: `uniform vec3 uMoon; uniform float uGlow, uFlash; varying vec3 vD;
+    fragmentShader: `uniform vec3 uMoon, uGlowDir; uniform float uGlow, uFlash; varying vec3 vD;
       float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
       void main(){ vec3 d = normalize(vD);
         float up = clamp(d.y, -1.0, 1.0);
@@ -104,13 +104,13 @@ function buildNight(W) {
         // the moon and its halo
         float m = max(dot(d, uMoon), 0.0); c += vec3(0.55, 0.6, 0.7) * pow(m, 30.0) * 0.18 + vec3(0.9, 0.92, 1.0) * smoothstep(0.99955, 0.9997, m) * 1.6;
         // ahead, the coast burning under the horizon
-        float ahead = max(-d.z, 0.0); c += vec3(0.5, 0.18, 0.05) * pow(ahead, 6.0) * smoothstep(0.25, -0.02, abs(up + 0.02)) * (0.25 + uGlow);
+        float ahead = max(dot(d, uGlowDir), 0.0); c += vec3(0.5, 0.18, 0.05) * pow(ahead, 6.0) * smoothstep(0.25, -0.02, abs(up + 0.02)) * (0.25 + uGlow);
         c += vec3(0.9, 0.7, 0.55) * uFlash * 0.05;
         gl_FragColor = vec4(c, 1.0); }`,
   });
   W.sky = new THREE.Mesh(new THREE.SphereGeometry(4500, 32, 16), mat); W.sky.frustumCulled = false; W.sky.renderOrder = -10; W.scene.add(W.sky); W.skyU = mat.uniforms;
   { const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat.clone())); const pm = new THREE.PMREMGenerator(W.renderer); W.envTex = pm.fromScene(envScene, 0.02).texture; W.scene.environment = W.envTex; W.scene.environmentIntensity = 0.6; }
-  W.fogColor = new THREE.Color(0.02, 0.028, 0.045); W.scene.fog = W.fog = new THREE.FogExp2(W.fogColor, 0.00042);
+  W.fogColor = o.fogColor || new THREE.Color(0.02, 0.028, 0.045); W.scene.fog = W.fog = new THREE.FogExp2(W.fogColor, o.fog || 0.00042);
   // moonlight (the 'sun' the rest of the engine knows about) and a cold fill
   const sun = new THREE.DirectionalLight(new THREE.Color(0.55, 0.62, 0.8), 0.55); sun.castShadow = true; sun.shadow.mapSize.set(W.q.shadow, W.q.shadow);
   const c = sun.shadow.camera; c.left = -30; c.right = 30; c.top = 30; c.bottom = -30; c.near = 1; c.far = 500; sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
