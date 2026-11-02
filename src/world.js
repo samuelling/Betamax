@@ -162,7 +162,7 @@ export class World {
     this.buildDecals();
     this.buildTracks();
     // a resort hotel up the beach to the east, which the naval guns take down mid-morning
-    { const plans = [planStructure({ name: 'HOTEL', x: -285, y: heightAt(-285, -40), z: -40, rot: 0.05, w: 64, d: 18, floors: 8, fh: 3.4, bay: 4.3, style: 'office', T: 96, seed: 1957, lean: [0.2, -1] })];
+    { const plans = [planStructure({ name: 'HOTEL', x: -215, y: heightAt(-215, -46), z: -46, rot: 0.05, w: 64, d: 18, floors: 12, fh: 3.4, bay: 4.3, style: 'office', T: 96, seed: 1957, lean: [0.2, -1] })];
       this.megas = new Megastructures(this.root, plans, { dustColor: [0.7, 0.66, 0.6] }); this.megaPlans = plans; }
     this.toonPrep();
   }

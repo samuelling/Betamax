@@ -94,10 +94,10 @@ export function buildSandwich(W) {
   { const parts = []; for (let k = 0; k < 14; k++) { const a = r() * 6.28, d = 3 + r() * 9, x = CRASH.x + Math.cos(a) * d, z = CRASH.z + Math.sin(a) * d; parts.push(cyl(0.08 + r() * 0.1, 0.12 + r() * 0.12, 1 + r() * 3, 6, x, heightAt(x, z) + 0.5, z, (r() - 0.5) * 0.8, 0, (r() - 0.5) * 0.8)); }
     const m = new THREE.Mesh(merge(parts), std([0.16, 0.13, 0.11], 0.95)); m.castShadow = true; root.add(m); }
   // ---------- the power station by the canal: two 150 m chimneys over the marsh; the near one is brought down ----------
-  { const base = 0.4, hall = new THREE.Mesh(box(90, 34, 40, 395, base + 17, 300), std([0.62, 0.6, 0.56], 0.85)); hall.castShadow = true; root.add(hall);
-    root.add(new THREE.Mesh(box(30, 50, 26, 345, base + 25, 300), std([0.55, 0.53, 0.5], 0.85)));
-    const plans = [{ name: 'CANAL STACK', x: 372, y: base, z: 262, rot: 0, w: 14, d: 14, floors: 30, fh: 5, binR: 7.5, T: 74, seed: 1968, style: 'stack', lean: [-0.35, -1] },
-      { name: 'CANAL STACK', x: 420, y: base, z: 262, rot: 0, w: 14, d: 14, floors: 30, fh: 5, binR: 7.5, T: 1e6, seed: 1969, style: 'stack' }].map(planStructure);
+  { const base = 0.4, hall = new THREE.Mesh(box(90, 34, 40, 270, base + 17, 248), std([0.62, 0.6, 0.56], 0.85)); hall.castShadow = true; root.add(hall);
+    root.add(new THREE.Mesh(box(30, 50, 26, 220, base + 25, 250), std([0.55, 0.53, 0.5], 0.85)));
+    const plans = [{ name: 'CANAL STACK', x: 228, y: base, z: 206, rot: 0, w: 14, d: 14, floors: 30, fh: 5, binR: 7.5, T: 74, seed: 1968, style: 'stack', lean: [1, 0.35] },
+      { name: 'CANAL STACK', x: 262, y: base, z: 200, rot: 0, w: 14, d: 14, floors: 30, fh: 5, binR: 7.5, T: 1e6, seed: 1969, style: 'stack' }].map(planStructure);
     W.megas = new Megastructures(root, plans, { dustColor: [0.66, 0.64, 0.6] }); W.megaPlans = plans; }
 }
 
