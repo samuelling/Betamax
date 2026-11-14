@@ -3,7 +3,7 @@
 import { loadJSON, photoTex } from './assets.js';
 import * as THREE from 'three';
 import { J, NJ, NB, B, bindJoints, boneFrames, buildSoldierGeometry, makeSoldierMaterial } from './rig.js';
-import { posePose, simulateRagdoll, variation, stanceOffset, lastHeadBasis, STEP_C } from './anim.js';
+import { posePose, simulateRagdoll, variation, stanceOffset, lastHeadBasis, STEP_C, clipPose } from './anim.js';
 import { MODE, SHOT_F, F, HZ } from './sim.js';
 import { styleOf, gaitStride } from './gait.js';
 import { CLIPS } from './mocap.js';
@@ -140,6 +140,7 @@ export class Soldiers {
       // some of the shot go down as a real person lies down: a mocap getting-up, run backwards. In rewind
       // you see the real thing — a body pushing itself up off the sand and standing
       if (this.planGetup(i, s)) { this.ragdolls[i] = new Float32Array(NJ * 3); return; }
+      if (this.planMocapDeath(i, s)) { this.ragdolls[i] = new Float32Array(NJ * 3); return; }
       const TS = this.slumpTime(i);
       if (TS > 0) {
         // folded to the knees first: the ragdoll starts from the slump, with a gentle topple
@@ -281,6 +282,15 @@ export class Soldiers {
     return this.drops[i];
   }
 
+  // some of those shot where they stand go down as a captured death: a man folding, catching himself, and lying still
+  planMocapDeath(i, s) {
+    const st = this.S.actors[i];
+    if (st.cause !== 'shot' || s.speed > 1.6 || Math.abs(heightFast(s.x, s.z) - s.y) > 0.3 || s.y < 0.1) return false;
+    const h = (((i + 29) * 2654435761) >>> 0) / 4294967296;
+    if (h > 0.62) return false;
+    (this.mdeath || (this.mdeath = []))[i] = { clip: s.crouch > 0.5 ? 't_crouch_death' : h < 0.31 ? 't_dying' : 't_death_headshot', x: s.x, y: s.y, z: s.z, yaw: s.yaw };
+    return true;
+  }
   planGetup(i, s) {
     const st = this.S.actors[i];
     if (st.cause !== 'shot' || s.y < 0.1) return false;
@@ -567,7 +577,16 @@ export class Soldiers {
     const j = this.joints;
     if (s.mode === MODE.DEAD && !this.ragdolls[i] && this.pb) this.computeRagdoll(i);
     if (s.mode === MODE.DEAD && this.gib[i]) return this.poseGib(i, tau);
-    if (s.mode === MODE.DEAD && this.ragdolls[i] && this.getup[i]) {
+    if (s.mode === MODE.DEAD && this.mdeath && this.mdeath[i]) {
+      const m = this.mdeath[i], tt = tau - st.deathTime;
+      clipPose(m.clip, tt, j, m.x, m.y, m.z, m.yaw, st.side === 1);
+      if (tt < 0.25) {   // out of the living pose into the capture
+        const s0 = this._s0 || (this._s0 = {}), L = this._l0 || (this._l0 = new Float32Array(NJ * 3));
+        this.pb.sample(i, st.deathTime - 0.002, s0); s0.mode = MODE.GROUND; this.living(i, s0, st.deathTime - 0.002, L);
+        const k = Math.max(0, tt) / 0.25, e = k * k * (3 - 2 * k);
+        for (let q = 0; q < NJ * 3; q++) j[q] = L[q] + (j[q] - L[q]) * e;
+      }
+    } else if (s.mode === MODE.DEAD && this.ragdolls[i] && this.getup[i]) {
       const tt = tau - st.deathTime;
       this.getupPose(i, tt, j);
       if (tt < 0.3) { // ease out of the living pose (aiming) into the mocap

@@ -12,7 +12,7 @@ import { heightFast as heightAt } from './terrain.js';
 // mocap joint order: hips spine chest neck head shL elbL handL shR elbR handR hipL kneeL ankleL toeL hipR kneeR ankleR toeR
 const MJ = { hips: 0, spine: 1, chest: 2, neck: 3, head: 4, shL: 5, shR: 8, hipL: 11, kneeL: 12, ankleL: 13, toeL: 14, hipR: 15, kneeR: 16, ankleR: 17, toeR: 18 };
 const NM = 19, NM3 = NM * 3;
-const NEED = [MJ.hips, MJ.spine, MJ.chest, MJ.neck, MJ.shL, MJ.shR, MJ.hipL, MJ.hipR];
+const NEED = Array.from({ length: 19 }, (_, i) => i);   // the whole capture: the body can be played straight from it
 export const STEP_C = 0.25;            // gait clock value (mod 1) at which the left foot is at mid-stance; the right is half a cycle on
 const clip = {};
 for (const k of Object.keys(CLIPS)) {
@@ -31,11 +31,15 @@ for (const k of Object.keys(CLIPS)) {
     yp += Math.atan2(-(d[o + MJ.hipL * 3 + 2] - d[o + MJ.hipR * 3 + 2]), d[o + MJ.hipL * 3] - d[o + MJ.hipR * 3]);
     yc += Math.atan2(-(d[o + MJ.shL * 3 + 2] - d[o + MJ.shR * 3 + 2]), d[o + MJ.shL * 3] - d[o + MJ.shR * 3]);
   }
-  clip[k] = { n, d, hipsMean: m, dur: c.dur, mid, yawP: yp / n, yawC: yc / n };
+  clip[k] = { n, d, hipsMean: m, dur: c.dur, mid, yawP: yp / n, yawC: yc / n, armed: c.armed ? 1 : 0 };
 }
 const DEF_STYLE = { walk: 'walk', run: 'run', crouch: 'c_crouch_walk', limp: 'c_limp', idle: 'idle', idleOff: 0 };
 const Mx = new Float64Array(NM3);
-let _hm = 0, _yp = 0, _yc = 0;
+let _hm = 0, _yp = 0, _yc = 0, _arm = 0;
+// how much of the body is played straight from the rifle captures (0: the procedural body throughout)
+let FULL = 1;
+export function setFullBody(v) { FULL = v; }
+const PC = new Float64Array(NJ * 3);
 function accClip(c, u, w) {
   const f = (((u % 1) + 1) % 1) * c.n; const i0 = Math.floor(f) % c.n, i1 = (i0 + 1) % c.n, t = f - Math.floor(f);
   const a = i0 * NM3, b = i1 * NM3, d = c.d;
@@ -43,7 +47,7 @@ function accClip(c, u, w) {
     const k = NEED[q] * 3;
     Mx[k] += (d[a + k] + (d[b + k] - d[a + k]) * t) * w; Mx[k + 1] += (d[a + k + 1] + (d[b + k + 1] - d[a + k + 1]) * t) * w; Mx[k + 2] += (d[a + k + 2] + (d[b + k + 2] - d[a + k + 2]) * t) * w;
   }
-  _hm += c.hipsMean * w; _yp += c.yawP * w; _yc += c.yawC * w;
+  _hm += c.hipsMean * w; _yp += c.yawP * w; _yc += c.yawC * w; _arm += c.armed * w;
 }
 
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -150,6 +154,7 @@ function footPose(gx, gy, gz, yaw, th, th0) {
 }
 const GN = [null, null, null, null, null, null], GW = [0, 0, 0, 0, 0, 0];
 const LEGS = [[J.hipL, J.kneeL, J.ankleL, J.toeL, 1], [J.hipR, J.kneeR, J.ankleR, J.toeR, -1]];
+const UPPER = [J.neck, J.head, J.shL, J.elbL, J.handL, J.shR, J.elbR, J.handR], ARMS = [[J.shL, J.elbL, J.handL], [J.shR, J.elbR, J.handR]];
 const AN = new Float64Array(8);   // per foot: ankle xyz + pitch
 const FD = new Float64Array(8);   // per foot: foot forward xyz, heading
 
@@ -183,13 +188,17 @@ export function posePose(p, out, x, y, z, yaw) {
 
   // ---- mocap: pelvis and ribcage motion of this soldier's own gait, re-timed onto the step clock ----
   const st = p.st || DEF_STYLE;
-  Mx.fill(0); _hm = 0; _yp = 0; _yc = 0;
+  Mx.fill(0); _hm = 0; _yp = 0; _yc = 0; _arm = 0;
+  const eA = clamp(eng, 0, 1);
   if (wMove > 0.001) {
     const nb = gaitBlendFlat(st, speed, c, !!p.hurt, GN, GW);
-    for (let q = 0; q < nb; q++) { const cl = clip[GN[q]]; accClip(cl, C - STEP_C + cl.mid, GW[q] * wMove); }
+    for (let q = 0; q < nb; q++) { const cl = clip[GN[q]], wf = GN[q] === st.walk && st.walkFire ? clip[st.walkFire] : null;
+      if (wf && eA > 0.01) { accClip(cl, C - STEP_C + cl.mid, GW[q] * wMove * (1 - eA)); accClip(wf, C - STEP_C + wf.mid, GW[q] * wMove * eA); }   // walking on the sights: the capture of exactly that
+      else accClip(cl, C - STEP_C + cl.mid, GW[q] * wMove); }
   }
   let idleHY = 0;
-  { const ic = clip[st.idle] || clip.idle; idleHY = ic.hipsMean; if (still > 0.001) accClip(ic, (t + st.idleOff) / ic.dur, still); else { _hm += 0; } }
+  { const ic = clip[st.idle] || clip.idle; idleHY = ic.hipsMean; const ac = st.aim ? clip[st.aim] : null;
+    if (still > 0.001) { if (ac && eA > 0.01) { accClip(ic, (t + st.idleOff) / ic.dur, still * (1 - eA)); accClip(ac, (t + st.idleOff) / ac.dur, still * eA); } else accClip(ic, (t + st.idleOff) / ic.dur, still); } }
   const baseHY = _hm;
   const hx0 = Mx[0], hy0 = Mx[1], hz0 = Mx[2];
   setBasis(Rp, Mx[MJ.hipL * 3] - Mx[MJ.hipR * 3], Mx[MJ.hipL * 3 + 1] - Mx[MJ.hipR * 3 + 1], Mx[MJ.hipL * 3 + 2] - Mx[MJ.hipR * 3 + 2], Mx[3] - hx0, Mx[4] - hy0, Mx[5] - hz0);
@@ -387,6 +396,46 @@ export function posePose(p, out, x, y, z, yaw) {
     PL[h3] = PL[n3] + ux * l; PL[h3 + 1] = PL[n3 + 1] + uy * l; PL[h3 + 2] = PL[n3 + 2] + uz * l;
   }
 
+  // ---- the capture, whole ----
+  // Where both hands are on a rifle in the capture, the body is the capture's: legs, pelvis, spine, arms and head as
+  // the man who was recorded moved them, turned to the heading, stood on the slope, and with the weapon laid through
+  // his hands. The procedural body above remains for what there is no capture of (kneeling, reloading, boats, limps).
+  const wF = FULL * clamp(_arm, 0, 1) * (1 - kneel) * (1 - rlT) * (boat ? 0 : 1) * (1 - stag) * (1 - 0.7 * sup);
+  if (wF > 0.01) {
+    const by = bodyYaw * (1 - 0.6 * aimW), cb = Math.cos(by), sb = Math.sin(by);
+    const ox = p.offX || 0, oy = p.offY || 0, oz = p.offZ || 0;
+    for (let k = 0; k < 57; k += 3) { const qx = Mx[k], qz = Mx[k + 2]; PC[k] = qx * cb + qz * sb + ox; PC[k + 1] = Mx[k + 1] + oy; PC[k + 2] = -qx * sb + qz * cb + oz; }
+    // on a slope: each foot to its own ground, the pelvis and everything on it by the mean
+    { const a3 = J.ankleL * 3, b3 = J.ankleR * 3, dl = gxs * PC[a3] + gzs * PC[a3 + 2], dr = gxs * PC[b3] + gzs * PC[b3 + 2], dm = (dl + dr) / 2;
+      for (let k = 0; k < 57; k += 3) PC[k + 1] += dm;
+      PC[a3 + 1] += dl - dm; PC[J.toeL * 3 + 1] += dl - dm; PC[b3 + 1] += dr - dm; PC[J.toeR * 3 + 1] += dr - dm; }
+    // the line of sight: everything from the chest up turns onto it
+    const c3 = J.chest * 3, pa = (pit + (p.pitErr || 0)) * (0.35 + 0.65 * aimW), ya = (p.yawErr || 0) * aimW, cp = Math.cos(pa), sp = Math.sin(pa), cq = Math.cos(ya), sq = Math.sin(ya);
+    for (const j of UPPER) { const k = j * 3; let rx = PC[k] - PC[c3], ry = PC[k + 1] - PC[c3 + 1], rz = PC[k + 2] - PC[c3 + 2];
+      const y1 = ry * cp + rz * sp, z1 = -ry * sp + rz * cp; ry = y1; rz = z1;
+      const x2 = rx * cq + rz * sq, z2 = -rx * sq + rz * cq;
+      PC[k] = PC[c3] + x2; PC[k + 1] = PC[c3 + 1] + ry; PC[k + 2] = PC[c3 + 2] + z2; }
+    // the rifle through the hands; recoil pushes it, and them, back along the bore
+    const hr = J.handR * 3, hl = J.handL * 3;
+    let ddx = PC[hl] - PC[hr], ddy = PC[hl + 1] - PC[hr + 1], ddz = PC[hl + 2] - PC[hr + 2]; { const l = Math.hypot(ddx, ddy, ddz) || 1; ddx /= l; ddy /= l; ddz /= l; }
+    // the bore runs above the line between the wrists; and on the sights it is the line of sight itself
+    ddy -= 0.2; { const fx = sq * cp, fy = sp, fz = cq * cp, w = aimW * 0.85; ddx += (fx - ddx) * w; ddy += (fy - ddy) * w; ddz += (fz - ddz) * w; }
+    ddy += climb * 0.05 + kick * 0.03; { const l = Math.hypot(ddx, ddy, ddz) || 1; ddx /= l; ddy /= l; ddz /= l; }
+    const kb = kick * 0.028;
+    PC[hr] -= ddx * kb; PC[hr + 1] -= ddy * kb; PC[hr + 2] -= ddz * kb; PC[hl] -= ddx * kb; PC[hl + 1] -= ddy * kb; PC[hl + 2] -= ddz * kb;
+    const g3c = J.grip * 3, m3c = J.muzzle * 3, mlc = bp ? 0.5 : 0.72;
+    PC[g3c] = PC[hr] + ddx * 0.01; PC[g3c + 1] = PC[hr + 1] + ddy * 0.01 + 0.015; PC[g3c + 2] = PC[hr + 2] + ddz * 0.01;
+    PC[m3c] = PC[g3c] + ddx * mlc; PC[m3c + 1] = PC[g3c + 1] + ddy * mlc; PC[m3c + 2] = PC[g3c + 2] + ddz * mlc;
+    for (let k = 0; k < NJ * 3; k++) PL[k] += (PC[k] - PL[k]) * wF;
+    // blending poses shortens limbs: put every limb back on its own bone lengths, bent the way the blend bent it
+    for (let k = 0; k < 2; k++) { const L = LEGS[k], h3 = L[0] * 3, n3 = L[1] * 3, a3 = L[2] * 3, t3 = L[3] * 3;
+      let tx = PL[t3] - PL[a3], ty = PL[t3 + 1] - PL[a3 + 1], tz = PL[t3 + 2] - PL[a3 + 2]; const tl = Math.hypot(tx, ty, tz) || 1;
+      ikL(L[0], PL[a3], PL[a3 + 1], PL[a3 + 2], 0.43, 0.43, PL[n3] - (PL[h3] + PL[a3]) / 2, PL[n3 + 1] - (PL[h3 + 1] + PL[a3 + 1]) / 2, PL[n3 + 2] - (PL[h3 + 2] + PL[a3 + 2]) / 2 + 0.02, L[1], L[2]);
+      PL[t3] = PL[a3] + tx / tl * FOOT; PL[t3 + 1] = PL[a3 + 1] + ty / tl * FOOT; PL[t3 + 2] = PL[a3 + 2] + tz / tl * FOOT; }
+    for (const [sj, ej, hj] of ARMS) { const s3 = sj * 3, e3 = ej * 3, h3 = hj * 3;
+      ikL(sj, PL[h3], PL[h3 + 1], PL[h3 + 2], 0.28, 0.26, PL[e3] - (PL[s3] + PL[h3]) / 2, PL[e3 + 1] - (PL[s3 + 1] + PL[h3 + 1]) / 2 - 0.02, PL[e3 + 2] - (PL[s3 + 2] + PL[h3 + 2]) / 2, ej, hj); }
+  }
+
   // ---- to world ----
   const cy = Math.cos(yaw), sy2 = Math.sin(yaw);
   for (let k = 0; k < NJ * 3; k += 3) {
@@ -469,3 +518,22 @@ export function simulateRagdoll(start, prevStart, impulse, seed, frames = 75, gr
   }
   return out;
 }
+
+// One capture played on its own from a root (deaths): 21 joints to world. Joints near the ground follow the terrain,
+// so a man who falls on a dune lies on the dune. Returns false if there is no such clip.
+export function clipPose(name, sec, out, x, y, z, yaw, bp) {
+  const c = clip[name]; if (!c) return false;
+  const f = Math.min(c.n - 1.001, Math.max(0, sec / c.dur * (c.n - 1))), i0 = Math.floor(f), t = f - i0, a = i0 * NM3, b = a + NM3, d = c.d;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  for (let k = 0; k < 57; k += 3) {
+    const qx = d[a + k] + (d[b + k] - d[a + k]) * t, qy = d[a + k + 1] + (d[b + k + 1] - d[a + k + 1]) * t, qz = d[a + k + 2] + (d[b + k + 2] - d[a + k + 2]) * t;
+    const wx = x + qx * cy + qz * sy, wz = z - qx * sy + qz * cy;
+    out[k] = wx; out[k + 2] = wz; out[k + 1] = y + qy + (heightAt(wx, wz) - y) * clamp(1.6 - qy * 1.6, 0, 1);
+  }
+  const hr = J.handR * 3, hl = J.handL * 3, g3 = J.grip * 3, m3 = J.muzzle * 3;
+  let dx = out[hl] - out[hr], dy = out[hl + 1] - out[hr + 1], dz = out[hl + 2] - out[hr + 2]; const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+  out[g3] = out[hr]; out[g3 + 1] = out[hr + 1] + 0.015; out[g3 + 2] = out[hr + 2];
+  const ml = bp ? 0.5 : 0.72; out[m3] = out[g3] + dx * ml; out[m3 + 1] = Math.max(out[g3 + 1] + dy * ml, heightAt(out[g3] + dx * ml, out[g3 + 2] + dz * ml) + 0.03); out[m3 + 2] = out[g3 + 2] + dz * ml;
+  return true;
+}
+export const clipDur = (name) => (clip[name] ? clip[name].dur : 0);

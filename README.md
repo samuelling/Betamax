@@ -117,3 +117,10 @@ The beach (tape 1) is the photoreal level; the other tapes keep the cel look. It
 - "Suburban shabby house low poly" by Simlion — https://sketchfab.com/3d-models/suburban-shabby-house-low-poly-f4678340de204c829e79a01f216e1be0
 - "House: "May-Flower" (Design 371)" by AleixoAlonso — https://sketchfab.com/3d-models/house-may-flower-design-371-9784bb9cec634ccb911b889ef5cb1c57
 - "House: "Dawson" (Design 36)" by AleixoAlonso — https://sketchfab.com/3d-models/house-dawson-design-36-36e4e93baf464c94ae6c447bb67f12c7
+
+**Rifle motion capture** (walk, combat jog, sprint, standing and walking on the sights, crouched advance, deaths), from the Mixamo-skeleton animations in these CC BY models:
+
+- "Game Ready Military Character" by Pure Gamer Studios — https://sketchfab.com/3d-models/game-ready-military-character-8cd04f8d8ca94f7fb911fef2d3802f13  (animations only: baked to joint positions on the game's rig)
+- "Tactical Soldier (game ready) low poly" by MissingTray1151 — https://sketchfab.com/3d-models/tactical-soldier-game-ready-low-poly-2bfce585144d4403a3ddf76a0e65767a  (animations only: baked to joint positions on the game's rig)
+- "Futuristic soldier (lowpoly)" by SlagPerch 3D — https://sketchfab.com/3d-models/futuristic-soldier-lowpoly-5ebade1ccbff4adb91ddd3a4d1fcd541  (animations only: baked to joint positions on the game's rig)
+- "Marine_Walk_with_rifle" by Elisey — https://sketchfab.com/3d-models/marine-walk-with-rifle-094a698e3ddf44cc87385eadea1350e2  (animations only: baked to joint positions on the game's rig)
