@@ -1,7 +1,6 @@
 // Scanned, public-domain (CC0) assets from Poly Haven, loaded from ./assets/ beside the page. Everything here is
 // optional: if a file isn't there (the single-file build on its own), the procedural version it replaces stays.
 import * as THREE from 'three';
-import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 
 const BASE = (() => { try { return new URL('./assets/', location.href).href; } catch (e) { return './assets/'; } })();
 const OFF = typeof location !== 'undefined' && /[?&]noassets\b/.test(location.search);
@@ -30,16 +29,15 @@ export function applyTex(mat, name, o = {}) {
     if (o.done) o.done(mat);
   }).catch(() => {});
 }
-// the sky: an HDR panorama, and where in it the sun is (u, 0..1), so it can be turned to face the scene's own sun
+// the sky: an HDR panorama stored as RGBE in a PNG (mantissas in rgb, exponent in alpha — a PNG is a file any host
+// will serve), decoded in the sky shader; and where in it the sun is (u, 0..1), so it can be turned to the scene's sun
+const SKY = { file: 'sky.png', sunU: 0.5984, w: 2048, h: 1024 };
 export function loadSky(done) {
-  if (OFF) return;
-  new HDRLoader().load(BASE + 'sky.hdr', (t) => {
-    t.wrapS = THREE.RepeatWrapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
-    const { data, width, height } = t.image; let best = -1, bu = 0.5, bv = 0.5;
-    const val = data instanceof Uint16Array ? (i) => THREE.DataUtils.fromHalfFloat(data[i]) : (i) => data[i];
-    for (let y = 0; y < height; y += 2) for (let x = 0; x < width; x += 2) { const i = (y * width + x) * 4, l = val(i) + val(i + 1) + val(i + 2); if (l > best) { best = l; bu = (x + 0.5) / width; bv = (y + 0.5) / height; } }
-    done(t, bu, bv);
-  }, undefined, () => {});
+  if (OFF || typeof createImageBitmap === 'undefined') return;
+  fetch(BASE + SKY.file).then((r) => { if (!r.ok) throw new Error('missing'); return r.blob(); })
+    .then((b) => createImageBitmap(b, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
+    .then((bmp) => { const t = new THREE.Texture(bmp); t.flipY = false; t.premultiplyAlpha = false; t.colorSpace = THREE.NoColorSpace; t.wrapS = THREE.RepeatWrapping; t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; done(t, SKY.sunU, SKY); })
+    .catch(() => {});
 }
 
 // downloaded models (glTF binary, meshopt-compressed, WebP textures): one load per file, shared by every user
@@ -50,7 +48,10 @@ export function loadModel(file) {
   if (!models.has(file)) models.set(file, new Promise((res, rej) => {
     if (OFF) return rej(new Error('off'));
     const l = new GLTFLoader(); l.setMeshoptDecoder(MeshoptDecoder);
-    l.load(BASE + 'models/' + file, (g) => { g.scene.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { if (m.map) m.map.anisotropy = 8; } } }); res(g.scene); }, undefined, () => rej(new Error('missing ' + file)));
+    // the binary glTF travels as base64 inside a .json (a type any static host will serve)
+    fetch(BASE + 'models/' + file.replace(/\.glb$/, '.json')).then((r) => { if (!r.ok) throw new Error('missing ' + file); return r.json(); }).then((j) => {
+      const bin = atob(j.glb), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      l.parse(u8.buffer, '', (g) => { g.scene.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { if (m.map) m.map.anisotropy = 8; } } }); res(g.scene); }, (e) => rej(e)); }).catch(rej);
   }));
   return models.get(file);
 }

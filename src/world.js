@@ -234,6 +234,9 @@ export class World {
         float hsh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
         float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hsh(i),hsh(i+vec2(1,0)),f.x), mix(hsh(i+vec2(0,1)),hsh(i+vec2(1,1)),f.x), f.y); }
         uniform float uTime, uSkyOn, uSkyRot, uSkyGain; uniform sampler2D uSkyTex;
+        vec3 rgbe(vec2 uv){ vec4 e = texture2D(uSkyTex, uv); return e.rgb * exp2(e.a * 255.0 - 128.0); }
+        vec3 skyTex(vec2 uv){ vec2 sz = vec2(2048.0, 1024.0), p = uv * sz - 0.5, f = fract(p), b = (floor(p) + 0.5) / sz, px = 1.0 / sz;
+          return mix(mix(rgbe(b), rgbe(b + vec2(px.x, 0.0)), f.x), mix(rgbe(b + vec2(0.0, px.y)), rgbe(b + px), f.x), f.y); }
         float fb(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(17.1, 9.3); a *= 0.5; } return s; }
         // a deck of broken cumulus over a veil of cirrus, each lit by a second sample taken toward the sun
         vec4 cloudLayer(vec3 d, float alt, float scale, float cover, float soft, vec2 drift){
@@ -250,7 +253,7 @@ export class World {
           if (uSkyOn > 0.5) {   // a photographed sky (HDR), turned so that its sun stands where the scene's does
             float ca = cos(uSkyRot), sa = sin(uSkyRot); vec3 q = vec3(d.x * ca - d.z * sa, abs(d.y) * 0.985 + 0.015, d.x * sa + d.z * ca); q = normalize(q);
             vec2 uv = vec2(atan(q.z, q.x) / 6.28318530718 + 0.5, asin(clamp(q.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
-            vec3 hc = texture2D(uSkyTex, uv).rgb * uSkyGain;
+            vec3 hc = skyTex(vec2(uv.x, 1.0 - uv.y)) * uSkyGain;
             hc = hc / (1.0 + max(hc - 0.9, 0.0) * 1.1);   // the film's shoulder: the glow round the sun doesn't white out half the sky
             float s = max(dot(d, uSunDir), 0.0);
             hc += vec3(1.0, 0.8, 0.58) * (smoothstep(0.99962, 0.99985, s) * 60.0 + pow(s, 300.0) * 2.5);   // the scene's sun, a little above the photograph's
