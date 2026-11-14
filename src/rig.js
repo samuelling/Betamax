@@ -57,7 +57,8 @@ function hinge(j, a, b, c, fallback, out) {
 }
 const _o = v(), _y = v(), _hx = v(), _hx2 = v(), _fwd = v();
 // writes NB matrices into mats (array of Matrix4)
-export function boneFrames(j, mats) {
+// headLeft (optional, 3 numbers): the head's own left axis, so the face can turn independently of the shoulders
+export function boneFrames(j, mats, headLeft) {
   // body left axes
   P(j, J.hipL, T.a); P(j, J.hipR, T.b); T.L.subVectors(T.a, T.b).normalize();
   P(j, J.shL, T.a); P(j, J.shR, T.b); T.Lc.subVectors(T.a, T.b).normalize();
@@ -67,7 +68,7 @@ export function boneFrames(j, mats) {
   T.u.copy(T.L).add(T.Lc).normalize();
   bone(B.abd, J.spine, J.chest, T.u);
   bone(B.chest, J.chest, J.neck, T.Lc);
-  bone(B.head, J.neck, J.head, T.Lc);
+  if (headLeft) { T.c.set(headLeft[0], headLeft[1], headLeft[2]); bone(B.head, J.neck, J.head, T.c); } else bone(B.head, J.neck, J.head, T.Lc);
   const RC = _fwd.copy(T.Lc).negate();
   hinge(j, J.shL, J.elbL, J.handL, RC, _hx); bone(B.uaL, J.shL, J.elbL, _hx); bone(B.faL, J.elbL, J.handL, _hx);
   P(j, J.handL, _o); P(j, J.handL, _y).sub(P(j, J.elbL, T.c)); frame(mats[B.hdL], _o, _y, _hx);
@@ -372,6 +373,7 @@ const PALETTE_GLSL = /* glsl */`
 export function makeSoldierMaterial(bonesTex) {
   const uni = { uBones: { value: bonesTex } };
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0 });
+  mat.userData.det4 = [16, 0.0011, 0.3, 0.14];   // the photoreal look: a cloth weave, in the body's own space so it moves with it
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uBones = uni.uBones;
     sh.vertexShader = sh.vertexShader

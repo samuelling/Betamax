@@ -12,7 +12,7 @@ function makeGradientMap() {
   return tex;
 }
 export const gradientMap = makeGradientMap();
-export const toonShared = { resY: { value: 720 }, outlinePx: { value: 1.6 } };
+export const toonShared = { resY: { value: 720 }, outlinePx: { value: 1.6 }, off: false };   // off: the scene in the deck is the photoreal one
 
 // a hard specular band and a thin rim, for metal and paint: view-space, so it reads the same at every time of day
 const SPEC = /* glsl */`
@@ -30,11 +30,12 @@ const VMKEY = /* glsl */`
     vec3 base = max(diffuseColor.rgb, vec3(0.04, 0.042, 0.05));
     outgoingLight = outgoingLight * 0.55 + base * (0.4 + b * 2.0); }
 `;
-const cache = new WeakMap();
+const cache = new WeakMap(), origOf = new WeakMap();
 const pairs = [];
+export const toonOrig = (t) => origOf.get(t) || t;
 // Standard / Lambert / Phong → Toon, carrying over everything the scene relies on (and the shader hooks)
 export function toonOf(m) {
-  if (OFF || !m || m.isMeshToonMaterial || m.userData.noToon || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)) return m;
+  if (OFF || toonShared.off || !m || m.isMeshToonMaterial || m.userData.noToon || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial)) return m;
   let t = cache.get(m); if (t) return t;
   t = new THREE.MeshToonMaterial({ gradientMap });
   for (const k of ['map', 'alphaMap', 'emissiveMap', 'aoMap', 'lightMap', 'vertexColors', 'transparent', 'opacity', 'side', 'alphaTest', 'emissiveIntensity', 'depthWrite', 'depthTest', 'fog', 'flatShading', 'blending', 'polygonOffset', 'polygonOffsetFactor', 'polygonOffsetUnits', 'toneMapped', 'visible', 'wireframe', 'name', 'shadowSide', 'colorWrite', 'premultipliedAlpha', 'alphaToCoverage']) if (m[k] !== undefined) t[k] = m[k];
@@ -43,7 +44,7 @@ export function toonOf(m) {
   const metal = m.metalness ?? 0, rough = m.roughness ?? 1;
   const spec = m.userData.spec ?? (metal > 0.3 ? 1 : rough < 0.4 ? 0.6 : 0), rim = m.userData.rim ?? 0;
   const vm = !!m.userData.vm;   // a gun: lit by its own studio key, so it reads in any light
-  const prev = m.onBeforeCompile, key = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+  const prev = m.userData.obc0 !== undefined ? m.userData.obc0 : m.onBeforeCompile, key = m.userData.key0 !== undefined ? m.userData.key0 : m.customProgramCacheKey ? m.customProgramCacheKey() : '';   // (the photoreal pass wraps these: the cel copy wants the originals)
   const uSpec = { value: spec }, uRim = { value: rim };
   t.userData.uSpec = uSpec; t.userData.uRim = uRim;
   t.onBeforeCompile = (sh, r) => {
@@ -55,12 +56,13 @@ export function toonOf(m) {
     }
   };
   t.customProgramCacheKey = () => 'toon:' + key + (spec > 0 || rim > 0 ? ':s' : '') + (vm ? ':vm' : '');
-  cache.set(m, t); pairs.push([m, t]);
+  cache.set(m, t); origOf.set(t, m); pairs.push([m, t]);
   return t;
 }
 export function toonify(root) {
   root.traverse((o) => {
-    if (!(o.isMesh || o.isInstancedMesh || o.isSkinnedMesh) || o.userData.outline) return;
+    if (o.userData.outline) { o.visible = true; return; }
+    if (!(o.isMesh || o.isInstancedMesh || o.isSkinnedMesh)) return;
     if (Array.isArray(o.material)) o.material = o.material.map(toonOf); else o.material = toonOf(o.material);
   });
 }

@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 
+// shared by every effect: the sun in view space, and whether the scene in the deck is the photoreal one
+export const FX = { uSunV: { value: new THREE.Vector3(0, 1, 0) }, uReal: { value: 0 } };
+
 // Camera-facing instanced quads, refilled every frame.
 export class Billboards {
-  constructor(scene, max, tex, additive, fogColor) {
+  constructor(scene, max, tex, additive, fogColor, texReal) {
     this.max = max;
     const g = new THREE.InstancedBufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
@@ -17,19 +20,23 @@ export class Billboards {
     g.setAttribute('iPos', this.aPos); g.setAttribute('iCol', this.aCol); g.setAttribute('iRot', this.aRot);
     g.instanceCount = 0;
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uTex: { value: tex }, uFogColor: { value: fogColor }, uFogDensity: { value: 0.0022 } },
-      vertexShader: `attribute vec4 iPos; attribute vec4 iCol; attribute float iRot; varying vec2 vUv; varying vec4 vCol; varying float vFog;
+      uniforms: { uTex: { value: tex }, uTexR: { value: texReal || tex }, uFogColor: { value: fogColor }, uFogDensity: { value: 0.0022 }, uSunV: FX.uSunV, uReal: FX.uReal },
+      vertexShader: `attribute vec4 iPos; attribute vec4 iCol; attribute float iRot; varying vec2 vUv; varying vec4 vCol; varying float vFog; varying vec2 vRot;
         uniform float uFogDensity;
         void main(){ vUv = uv; vCol = iCol;
           vec4 mv = modelViewMatrix * vec4(iPos.xyz, 1.0);
-          float c = cos(iRot), s = sin(iRot);
+          float c = cos(iRot), s = sin(iRot); vRot = vec2(c, s);
           vec2 p = vec2(c*position.x - s*position.y, s*position.x + c*position.y) * iPos.w;
           mv.xy += p;
           float d = -mv.z; vFog = 1.0 - exp(-pow(uFogDensity*d, 2.0));
           gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `uniform sampler2D uTex; uniform vec3 uFogColor; varying vec2 vUv; varying vec4 vCol; varying float vFog;
-        void main(){ vec4 t = texture2D(uTex, vUv);
-          ${additive ? 'gl_FragColor = vec4(vCol.rgb * t.a * vCol.a * (1.0 - vFog), 1.0);' : 'gl_FragColor = vec4(mix(vCol.rgb, uFogColor, vFog), t.a * vCol.a);'} }`,
+      fragmentShader: `uniform sampler2D uTex, uTexR; uniform vec3 uFogColor, uSunV; uniform float uReal; varying vec2 vUv; varying vec4 vCol; varying float vFog; varying vec2 vRot;
+        void main(){ vec4 t = uReal > 0.5 ? texture2D(uTexR, vUv) : texture2D(uTex, vUv); vec3 col = vCol.rgb;
+          ${additive ? '' : `if (uReal > 0.5) {   // a puff is a ball of smoke: lit on its sun side, blue in its own shade
+            vec2 c = vUv * 2.0 - 1.0; float r2 = min(dot(c, c), 1.0); vec2 cr = vec2(vRot.x * c.x - vRot.y * c.y, vRot.y * c.x + vRot.x * c.y);
+            vec3 n = normalize(vec3(cr, sqrt(1.0 - r2 * 0.8))); float lit = dot(n, uSunV) * 0.5 + 0.5;
+            col *= mix(vec3(0.34, 0.38, 0.47), vec3(1.2, 0.98, 0.78), smoothstep(0.15, 1.0, lit)); }`}
+          ${additive ? 'gl_FragColor = vec4(col * t.a * vCol.a * (1.0 - vFog), 1.0);' : 'gl_FragColor = vec4(mix(col, uFogColor, vFog), t.a * vCol.a);'} }`,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
     });
@@ -70,9 +77,12 @@ export class Tracers {
     g.setIndex(new THREE.BufferAttribute(idx, 1)); g.setDrawRange(0, 0);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: `attribute vec4 aCol; attribute vec2 aUv; varying vec2 vP; varying vec4 vC; void main(){ vP = aUv; vC = aCol; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `varying vec2 vP; varying vec4 vC;
-        void main(){ float a = (1.0 - abs(vP.y)); a = a*a; float h = mix(0.25, 1.0, vP.x);
-          gl_FragColor = vec4(vC.rgb * a * h * vC.a, 1.0); }`,
+      uniforms: { uReal: FX.uReal },
+      fragmentShader: `varying vec2 vP; varying vec4 vC; uniform float uReal;
+        void main(){ float a = (1.0 - abs(vP.y)); float core = a*a*a*a*a*a; a = a*a; float h = mix(0.25, 1.0, vP.x);
+          vec3 c = vC.rgb * a * h * vC.a;
+          if (uReal > 0.5) c = vC.rgb * a * h * vC.a * 0.75 + vec3(1.0, 0.94, 0.82) * core * h * h * vC.a * 1.2;   // a white-hot core in a coloured sheath
+          gl_FragColor = vec4(c, 1.0); }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     });
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = 5;
@@ -99,7 +109,7 @@ export class Tracers {
       if (sl < 1e-6 * vd) continue;   // end-on: nothing to see
       sx /= sl; sy /= sl; sz /= sl;
       const da = Math.hypot(ax - cx, ay - cy, az - cz), db = Math.hypot(bx - cx, by - cy, bz - cz);
-      const wa = Math.max(A[o + 3], da * 0.0018), wb = Math.max(B[o + 3], db * 0.0018);
+      const mw = FX.uReal.value > 0.5 ? 0.0013 : 0.0018, wa = Math.max(A[o + 3], da * mw), wb = Math.max(B[o + 3], db * mw);
       const v = n * 4, p = v * 3, q = v * 4, u = v * 2;
       P[p] = ax - sx * wa; P[p + 1] = ay - sy * wa; P[p + 2] = az - sz * wa;
       P[p + 3] = bx - sx * wb; P[p + 4] = by - sy * wb; P[p + 5] = bz - sz * wb;

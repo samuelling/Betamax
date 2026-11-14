@@ -59,6 +59,25 @@ export function gaitBlend(st, speed, crouch, hurt, out = _L) {
   if (wj > 0.001) out.push(['c_jog', wj]);
   return out;
 }
+// the same blend without allocating: fills names[]/weights[] and returns the count (animation hot path)
+export function gaitBlendFlat(st, speed, crouch, hurt, names, weights) {
+  let n = 0;
+  const wRun = smooth(2.3, 3.9, speed);
+  const wc = smooth(0.4, 0.75, crouch) * 0.85;
+  const fast = smooth(1.3, 2.4, speed);
+  const wl = hurt ? (1 - smooth(1.0, 2.3, speed)) * 0.9 : 0;
+  const wj = hurt ? smooth(1.0, 2.3, speed) * 0.6 : 0;
+  const rest = (1 - wc) * (1 - wl) * (1 - wj), k = wc * (1 - wl) * (1 - wj);
+  if ((1 - wRun) * rest > 0.001) { names[n] = st.walk; weights[n++] = (1 - wRun) * rest; }
+  if (wRun * rest > 0.001) { names[n] = st.run; weights[n++] = wRun * rest; }
+  if (k > 0.001) {
+    if (1 - fast > 0.001) { names[n] = st.crouch; weights[n++] = k * (1 - fast); }
+    if (fast > 0.001) { names[n] = 'c_crouch_run'; weights[n++] = k * fast; }
+  }
+  if (wl > 0.001) { names[n] = st.limp; weights[n++] = wl * (1 - wj); }
+  if (wj > 0.001) { names[n] = 'c_jog'; weights[n++] = wj; }
+  return n;
+}
 export function gaitStride(st, speed, crouch, hurt) {
   const b = gaitBlend(st, speed, crouch, hurt);
   let s = 0, w = 0; for (const [k, x] of b) { s += STRIDE[k] * x; w += x; }

@@ -56,7 +56,7 @@ const SCREEN_GLSL = /* glsl */`
   }`;
 
 // the menu, as the set shows it — and the full-screen title is this very picture, so the two can't differ
-export const MENU_W = 1024, MENU_H = 768, PLAY_BOX = [362, 392, 300, 86];   // all of it inside the band a 16:9 window shows (the title is cover-fit)
+export const MENU_W = 1024, MENU_H = 768, PLAY_BOX = [202, 392, 300, 86], FWD_BOX = [522, 392, 300, 86];   // all of it inside the band a 16:9 window shows (the title is cover-fit)
 // chapter select along the foot of the menu: [id, label]; each gets an equal slot
 // two rows: the Cape Cod track and the Texas track, each in tape order
 export const CHAPTERS = [
@@ -73,7 +73,9 @@ export function drawMenu(g, w = MENU_W, h = MENU_H) {
   g.font = '34px "VT323", "Courier New", monospace'; g.fillText('a battle, in rewind \u00B7 Mayflower Beach, Dennis', w / 2, 330);
   const [bx, by, bw, bh] = PLAY_BOX;
   g.strokeStyle = '#f4f1e8'; g.lineWidth = 5; g.strokeRect(bx, by, bw, bh);
-  g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25B6 PLAY', w / 2, by + 64);
+  g.font = '62px "VT323", "Courier New", monospace'; g.fillText('\u25C0\u25C0 REWIND', bx + bw / 2, by + 64);
+  { const [fx, fy, fw, fh] = FWD_BOX; g.lineWidth = 3; g.strokeRect(fx, fy, fw, fh); g.fillText('\u25B6 FORWARD', fx + fw / 2, fy + 64); g.lineWidth = 5;
+    g.globalAlpha = 0.6; g.font = '22px "VT323", "Courier New", monospace'; g.fillText('the battle as recorded, backward', bx + bw / 2, by + bh + 24); g.fillText('an ordinary shooter: the same battle, in order', fx + fw / 2, fy + fh + 24); g.globalAlpha = 1; }
   g.globalAlpha = 0.55; g.font = '26px "VT323", "Courier New", monospace';
   g.fillText('WASD \u00B7 MOUSE \u00B7 CLICK FIRE \u00B7 R RELOAD \u00B7 1/2 GUNS \u00B7 F SWAP \u00B7 T REW \u00D72 \u00B7 V SLOW', w / 2, 516);
   g.globalAlpha = 0.7; g.font = '22px "VT323", "Courier New", monospace'; g.fillText('\u2014 OR START FROM A CHAPTER \u2014', w / 2, 558);

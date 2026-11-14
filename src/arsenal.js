@@ -20,7 +20,7 @@ const sRGB = (r, g, b) => new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace
 const M = {
   ...mats,
   black: new THREE.MeshStandardMaterial({ color: sRGB(0.05, 0.05, 0.055), roughness: 0.5, metalness: 0.6 }),
-  fde: new THREE.MeshStandardMaterial({ color: sRGB(0.5, 0.42, 0.31), roughness: 0.75, metalness: 0.05 }),
+  fde: new THREE.MeshStandardMaterial({ color: sRGB(0.46, 0.375, 0.265), roughness: 0.58, metalness: 0.28 }),   // coyote anodising
   ranger: new THREE.MeshStandardMaterial({ color: sRGB(0.3, 0.31, 0.24), roughness: 0.75, metalness: 0.05 }),
   pouch: new THREE.MeshStandardMaterial({ color: sRGB(0.42, 0.38, 0.28), roughness: 0.95 }),
   shell: new THREE.MeshStandardMaterial({ color: sRGB(0.32, 0.06, 0.05), roughness: 0.55 }),

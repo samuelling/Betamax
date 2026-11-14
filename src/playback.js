@@ -45,7 +45,7 @@ export class Playback {
     this.hit = sim.actors.map(() => ({ ok: false, headM: new THREE.Matrix4(), head: new THREE.Vector3(), neck: new THREE.Vector3(), pelvis: new THREE.Vector3(), pos: new THREE.Vector3(), yaw: 0, pitch: 0 }));
     this.lights = [];
     for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xffa060, 0, 60, 1.6); scene.add(l); this.lights.push(l); }
-    this.hitShots = new Set();
+    this.hitShots = new Set(); this.killed = new Map();
     this.whizzed = new Set();
     // drones
     this.drones = [];
@@ -133,6 +133,7 @@ export class Playback {
   // is actor i a valid living target at tau?
   alive(i, tau) {
     const st = this.S.actors[i];
+    const kt = this.killed.get(i); if (kt !== undefined && tau >= kt) return false;   // killed live, off the script (forward play)
     return tau >= st.spawn && !(st.deathTime > 0 && tau >= st.deathTime);
   }
 
@@ -165,6 +166,8 @@ export class Playback {
       h.ok = false;
       if (i === body && ctx.hideBody) { this.sol.hide(i); this.capture(i, s, tau); this.posed[i] = 0; continue; }
       if (s.mode === MODE.HIDDEN) { this.sol.hide(i); this.posed[i] = 0; continue; }
+      const kt = this.killed.size ? this.killed.get(i) : undefined, gone = kt !== undefined && tau >= kt;
+      if (gone && !this.sol.killAt) { this.sol.hide(i); this.posed[i] = 0; continue; }
       const ov = ctx.overrides.get(i);
       if (ov) {
         const k = Math.min(1, (ctx.real - ov.t0) / 1.6);
@@ -177,7 +180,7 @@ export class Playback {
       const fy = ctx.face && ctx.face.get(i); if (fy !== undefined) s.yaw = fy;   // off the tape: turned to look at you
       const k = this.sol.pose(i, s, tau);
       // keypoints are kept for the dead too (cameras and voices follow bodies); only the living are hittable
-      h.ok = s.mode === MODE.GROUND; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
+      h.ok = s.mode === MODE.GROUND && !gone; h.head.copy(k.head); h.neck.copy(k.neck); h.pelvis.copy(k.pelvis);
       h.pos.set(s.x, s.y, s.z); h.yaw = s.yaw; h.pitch = s.pitch;
     }
     this.sol.commit();
@@ -196,6 +199,7 @@ export class Playback {
       const o = si * SHOT_F;
       const fireT = A[o], impT = A[o + 1], shooter = A[o + 8], target = A[o + 9];
       if (shooter === body) continue;
+      if (this.killed.size && shooter >= 0) { const kt = this.killed.get(shooter); if (kt !== undefined && fireT >= kt) continue; }   // the dead don't fire their later rounds
       const veh = shooter < 0;
       const ship = shooter <= -100;
       const side = veh ? 1 : S.actors[shooter].side;

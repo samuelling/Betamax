@@ -22,13 +22,30 @@ import { buildShipWorld } from './worldS.js';
 import { buildShipLayout } from './layoutS.js';
 import { buildAsh, ashGround } from './worldA.js';
 import { planStructure, Megastructures } from './megastruct.js';
+import { applyTex, photoTex, loadSky } from './assets.js';
+import { dressVehicle, pickCar } from './vehassets.js';
+import { triPhoto } from './real.js';
 import { buildAshLayout } from './layoutA.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.9, 0.26, 0.28).normalize();
 
 export const SKY_GLSL = /* glsl */`
-uniform vec3 uSunDir;
+uniform vec3 uSunDir; uniform float uSkyReal;
+// the photoreal dawn: a deep zenith, a pale horizon that warms toward the sun, the sun's own scatter
+vec3 skyReal(vec3 d){
+  float h = max(d.y, 0.0), s = max(dot(d, uSunDir), 0.0);
+  float az = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), normalize(vec3(uSunDir.x, 0.0, uSunDir.z))), 0.0);
+  vec3 zen = vec3(0.075, 0.17, 0.40), mid = vec3(0.27, 0.42, 0.66), hor = vec3(0.66, 0.70, 0.74);
+  vec3 c = mix(hor, mid, smoothstep(0.0, 0.22, h)); c = mix(c, zen, smoothstep(0.12, 0.95, h));
+  vec3 warm = mix(vec3(0.98, 0.70, 0.50), vec3(1.25, 0.66, 0.30), az * az);
+  c = mix(c, warm, exp(-h * 6.5) * (0.22 + 0.78 * pow(az, 1.5)));
+  c += vec3(1.0, 0.62, 0.34) * (pow(s, 5.0) * 0.30 + pow(s, 40.0) * 0.9 + pow(s, 400.0) * 5.0);
+  c += vec3(1.0, 0.86, 0.66) * smoothstep(0.99962, 0.99985, s) * 70.0;
+  c = mix(c, vec3(0.50, 0.50, 0.52) * (0.6 + 0.6 * az), smoothstep(0.0, -0.12, d.y));
+  return c;
+}
 vec3 skyCol(vec3 d){
+  if (uSkyReal > 0.5) return skyReal(d);
   float h = d.y;
   vec3 horizon = vec3(0.70,0.62,0.56);
   vec3 zenith = vec3(0.20,0.30,0.48);
@@ -103,6 +120,7 @@ export class World {
     this.scene = scene; this.renderer = renderer; this.q = quality; this.kind = kind;
     this.L = kind === 'sandwich' ? buildSandwichLayout() : kind === 'bomb' ? buildBombLayout() : kind === 'jump' ? buildJumpLayout() : kind === 'port' ? buildPortLayout() : kind === 'ship' ? buildShipLayout() : kind === 'ash' ? buildAshLayout() : buildLayout();
     this.uTau = { value: 0 };
+    this.realLook = kind === 'beach' && !/[?&]cel\b/.test(location.search);   // the beach is the photoreal scene
     this.root = new THREE.Group(); scene.add(this.root);
     if (kind === 'ship') {   // night at sea
       this.coreRect = [-100, 180, -30, 30];
@@ -207,16 +225,51 @@ export class World {
 
   // ---------------- sky ----------------
   buildSky() {
+    const real = this.realLook;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uSunDir: { value: SUN_DIR } },
+      uniforms: { uSunDir: { value: SUN_DIR }, uSkyReal: { value: real ? 1 : 0 }, uTime: this.uTau, uSkyTex: { value: null }, uSkyOn: { value: 0 }, uSkyRot: { value: 0 }, uSkyGain: { value: 1 } },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize((modelMatrix*vec4(position,1.0)).xyz - cameraPosition); vec4 p = projectionMatrix*viewMatrix*modelMatrix*vec4(position,1.0); gl_Position = p.xyww; }`,
       fragmentShader: `${SKY_GLSL}
         varying vec3 vDir;
         float hsh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
         float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(hsh(i),hsh(i+vec2(1,0)),f.x), mix(hsh(i+vec2(0,1)),hsh(i+vec2(1,1)),f.x), f.y); }
+        uniform float uTime, uSkyOn, uSkyRot, uSkyGain; uniform sampler2D uSkyTex;
+        float fb(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(17.1, 9.3); a *= 0.5; } return s; }
+        // a deck of broken cumulus over a veil of cirrus, each lit by a second sample taken toward the sun
+        vec4 cloudLayer(vec3 d, float alt, float scale, float cover, float soft, vec2 drift){
+          vec2 uv = d.xz / (d.y + 0.06) * alt + drift;
+          vec2 sd = normalize(uSunDir.xz) * 0.42;
+          float n = fb(uv * scale), n2 = fb((uv + sd) * scale);
+          float den = smoothstep(cover, cover + soft, n), den2 = smoothstep(cover, cover + soft, n2);
+          float lit = clamp(0.5 + (den - den2) * 1.6 + (1.0 - den) * 0.5, 0.0, 1.0);
+          return vec4(vec3(lit), den);
+        }
         void main(){
           vec3 d = normalize(vDir);
           vec3 c = skyCol(d);
+          if (uSkyOn > 0.5) {   // a photographed sky (HDR), turned so that its sun stands where the scene's does
+            float ca = cos(uSkyRot), sa = sin(uSkyRot); vec3 q = vec3(d.x * ca - d.z * sa, abs(d.y) * 0.985 + 0.015, d.x * sa + d.z * ca); q = normalize(q);
+            vec2 uv = vec2(atan(q.z, q.x) / 6.28318530718 + 0.5, asin(clamp(q.y, -1.0, 1.0)) / 3.14159265359 + 0.5);
+            vec3 hc = texture2D(uSkyTex, uv).rgb * uSkyGain;
+            hc = hc / (1.0 + max(hc - 0.9, 0.0) * 1.1);   // the film's shoulder: the glow round the sun doesn't white out half the sky
+            float s = max(dot(d, uSunDir), 0.0);
+            hc += vec3(1.0, 0.8, 0.58) * (smoothstep(0.99962, 0.99985, s) * 60.0 + pow(s, 300.0) * 2.5);   // the scene's sun, a little above the photograph's
+            gl_FragColor = vec4(min(hc, vec3(90.0)), 1.0); return;
+          }
+          if (uSkyReal > 0.5) {
+            if (d.y > -0.01) {
+              float s = max(dot(d, uSunDir), 0.0), hz = smoothstep(0.0, 0.16, d.y);
+              vec3 lightC = mix(vec3(1.25, 0.86, 0.62), vec3(2.4, 1.35, 0.72), pow(s, 3.0)), shadeC = vec3(0.26, 0.29, 0.37);
+              vec4 ci = cloudLayer(d, 0.55, vec2(1.0, 3.2).x, 0.50, 0.30, vec2(uTime * 0.0006, 0.0));
+              { vec2 uv = d.xz / (d.y + 0.05) * 0.5; float st = vn(uv * vec2(1.4, 7.0)) * 0.6 + vn(uv * vec2(3.0, 15.0)) * 0.4; ci.a = smoothstep(0.52, 0.86, st) * 0.55; }
+              c = mix(c, mix(c * 1.1 + vec3(0.25, 0.2, 0.18), lightC * 0.55, 0.6), ci.a * hz);
+              vec4 cu = cloudLayer(d, 1.0, 0.85, 0.50, 0.22, vec2(uTime * 0.0012, uTime * 0.0004));
+              vec3 cc = mix(shadeC, lightC, cu.r);
+              cc = mix(cc, c, 0.55 * (1.0 - smoothstep(0.02, 0.3, d.y)));          // the far deck sinks into the haze
+              c = mix(c, cc, cu.a * hz * 0.92);
+            }
+            gl_FragColor = vec4(c, 1.0); return;
+          }
           if (d.y > 0.0) {
             vec2 uv = d.xz / (d.y + 0.08) * 1.4;
             float n = vn(uv*vec2(1.0,4.0)) * 0.5 + vn(uv*vec2(2.1,8.0))*0.3 + vn(uv*vec2(4.3,15.0))*0.2;
@@ -237,28 +290,36 @@ export class World {
     envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat.clone()));
     const pm = new THREE.PMREMGenerator(this.renderer);
     this.scene.environment = this.envTex = pm.fromScene(envScene, 0.02).texture;
-    this.scene.environmentIntensity = 0.75;
+    if (real) loadSky((tex, su) => {
+      const u = mat.uniforms; u.uSkyTex.value = tex; u.uSkyOn.value = 1; u.uSkyGain.value = 0.42;
+      u.uSkyRot.value = (su - 0.5) * Math.PI * 2 - Math.atan2(SUN_DIR.z, SUN_DIR.x);
+      const es = new THREE.Scene(), em = mat.clone(); em.uniforms.uSkyTex.value = tex; es.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), em));
+      const env = pm.fromScene(es, 0.02).texture; this.envTex = env; if (this.root.visible) this.scene.environment = env;
+    });
+    this.scene.environmentIntensity = this.envI = real ? 0.5 : 0.75;
     const fc = skyColorJS(new THREE.Vector3(-SUN_DIR.x, 0.02, -SUN_DIR.z).normalize());
-    this.fogColor = new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
-    this.scene.fog = this.fog = new THREE.FogExp2(this.fogColor, this.kind === 'sandwich' ? 0.0026 : this.kind === 'bomb' ? 0.0016 : this.kind === 'ash' ? 0.0042 : 0.0015);
+    this.fogColor = real ? new THREE.Color(0.56, 0.58, 0.62) : new THREE.Color(fc[0] * 0.92, fc[1] * 0.92, fc[2] * 0.92);
+    this.scene.fog = this.fog = new THREE.FogExp2(this.fogColor, this.kind === 'sandwich' ? 0.0026 : this.kind === 'bomb' ? 0.0016 : this.kind === 'ash' ? 0.0042 : real ? 0.0008 : 0.0015);
   }
 
   buildLights() {
-    const sun = new THREE.DirectionalLight(new THREE.Color(1.0, 0.8, 0.62), 3.4);
+    const real = this.realLook;
+    const sun = new THREE.DirectionalLight(real ? new THREE.Color(1.0, 0.72, 0.47) : new THREE.Color(1.0, 0.8, 0.62), real ? 4.6 : 3.4);
     sun.castShadow = true;
-    const ms = this.q.shadow;
+    const ms = this.q.shadow * (real && this.q.shadow >= 2048 ? 2 : 1);
     sun.shadow.mapSize.set(ms, ms);
     const c = sun.shadow.camera; c.left = -70; c.right = 70; c.top = 70; c.bottom = -70; c.near = 1; c.far = 500;
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
     this.scene.add(sun, sun.target);
     this.sun = sun;
-    this.hemi = new THREE.HemisphereLight(new THREE.Color(0.62, 0.7, 0.82), new THREE.Color(0.52, 0.42, 0.28), 1.35);   // the cel materials take no sky reflection: the hemisphere carries the fill, as in Ashland
+    this.hemi = new THREE.HemisphereLight(new THREE.Color(0.62, 0.7, 0.82), new THREE.Color(0.52, 0.42, 0.28), real ? 0.1 : 1.35);   // the cel materials take no sky reflection: the hemisphere carries the fill, as in Ashland
     this.scene.add(this.hemi);
   }
 
   // cel shading works on clean surfaces: bumpy normal maps turn into speckle once the light is banded, so they go;
   // colour textures stay (the bands and ink are added in post)
   toonPrep() {
+    if (this.realLook) return;   // the photoreal scene keeps its normal and roughness maps
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
@@ -295,7 +356,7 @@ export class World {
   colorTerrain(g, matIn) {
     const pos = g.attributes.position;
     const col = new Float32Array(pos.count * 3);
-    const wet = new Float32Array(pos.count);
+    const wet = new Float32Array(pos.count), lot = new Float32Array(pos.count);
     const c = new THREE.Color();
     const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
     const DRY = [0.93, 0.86, 0.72], WET = [0.60, 0.54, 0.44], WRACK = [0.32, 0.27, 0.2], GRASS = [0.52, 0.53, 0.33], SCRUB = [0.30, 0.33, 0.21], ALGAE = [0.40, 0.42, 0.30], ASPH = [0.2, 0.2, 0.21];
@@ -325,7 +386,7 @@ export class World {
         const d = -z, cr = crestD(x);
         const inland = smoothstep(cr + 6, cr + 26, d);
         k = mix(k, mix(SCRUB, DRY, smoothstep(0.62, 0.75, fbm(x * 0.03, z * 0.03, 3)) * 0.7), inland);
-        k = mix(k, ASPH, lotMask(x, z));
+        k = mix(k, ASPH, lotMask(x, z)); lot[i] = lotMask(x, z);
       }
       if (y < -0.4 && this.kind !== 'bomb' && this.kind !== 'ash') k = mix(k, [0.38, 0.36, 0.3], smoothstep(-0.4, -2, y));
       c.setRGB(k[0], k[1], k[2], THREE.SRGBColorSpace);
@@ -333,7 +394,7 @@ export class World {
       wet[i] = w;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.setAttribute('wet', new THREE.BufferAttribute(wet, 1));
+    g.setAttribute('wet', new THREE.BufferAttribute(wet, 1)); g.setAttribute('lot', new THREE.BufferAttribute(lot, 1));
     g.computeVertexNormals();
     if (matIn) return matIn;
     const sand = TX.makeSandTextures();
@@ -343,6 +404,7 @@ export class World {
     // softer sand grain under cel bands
     sand.map.minFilter = THREE.LinearMipmapLinearFilter;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: sand.map, normalMap: sand.normal || null, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.0, metalness: 0 });
+    mat.userData.det4 = [1.7, 0.005, 0.24, 0.1];
     // craters: looked up from a coarse grid of crater ids, each crater (x, z, radius, time) in a float texture
     const cu = this.crU = {
       uCrG: { value: new THREE.DataTexture(new Float32Array(8).fill(-1), 2, 1, THREE.RGBAFormat, THREE.FloatType) },
@@ -361,17 +423,34 @@ export class World {
             vec4 cr = texelFetch(uCr, ivec2(ii % 1024, ii / 1024), 0); float age = uTauT - cr.w; if (age <= 0.0) continue;
             h += crProf(length(p - cr.xy) / cr.z) * cr.z * min(1.0, age / 0.18); } }
         return max(h, -1.4); }`;
+    // the photoreal beach: scanned dry sand, wet sand and asphalt (Poly Haven, CC0), laid by world position and tinted by the hand-painted map
+    const real = this.realLook, ph = { uPh: { value: 0 }, uSandD: { value: null }, uWetD: { value: null }, uAsphD: { value: null } };
+    if (real) {
+      mat.envMapIntensity = 1.5;
+      Promise.all([photoTex('aerial_beach_01', 'd'), photoTex('damp_beach_sand', 'd'), photoTex('asphalt_02', 'd'), photoTex('aerial_beach_01', 'n', [176, 184])]).then(([a, b, c2, n]) => {
+        ph.uSandD.value = a; ph.uWetD.value = b; ph.uAsphD.value = c2; ph.uPh.value = 1; mat.map = null; mat.normalMap = n; mat.normalScale.set(0.9, 0.9); mat.needsUpdate = true;
+      }).catch(() => {});
+    }
     mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, cu);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet; varying float vWet;\n' + CR_GLSL)
+      Object.assign(sh.uniforms, cu, ph);
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float wet, lot; varying float vWet, vLot; varying vec2 vTp;\n' + CR_GLSL)
         .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
           { float e = 0.35; float hx = crH(position.xz + vec2(e, 0.0)) - crH(position.xz - vec2(e, 0.0)); float hz = crH(position.xz + vec2(0.0, e)) - crH(position.xz - vec2(0.0, e));
             objectNormal = normalize(objectNormal + vec3(-hx / (2.0*e), 0.0, -hz / (2.0*e))); }`)
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWet = wet; vCrater = crH(position.xz); transformed.y += vCrater;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWet; varying float vCrater;')
-        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(1.0, 0.58, smoothstep(0.0, -0.6, vCrater)); diffuseColor.rgb *= 1.0 + 0.12 * smoothstep(0.02, 0.1, vCrater);')
-        .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(0.97, 0.18, vWet);')
-        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n normal = normalize(mix(normal, normalize(vNormal), vWet*0.65));');
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWet = wet; vLot = lot; vTp = position.xz; vCrater = crH(position.xz); transformed.y += vCrater;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWet, vLot; varying vec2 vTp; varying float vCrater; uniform float uPh; uniform sampler2D uSandD, uWetD, uAsphD;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          if (uPh > 0.5) {
+            vec3 tint = pow(clamp(diffuseColor.rgb / vec3(0.85, 0.71, 0.48), 0.0, 1.5), vec3(0.55));
+            vec3 sd = mix(texture2D(uSandD, vTp * 0.16).rgb, texture2D(uSandD, vTp * 0.029 + 0.37).rgb, 0.4) * 1.45;
+            vec3 wt = texture2D(uWetD, vTp * 0.21).rgb * 1.35;
+            vec3 gr = mix(sd, wt, clamp(vWet * 1.3, 0.0, 1.0)) * tint;
+            vec3 as = mix(texture2D(uAsphD, vTp * 0.28).rgb, texture2D(uAsphD, vTp * 0.047 + 0.2).rgb, 0.35) * 0.95;
+            diffuseColor.rgb = mix(gr, as, smoothstep(0.35, 0.65, vLot));
+          }
+          diffuseColor.rgb *= mix(1.0, 0.58, smoothstep(0.0, -0.6, vCrater)); diffuseColor.rgb *= 1.0 + 0.12 * smoothstep(0.02, 0.1, vCrater);`)
+        .replace('#include <roughnessmap_fragment>', real ? 'float roughnessFactor = mix(mix(0.96, 0.07, vWet), 0.86, smoothstep(0.35, 0.65, vLot));' : 'float roughnessFactor = mix(0.97, 0.18, vWet);')
+        .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n normal = normalize(mix(normal, normalize(vNormal), max(vWet*' + (real ? '0.9' : '0.65') + ', vLot * 0.85)));');
     };
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
@@ -413,7 +492,7 @@ export class World {
     const nrm = TX.makeWaterNormal();
     const uni = {
       uTime: this.uTau, uSunDir: { value: SUN_DIR }, uNormal: { value: nrm }, uHeight: { value: ht },
-      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0015 },
+      uHRect: { value: new THREE.Vector4(-HX / 2, HZ0, HX, HZ1 - HZ0) }, uFogDensity: { value: 0.0015 }, uSkyReal: { value: this.realLook ? 1 : 0 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: uni, transparent: true, depthWrite: false,
@@ -481,13 +560,18 @@ export class World {
     ]);
     const n = blade.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
     const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 });
-    const uT = this.uTau;
+    const uT = this.uTau, real = this.realLook;
+    if (real && (this.q.msaa || 0) > 0) mat.alphaToCoverage = true;
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uT;
       // tag grass pixels (alpha 0.5) so the cel pass doesn't ink every blade
       sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', '#include <dithering_fragment>\n gl_FragColor.a = 0.5;');
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
+      if (real) sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vGh;')   // dark down in the roots, bright and a little translucent at the tips
+        .replace('#include <color_fragment>', '#include <color_fragment>\n diffuseColor.rgb *= mix(0.3, 1.1, smoothstep(0.0, 0.8, vGh));')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.8, 0.5) * 0.16 * vGh;');
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime; varying float vGh;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vGh = position.y;
           vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
           float sway = sin(uTime*1.9 + ip.x*0.35 + ip.z*0.21) * 0.6 + sin(uTime*3.7 + ip.x*1.3)*0.25;
           transformed.x += sway * 0.12 * position.y * position.y;
@@ -542,7 +626,9 @@ export class World {
   // ---------------- boardwalk, shack, lifeguard ----------------
   buildBeachStuff() {
     const B = new Builder();
-    const wood = std([0.55, 0.47, 0.38], 0.9), gray = std([0.62, 0.6, 0.56], 0.9), white = std([0.9, 0.9, 0.86], 0.7);
+    const wood = std([0.55, 0.47, 0.38], 0.9); wood.userData.det4 = [3.2, 0.0035, 0.5, 0.22, [0.07, 1, 1]];   // weathered boards, the grain running along them
+    const gray = std([0.62, 0.6, 0.56], 0.9), white = std([0.9, 0.9, 0.86], 0.7);
+    if (this.realLook) { triPhoto(wood, 'wood_planks_grey', 0.6, { gain: 1.5, swap: 1, tint: 0.5 }); triPhoto(gray, 'wood_planks_grey', 0.9, { gain: 1.15, tint: 0.3 }); }
     const bw = this.L.boardwalk;
     for (let i = 0; i < bw.length - 1; i++) {
       const a = bw[i], b = bw[i + 1];
@@ -594,6 +680,7 @@ export class World {
     const S = this.L.snackShack;
     const shingle = new THREE.MeshStandardMaterial({ map: TX.makeShingleTex(), roughness: 0.95 });
     shingle.map.wrapS = shingle.map.wrapT = THREE.RepeatWrapping; shingle.map.repeat.set(3, 1);
+    if (this.realLook) { shingle.map = null; shingle.color.setRGB(0.62, 0.6, 0.56, THREE.SRGBColorSpace); triPhoto(shingle, 'weathered_plank_siding', 0.55, { gain: 2.3, tint: 0.25 }); }
     const sy = heightAt(S.x, S.z);
     B.add(shingle, box(S.w, 3.2, S.l, S.x, sy + 1.6, S.z));
     B.add(std([0.25, 0.25, 0.27], 0.8), place(new THREE.ConeGeometry(S.w * 0.72, 1.8, 4, 1), S.x, sy + 4.1, S.z, 0, Math.PI / 4, 0, 1, 1, S.l / S.w));
@@ -668,6 +755,10 @@ export class World {
       siding: new THREE.MeshStandardMaterial({ map: sh, roughness: 0.95 }), roof: std([0.2, 0.2, 0.22], 0.85), trim: std([0.92, 0.92, 0.88], 0.6),
       glass: std([0.05, 0.07, 0.09], 0.08, 0.2), brick: std([0.45, 0.22, 0.17], 0.9), deck: std([0.5, 0.42, 0.33], 0.9), floor: std([0.42, 0.36, 0.3], 0.9),
     };
+    if (this.realLook) {   // scanned siding, roofing and decking on the houses
+      M.siding.map = null; M.siding.color.setRGB(0.64, 0.62, 0.58, THREE.SRGBColorSpace); triPhoto(M.siding, 'weathered_plank_siding', 0.55, { gain: 2.4, tint: 0.3 });
+      triPhoto(M.roof, 'grey_roof_01', 0.55, { gain: 1.0 }); triPhoto(M.deck, 'wood_planks_grey', 0.6, { gain: 1.4, tint: 0.5 }); triPhoto(M.floor, 'wood_planks_grey', 0.6, { gain: 1.1, tint: 0.5 });
+    }
     const lists = {}; for (const k of Object.keys(M)) lists[k] = [];
     const pieces = [];
     const add = (mat, geo, pid) => { const n = geo.attributes.position.count; geo.setAttribute('piece', new THREE.Float32BufferAttribute(new Float32Array(n).fill(pid), 1)); lists[mat].push(geo); };
@@ -764,8 +855,8 @@ export class World {
   }
 
   buildTrees() {
-    const trunk = cyl(0.12, 0.2, 4, 6, 0, 2, 0);
     const r = mulberry32(17);
+    if (this.realLook) return this.buildRealTrees(r);
     const blobs = [];
     for (let k = 0; k < 5; k++) blobs.push(place(new THREE.IcosahedronGeometry(1.4 + r() * 0.8, 1), (r() - 0.5) * 2, 3.6 + r() * 2.2, (r() - 0.5) * 2, 0, 0, 0, 1, 0.65, 1));
     const crown = merge(blobs);
@@ -776,6 +867,42 @@ export class World {
       _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.4), t.s);
       _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m);
       const v = 0.8 + r() * 0.4; col.setRGB(v, v, v * 0.9); ci.setColorAt(i, col);
+    });
+    ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true;
+    this.root.add(ti, ci);
+  }
+
+  // the photoreal trees: a limbed trunk and a crown of leaf cards, their normals blown outward so the crown shades as one soft mass
+  buildRealTrees(r) {
+    const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+    for (let i = 0; i < 1500; i++) {
+      const a = r() * 6.283, d = Math.pow(r(), 0.6) * 232, x = 256 + Math.cos(a) * d, y = 256 + Math.sin(a) * d * 0.9, v = 105 + r() * 150, w = 5 + r() * 9;
+      g.save(); g.translate(x, y); g.rotate(r() * 6.283); g.fillStyle = `rgb(${v * (0.9 + r() * 0.2) | 0},${v | 0},${v * (0.72 + r() * 0.2) | 0})`;
+      g.beginPath(); g.ellipse(0, 0, w, w * 0.42, 0, 0, 6.283); g.fill(); g.restore();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const leaf = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.82, alphaToCoverage: (this.q.msaa || 0) > 0 });
+    leaf.onBeforeCompile = (sh) => {   // light comes through a leaf: the far side of the crown glows a little instead of going black
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n totalEmissiveRadiance += diffuseColor.rgb * vec3(1.0, 0.78, 0.5) * 0.22;');
+    };
+    const cards = [], lim = [cyl(0.13, 0.24, 3.6, 7, 0, 1.8, 0)];
+    for (let k = 0; k < 4; k++) { const a = r() * 6.283, t = 0.5 + r() * 0.35; lim.push(cyl(0.05, 0.1, 2.6, 5, Math.sin(a) * 0.9, 3.9 + k * 0.25, Math.cos(a) * 0.9, Math.cos(a) * t, 0, -Math.sin(a) * t)); }
+    for (let k = 0; k < 54; k++) {
+      const a = r() * 6.283, el = (r() - 0.35) * 1.5, rad = 1.1 + r() * 1.5;
+      const cx = Math.cos(a) * Math.cos(el) * rad * 1.25, cy = 4.9 + Math.sin(el) * rad * 0.8, cz = Math.sin(a) * Math.cos(el) * rad * 1.25, sz = 1.7 + r() * 1.2;
+      const q = place(new THREE.PlaneGeometry(sz, sz), cx, cy, cz, (r() - 0.5) * 2.4, r() * 6.283, (r() - 0.5) * 1.2);
+      const n = q.attributes.normal, nx = cx, ny = (cy - 4.3) * 1.2 + 0.6, nz = cz, nl = Math.hypot(nx, ny, nz) || 1;
+      for (let i = 0; i < n.count; i++) n.setXYZ(i, nx / nl, ny / nl, nz / nl);
+      cards.push(q);
+    }
+    const N = this.L.trees.length;
+    const ti = new THREE.InstancedMesh(merge(lim), std([0.2, 0.16, 0.13], 0.95), N);
+    const ci = new THREE.InstancedMesh(mergeGeometries(cards.map((q) => q.toNonIndexed()), false), leaf, N);
+    const col = new THREE.Color(), PAL = [[0.2, 0.32, 0.11], [0.26, 0.34, 0.12], [0.16, 0.27, 0.12], [0.5, 0.26, 0.08], [0.62, 0.44, 0.1], [0.42, 0.2, 0.07], [0.3, 0.33, 0.12]];
+    this.L.trees.forEach((t, i) => {
+      _e.set(0, t.rot, 0); _q.setFromEuler(_e); _p.set(t.x, heightAt(t.x, t.z) - 0.2, t.z); _s.set(t.s, t.s * (0.9 + r() * 0.4), t.s);
+      _m.compose(_p, _q, _s); ti.setMatrixAt(i, _m); ci.setMatrixAt(i, _m);
+      const k = PAL[Math.floor(r() * PAL.length)], v = 0.8 + r() * 0.45; col.setRGB(k[0] * v, k[1] * v, k[2] * v, THREE.SRGBColorSpace); ci.setColorAt(i, col);
     });
     ti.castShadow = ci.castShadow = true; ti.receiveShadow = ci.receiveShadow = true;
     this.root.add(ti, ci);
@@ -806,6 +933,11 @@ export class World {
     this.cars = this.L.cars.map(([x, z, rot], i) => {
       const paintHex = PAINT[(i * 3 + 1) % PAINT.length], car = buildCar(kinds[i % kinds.length], paintHex, i + 1);
       car.paintHex = paintHex; car.root.position.set(x, Lt.y, z); car.root.rotation.y = rot; this.root.add(car.root);
+      if (this.realLook) {   // real car models over the procedural ones; a car that is blown apart goes back to its own panels for the blast
+        const kind = kinds[i % kinds.length], file = kind === 'pickup' && i % 2 ? 'pickup.glb' : 'cars.glb';
+        const name = { sedan: i % 2 ? 'Sedan Body' : 'Coupe Body', suv: i % 2 ? 'SUV Body' : 'Offroad Body', hatch: i % 2 ? 'Hatchback Body' : 'Compact Body', pickup: 'Pickup Body', wagon: i % 2 ? 'Wagon Body' : 'minivan body' }[kind];
+        dressVehicle(car.root, { file, pick: file === 'cars.glb' ? pickCar(name) : null, front: 1, done: (W, proc) => { car.model = W; car.procMeshes = proc; } });
+      }
       return car;
     });
   }
@@ -861,6 +993,7 @@ export class World {
     const bag = new RoundedBoxGeometry(0.62, 0.24, 0.36, 2, 0.1);
     const n = this.L.positions.length * 11;
     const im = new THREE.InstancedMesh(bag, std([0.56, 0.5, 0.38], 0.95), n);
+    if (this.realLook) triPhoto(im.material, 'hessian_230', 2.2, { gain: 1.25, tint: 0.4 });
     const r = mulberry32(6); let k = 0; const col = new THREE.Color();
     for (const p of this.L.positions) {
       if (p.bagZ == null) continue;
@@ -904,7 +1037,10 @@ export class World {
       const grp = (v.type === 'aav' ? tIFV : tLCAC).clone();
       const meshes = [], decals = []; grp.traverse((o) => { if (o.isMesh && o.material.map) decals.push(o); else if (o.isMesh && o.material !== VM.glass) meshes.push(o); });
       this.root.add(grp);
-      this.vehicles.push({ v, grp, meshes, ramp: grp.getObjectByName('ramp'), turret: grp.getObjectByName('turret'), barrel: grp.getObjectByName('barrel'), props: grp.children.filter((c) => c.name === 'prop'), decals, charred: false });
+      const ent = { v, grp, meshes, ramp: grp.getObjectByName('ramp'), turret: grp.getObjectByName('turret'), barrel: grp.getObjectByName('barrel'), props: grp.children.filter((c) => c.name === 'prop'), decals, charred: false };
+      this.vehicles.push(ent);
+      // the photoreal beach: the invaders' carrier is a real BTR-90 model (it chars like the procedural one did)
+      if (this.realLook && v.type === 'aav') dressVehicle(grp, { file: 'btr90.glb', front: -1, done: (W) => { const ms = []; W.traverse((q) => { if (q.isMesh) ms.push(q); }); ent.meshes = ms; ent.charred = false; } });
     }
   }
 
@@ -914,6 +1050,7 @@ export class World {
     for (const h of this.L.helos) {
       const grp = t.clone(); this.root.add(grp);
       this.helos.push({ h, grp, rotor: grp.getObjectByName('rotor'), tail: grp.getObjectByName('tail'), pose: {} });
+      if (this.realLook) dressVehicle(grp, { file: 'uh60.glb', front: 1, keep: ['rotor', 'tail'], drop: (q) => /pal/i.test(q.material.name || '') });   // a real Black Hawk; the turning rotors stay ours
     }
   }
 
@@ -936,12 +1073,13 @@ export class World {
 
   // ---------------------------------------------------------------
   // only one battlefield is in the deck at a time
-  setActive(on) { this.root.visible = on; this.sky.visible = on; this.sun.visible = on; this.hemi.visible = on; if (on) { this.scene.environment = this.envTex; this.scene.fog = this.fog; } }
+  setActive(on) { this.root.visible = on; this.sky.visible = on; this.sun.visible = on; this.hemi.visible = on; if (on) { this.scene.environment = this.envTex; this.scene.fog = this.fog; if (this.envI) this.scene.environmentIntensity = this.envI; } }
   update(tau, cam, explosions) {
     this.uTau.value = tau;
     if (this.cars) {
       if (!this.carBlasts) { this.carBlasts = explosions.filter((e) => e.car != null); for (const e of this.carBlasts) planBlast(this.cars[e.car], e.car * 977 + 5); }
-      for (const e of this.carBlasts) poseBlast(this.cars[e.car], tau - e.t);
+      for (const e of this.carBlasts) { const car = this.cars[e.car]; poseBlast(car, tau - e.t);
+        if (car.model) { const whole = tau < e.t; if (car.model.visible !== whole) { car.model.visible = whole; for (const q of car.procMeshes) q.visible = !whole; } } }
     }
     this.updatePieces(tau);
     if (this.megas) this.megas.update(tau);

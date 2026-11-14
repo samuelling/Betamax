@@ -109,7 +109,7 @@ export function buildNight(W, o = {}) {
         gl_FragColor = vec4(c, 1.0); }`,
   });
   W.sky = new THREE.Mesh(new THREE.SphereGeometry(4500, 32, 16), mat); W.sky.frustumCulled = false; W.sky.renderOrder = -10; W.scene.add(W.sky); W.skyU = mat.uniforms;
-  { const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat.clone())); const pm = new THREE.PMREMGenerator(W.renderer); W.envTex = pm.fromScene(envScene, 0.02).texture; W.scene.environment = W.envTex; W.scene.environmentIntensity = 0.6; }
+  { const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), mat.clone())); const pm = new THREE.PMREMGenerator(W.renderer); W.envTex = pm.fromScene(envScene, 0.02).texture; W.scene.environment = W.envTex; W.scene.environmentIntensity = W.envI = 0.6; }
   W.fogColor = o.fogColor || new THREE.Color(0.02, 0.028, 0.045); W.scene.fog = W.fog = new THREE.FogExp2(W.fogColor, o.fog || 0.00042);
   // moonlight (the 'sun' the rest of the engine knows about) and a cold fill
   const sun = new THREE.DirectionalLight(new THREE.Color(0.55, 0.62, 0.8), 0.55); sun.castShadow = true; sun.shadow.mapSize.set(W.q.shadow, W.q.shadow);

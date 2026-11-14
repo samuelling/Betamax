@@ -11,6 +11,7 @@ Inspired by the rewound bombing raid in *Slaughterhouse-Five*.
 ## Play
 Open `index.html` (a single self-contained file), or enable GitHub Pages on `main` / root.
 
+- **Two ways to play, from the title:** ◀◀ REWIND is the game as designed (the battle backward; kill someone to become them). ▶ FORWARD is the same beach battle as an ordinary shooter: time runs in order, the other side shoots at you, the men you kill stay down, and if you fall you carry on as the nearest of your side still standing until the tape runs out.
 - **Desktop:** WASD, mouse, click to fire, right-click to aim, Shift sprint, C crouch, Space jump, R reload, 1 / 2 / X / mouse wheel to switch primary and sidearm, F or E to swap for a gun on the ground (and to use things at home; Q or Tab to stop), T double-speed rewind, V slow, P / Esc pause (sensitivity settings, VCR filter on/off).
 - **Touch (phone/iPad):** floating left stick, drag right side to look, FIRE (drag to aim while firing), AIM, DUCK, JUMP, RLD, ×2, SLOW, pause. Light aim assist (toggle in pause).
 
@@ -95,3 +96,18 @@ node build.mjs   # writes index.html (single file, three.js inlined)
 
 - walk/run/idle: Mixamo, via the three.js Soldier.glb example.
 - All `c_*` clips (walks, sprint, crouch/sneak, limps, idles): CMU Graphics Lab Motion Capture Database, mocap.cs.cmu.edu. "The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217." Converter in `tools/mocap/`.
+
+## Assets and credits
+
+The beach (tape 1) is the photoreal level; the other tapes keep the cel look. It loads scanned surfaces, a photographed sky and several downloaded models from `assets/` beside `index.html`. If `assets/` is missing, everything falls back to the procedural versions, so the single HTML file still runs on its own (`?noassets` forces that; `?cel` puts the beach back in the cel look).
+
+**Public domain (CC0), from [Poly Haven](https://polyhaven.com):** the sky (`industrial_sunset_02_puresky`), and the surfaces `aerial_beach_01`, `damp_beach_sand`, `asphalt_02`, `wood_planks_grey`, `weathered_plank_siding`, `grey_roof_01`, `hessian_230`, `concrete_floor_worn_001`, `green_metal_rust`, `metal_plate`.
+
+**Creative Commons Attribution (CC BY 4.0), from Sketchfab** — resized and recompressed, otherwise unmodified:
+
+- "low-poly SIG MCX Spear" by D_U — https://sketchfab.com/3d-models/low-poly-sig-mcx-spear-36ac159795ae465e8a4d44068bbaf434
+- "low-poly VHS 2" by D_U — https://sketchfab.com/3d-models/low-poly-vhs-2-e70118269cc548d09de332088fc88904
+- "BTR-90 Rostok" by 42manako — https://sketchfab.com/3d-models/btr-90-rostok-f4568f2e30f3473f8ef6e9c7172d2c14
+- "Sikorsky UH-60M Blackhawk" by Muhamad Mirza Arrafi — https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750
+- "Generic passenger car pack" by Comrade1280 — https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5
+- "Lightbody '90 MD Utility - Low poly model" by Daniel Zhabotinsky — https://sketchfab.com/3d-models/lightbody-90-md-utility-low-poly-model-d3aca50a8f2b4917bb9f4ce2bf1ccfe5
