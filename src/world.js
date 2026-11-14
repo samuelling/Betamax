@@ -23,7 +23,7 @@ import { buildShipLayout } from './layoutS.js';
 import { buildAsh, ashGround } from './worldA.js';
 import { planStructure, Megastructures } from './megastruct.js';
 import { applyTex, photoTex, loadSky } from './assets.js';
-import { dressVehicle, pickCar } from './vehassets.js';
+import { dressVehicle, pickCar, dressHouse } from './vehassets.js';
 import { triPhoto } from './real.js';
 import { buildAshLayout } from './layoutA.js';
 
@@ -776,8 +776,9 @@ export class World {
     for (const H of D.houses) {
       const h = H.h, y0 = H.y0, fh = (h.floors === 2 ? 6.2 : 3.2) / h.floors;
       const nWin = Math.floor(h.w / 2.6);
+      H.pids = [];
       for (const pc of H.pieces) {
-        const pid = pieces.length; pieces.push(pc);
+        const pid = pieces.length; pieces.push(pc); H.pids.push(pid);
         const local = []; // [mat, geo] in house-local coords
         if (pc.kind === 'wall') {
           local.push(['siding', box(pc.sx, pc.sy, pc.sz, pc.x, pc.y, pc.z)]);
@@ -837,6 +838,16 @@ export class World {
     }
     this.pieces = pieces; this.pieceTex = tex; this.pieceData = data;
     this.flying = pieces.map((p, i) => [p, i]).filter(([p]) => p.t !== Infinity);
+    // the photoreal beach: each house is a downloaded model until the first shell touches it; from then on it is its own breakable pieces
+    this.houseModels = [];
+    if (this.realLook && !/[?&]nohouse\b/.test(location.search)) {
+      const BIG = ['house_american.glb', 'house_shabby.glb', 'house_suburban.glb'], SMALL = ['house_mayflower.glb', 'house_dawson.glb', 'house_suburban.glb'];
+      D.houses.forEach((H, k) => {
+        const h = H.h, grp = new THREE.Group(); grp.position.set(h.x, H.y0, h.z); grp.rotation.y = h.rot; this.root.add(grp);
+        const tFirst = Math.min(Infinity, ...H.pieces.map((p) => p.t));
+        dressHouse(grp, (h.floors === 2 ? BIG : SMALL)[k % 3], h.w, h.l, (W) => { this.houseModels.push({ W, H, tFirst, whole: null }); });
+      });
+    }
   }
   updatePieces(tau) {
     if (!this.flying) return;
@@ -853,6 +864,11 @@ export class World {
       m.makeRotationFromQuaternion(q); m.setPosition(st.x, st.y, st.z);
       a.makeTranslation(-p.c.x, -p.c.y, -p.c.z); m.multiply(a);
       this.pieceData.set(m.elements, i * 16);
+    }
+    for (const hm of this.houseModels || []) {
+      const whole = tau < hm.tFirst; if (whole === hm.whole) continue;
+      hm.whole = whole; hm.W.visible = whole; dirty = true;
+      for (const pid of hm.H.pids) { if (whole) this.pieceData.fill(0, pid * 16, pid * 16 + 16); else { this.pieceData.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], pid * 16); this.pieces[pid]._k = undefined; } }
     }
     if (dirty) this.pieceTex.needsUpdate = true;
   }

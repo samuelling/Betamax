@@ -1,5 +1,6 @@
 // All soldiers: one instanced, GPU-skinned draw call. Living bodies are driven by mocap + procedural layers;
 // the dead are precomputed verlet ragdolls (which therefore rewind perfectly).
+import { loadJSON, photoTex } from './assets.js';
 import * as THREE from 'three';
 import { J, NJ, NB, B, bindJoints, boneFrames, buildSoldierGeometry, makeSoldierMaterial } from './rig.js';
 import { posePose, simulateRagdoll, variation, stanceOffset, lastHeadBasis, STEP_C } from './anim.js';
@@ -47,6 +48,20 @@ function lastBefore(arr, t) { // index of last element <= t, or -1
 }
 
 export class Soldiers {
+  // the downloaded soldier (re-skinned onto this rig offline, in this rig's bind pose) in place of the sculpted one
+  usePhoto() {
+    Promise.all([loadJSON('models/soldier.json'), photoTex('soldier', 'd'), photoTex('soldier', 'n')]).then(([j, d, n]) => {
+      const u8 = (b) => { const s = atob(b), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; };
+      const V = j.verts, pos = new Float32Array(u8(j.pos).buffer), uv = new Float32Array(u8(j.uv).buffer), nb = new Int8Array(u8(j.nrm).buffer), sib = u8(j.si), swb = u8(j.sw), mb = u8(j.mat), idx = new Uint16Array(u8(j.idx).buffer);
+      const nrm = new Float32Array(V * 3), si = new Float32Array(V * 4), sw = new Float32Array(V * 4), dom = new Float32Array(V), mat = new Float32Array(V), sd = new Float32Array(V).fill(-1);
+      for (let i = 0; i < V * 3; i++) nrm[i] = nb[i] / 127;
+      for (let i = 0; i < V; i++) { let b = 0, bw = -1, t = 0; for (let k = 0; k < 4; k++) { const w = swb[i * 4 + k]; si[i * 4 + k] = sib[i * 4 + k]; sw[i * 4 + k] = w; t += w; if (w > bw) { bw = w; b = sib[i * 4 + k]; } } for (let k = 0; k < 4; k++) sw[i * 4 + k] /= t || 1; dom[i] = b; mat[i] = mb[i]; }
+      const g = this.mesh.geometry, A = (a, n2) => new THREE.Float32BufferAttribute(a, n2);
+      g.setAttribute('position', A(pos, 3)); g.setAttribute('normal', A(nrm, 3)); g.setAttribute('uv', A(uv, 2)); g.setAttribute('skinIdx', A(si, 4)); g.setAttribute('skinW', A(sw, 4));
+      g.setAttribute('skinDom', A(dom, 1)); g.setAttribute('matId', A(mat, 1)); g.setAttribute('sideMask', A(sd, 1)); g.setIndex(new THREE.BufferAttribute(idx, 1));
+      d.repeat.set(1, 1); n.repeat.set(1, 1); this.mat.userData.setPhoto(d, n); this.photo = true;
+    }).catch((e) => { if (!/missing|off/.test(String(e && e.message))) console.error('soldier model', e); });
+  }
   constructor(scene, S) {
     this.S = S; this.N = S.N;
     const N = this.N;
@@ -69,7 +84,7 @@ export class Soldiers {
     this.boneTex = new THREE.DataTexture(this.boneData, NB * 4, N, THREE.RGBAFormat, THREE.FloatType);
     this.boneTex.magFilter = this.boneTex.minFilter = THREE.NearestFilter; this.boneTex.needsUpdate = true;
     const { mat, depth } = makeSoldierMaterial(this.boneTex);
-    this.mesh = new THREE.Mesh(g, mat);
+    this.mesh = new THREE.Mesh(g, mat); this.mat = mat;
     this.mesh.customDepthMaterial = depth;
     this.mesh.castShadow = true; this.mesh.receiveShadow = true; this.mesh.frustumCulled = false;
     scene.add(this.mesh);

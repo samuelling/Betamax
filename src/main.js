@@ -71,7 +71,7 @@ function boot() {
   const world = new World(renderer, scene, Q);
   const S = simulate(7);
   world.setDestruction(S.destruction);
-  const sol = new Soldiers(scene, S);
+  const sol = new Soldiers(scene, S); if (!params.has("cel") && !params.has("nosol")) sol.usePhoto();
   const smoke = new Billboards(scene, 11000, TX.makeSoftTex(), false, world.fogColor, TX.makePuffTex());
   const glow = new Billboards(scene, 5000, TX.makeFlashTex(), true, world.fogColor, TX.makeFlashTex(true));
   const tracers = new Tracers(scene, 2500); Tracers.camera = camera;

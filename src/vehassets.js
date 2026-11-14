@@ -49,3 +49,17 @@ export function pickCar(name) {
     return H;
   };
 }
+
+// a downloaded house stretched onto a layout footprint (w along x, l along z), standing at the parent's origin
+export function dressHouse(parent, file, w, l, done) {
+  loadModel(file).then((scene) => {
+    const src = scene.clone(true), W = new THREE.Group(); W.name = 'model'; W.add(src);
+    let M = localBox(W); const H0 = M.max.y - M.min.y, y0 = M.min.y, gone = [];
+    src.traverse((q) => { if (!q.isMesh) return; q.geometry.computeBoundingBox(); W.updateMatrixWorld(true); _b.copy(q.geometry.boundingBox).applyMatrix4(q.matrixWorld); if (_b.max.y - y0 < H0 * 0.09) gone.push(q); });   // paths, lawns, driveways
+    for (const q of gone) q.parent.remove(q);
+    M = localBox(W); if (M.max.x - M.min.x < M.max.z - M.min.z) { src.rotation.y += Math.PI / 2; M = localBox(W); }
+    const fx = w * 1.03 / (M.max.x - M.min.x), fz = l * 1.03 / (M.max.z - M.min.z), fy = (fx + fz) / 2;
+    W.scale.set(fx, fy, fz); W.position.set(-(M.min.x + M.max.x) / 2 * fx, -M.min.y * fy - 0.03, -(M.min.z + M.max.z) / 2 * fz);
+    parent.add(W); if (done) done(W);
+  }).catch((e) => { if (!/missing|off/.test(String(e && e.message))) console.error('house model', file, e); });
+}

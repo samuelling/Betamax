@@ -303,7 +303,7 @@ const SKIN_GLSL = /* glsl */`
   uniform sampler2D uBones;
   attribute vec4 skinIdx; attribute vec4 skinW; attribute float skinDom; attribute float matId; attribute float sideMask;
   attribute float aInst; attribute float aSide; attribute float aTone;
-  varying vec3 vBind; varying float vMat; varying float vSide; varying float vTone;
+  varying vec3 vBind; varying float vMat; varying float vSide; varying float vTone; varying vec2 vPUv;
   mat4 boneM(float b){
     int x = int(b) * 4; int y = int(aInst);
     return mat4(texelFetch(uBones, ivec2(x, y), 0), texelFetch(uBones, ivec2(x + 1, y), 0), texelFetch(uBones, ivec2(x + 2, y), 0), texelFetch(uBones, ivec2(x + 3, y), 0));
@@ -314,7 +314,7 @@ const SKIN_GLSL = /* glsl */`
 `;
 
 const PALETTE_GLSL = /* glsl */`
-  varying vec3 vBind; varying float vMat; varying float vSide; varying float vTone;
+  varying vec3 vBind; varying float vMat; varying float vSide; varying float vTone; varying vec2 vPUv; uniform float uPhoto; uniform sampler2D uPhotoMap;
   float h3(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
   float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
     return mix(mix(mix(h3(i), h3(i+vec3(1,0,0)), f.x), mix(h3(i+vec3(0,1,0)), h3(i+vec3(1,1,0)), f.x), f.y),
@@ -371,18 +371,24 @@ const PALETTE_GLSL = /* glsl */`
 `;
 
 export function makeSoldierMaterial(bonesTex) {
-  const uni = { uBones: { value: bonesTex } };
+  const uni = { uBones: { value: bonesTex }, uPhoto: { value: 0 }, uPhotoMap: { value: null } };
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0 });
   mat.userData.det4 = [16, 0.0011, 0.3, 0.14];   // the photoreal look: a cloth weave, in the body's own space so it moves with it
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uBones = uni.uBones;
+    sh.uniforms.uBones = uni.uBones; sh.uniforms.uPhoto = uni.uPhoto; sh.uniforms.uPhotoMap = uni.uPhotoMap;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\n' + SKIN_GLSL)
-      .replace('#include <beginnormal_vertex>', 'mat4 sk = skinMat();\nvec3 objectNormal = normalize(mat3(sk) * normal);\nvBind = position; vMat = matId; vSide = aSide; vTone = aTone;')
+      .replace('#include <beginnormal_vertex>', 'mat4 sk = skinMat();\nvec3 objectNormal = normalize(mat3(sk) * normal);\nvBind = position; vMat = matId; vSide = aSide; vTone = aTone; vPUv = uv;')
       .replace('#include <begin_vertex>', 'vec3 transformed = (sk * vec4(position, 1.0)).xyz;\nif (sideMask > -0.5 && abs(sideMask - aSide) > 0.5) transformed = vec3(0.0, -500.0, 0.0);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + PALETTE_GLSL)
-      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'float mRough, mMetal; vec3 mCol = matColor(mRough, mMetal); vec4 diffuseColor = vec4(pow(mCol, vec3(2.2)), opacity);')
+      .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `float mRough, mMetal; vec3 mCol = matColor(mRough, mMetal); vec4 diffuseColor = vec4(pow(mCol, vec3(2.2)), opacity);
+        if (uPhoto > 0.5) {   // the downloaded soldier: his own textures, regraded by side — the Cape in Atlantic blue-grey, Texas left in its tan
+          vec3 pc = texture2D(uPhotoMap, vPUv).rgb; int pm = int(vMat + 0.5);
+          if (pm != 6) { if (vSide < 0.5) { float l = dot(pc, vec3(0.3, 0.55, 0.15)); pc = mix(vec3(l), pc, 0.3) * vec3(0.95, 1.14, 1.42); } else pc *= vec3(1.4, 1.27, 1.05); }
+          if (pm == 0 && idTape(pm, vBind)) pc = pow(idCol(vSide), vec3(2.2));   // the tape on the upper arms only: the helmet band would cross this model's face
+          diffuseColor.rgb = pc; mRough = pm == 6 ? 0.42 : 0.82; mMetal = pm == 6 ? 0.6 : 0.0;
+        }`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mRough;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = mMetal;')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n gl_FragColor.a = vSide > 0.5 ? 0.8 : 0.9;');   // which side, for the ink pass: their outline is in their colour
@@ -394,5 +400,6 @@ export function makeSoldierMaterial(bonesTex) {
       .replace('#include <common>', '#include <common>\n' + SKIN_GLSL)
       .replace('#include <begin_vertex>', 'vec3 transformed = (skinMat() * vec4(position, 1.0)).xyz;\nif (sideMask > -0.5 && abs(sideMask - aSide) > 0.5) transformed = vec3(0.0, -500.0, 0.0);');
   };
+  mat.userData.setPhoto = (d, n) => { uni.uPhotoMap.value = d; uni.uPhoto.value = 1; if (n) { mat.normalMap = n; mat.normalScale = new THREE.Vector2(1, 1); } if (mat.userData.uDet) mat.userData.uDet.value.y *= 0.5; mat.needsUpdate = true; };
   return { mat, depth };
 }

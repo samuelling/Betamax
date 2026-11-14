@@ -111,3 +111,9 @@ The beach (tape 1) is the photoreal level; the other tapes keep the cel look. It
 - "Sikorsky UH-60M Blackhawk" by Muhamad Mirza Arrafi — https://sketchfab.com/3d-models/sikorsky-uh-60m-blackhawk-12b4e525676a49678ac3006b360c8750
 - "Generic passenger car pack" by Comrade1280 — https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5
 - "Lightbody '90 MD Utility - Low poly model" by Daniel Zhabotinsky — https://sketchfab.com/3d-models/lightbody-90-md-utility-low-poly-model-d3aca50a8f2b4917bb9f4ce2bf1ccfe5
+- "S.W.A.T. Operator- 4k Followers Special Remaster" by SpatialNeglect — https://sketchfab.com/3d-models/swat-operator-4k-followers-special-remaster-f6923917c8014578b1c1cb2b4c249268  (re-skinned onto the game's own skeleton, decimated)
+- "American House" by AleixoAlonso — https://sketchfab.com/3d-models/american-house-798ffaeadacf4e08a2665785422fb45d
+- "Suburban House" by mbuannoart — https://sketchfab.com/3d-models/suburban-house-b8375c5e5e6b40639fc06492fbd95fcb
+- "Suburban shabby house low poly" by Simlion — https://sketchfab.com/3d-models/suburban-shabby-house-low-poly-f4678340de204c829e79a01f216e1be0
+- "House: "May-Flower" (Design 371)" by AleixoAlonso — https://sketchfab.com/3d-models/house-may-flower-design-371-9784bb9cec634ccb911b889ef5cb1c57
+- "House: "Dawson" (Design 36)" by AleixoAlonso — https://sketchfab.com/3d-models/house-dawson-design-36-36e4e93baf464c94ae6c447bb67f12c7
