@@ -17,6 +17,17 @@ Open `index.html` (a single self-contained file), or enable GitHub Pages on `mai
 
 Reversed bullets still hurt, and every one is tracer you can see. The edges of the beach are mined.
 
+### The Diggings
+The defenders have dug in. Under the parking lot and the back of the dunes runs a warren of timber-shored tunnels and bunkers (`src/diggings.js`), reached by hatches: five on the lot, four on the dune crest by the fighting positions and two on its back. **E** (or USE on touch) at a hatch climbs down or up the ladder.
+
+- **Several ways through.** The tunnels are a braided maze on a 6 m grid: most junctions have more than one route to anywhere, and each sector is painted its own colour (red and blue under the lot, yellow and green behind the dunes).
+- **Ammunition for the line.** Magazine rooms at the dead ends under the lot hold crates. Take one (**E**) and carry it back up through a crest hatch: AMMUNITION UP TO THE LINE.
+- **Cave-ins.** Shelling overhead brings a corridor down now and then, usually in the direction you're heading. It never cuts off part of the warren, but the way you remember is gone.
+- **The lights go out.** A hit on the generator darkens a sector for half a minute. Your lantern lights a few metres; find your way.
+- **Figures in the gloom.** Some are your own wounded, some are Texan sappers who got in. Decide before you shoot.
+
+The beach battle itself is unchanged: soldiers stay on the surface, and above ground the tunnels are just hatches in sandbag rings.
+
 ### The look
 Cel-shaded after the sister game *Ashland*:
 - Every surface takes its light in Ashland's four hard bands.

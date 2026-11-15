@@ -1,3 +1,4 @@
+import { Diggings } from './diggings.js';
 import * as THREE from 'three';
 import { simulate, MODE, T_SIM, SHOT_F } from './sim.js';
 import { World, SUN_DIR } from './world.js';
@@ -86,6 +87,8 @@ function boot() {
   G = { world, S, sol, pb, player, input, audio, post, heightAt };
   G.pick = new Pickups(scene, S, sol);
   G.sceneId = 'beach'; G.scenes = { beach: { world, S, sol, pb, pick: G.pick } };
+  G.dig = new Diggings(G, scene, { feed: (t) => feed(t), prompt: (what) => {   // the tunnels under the lot and the dunes
+    const pk = $('pick'); pk.innerHTML = `${G.input.touch ? 'USE' : '[E]'} &nbsp;${what}`; pk.style.opacity = 1; if (G.input.touch) $('bSwap').style.display = 'flex'; } });
   heroOutlines(world); toonShared.resY.value = innerHeight * Q.pr;
   // brass casings + dropped magazines live in forward time
   const brassGeo = new THREE.CylinderGeometry(0.0065, 0.0065, 0.05, 8).rotateZ(Math.PI / 2);
@@ -881,7 +884,7 @@ function forwardFire(dt, ev) {
 }
 function beginForward(i, t0) {
   const a = G.S.actors[i];
-  G.forward = true; G.lives = [lifeOf(i)];
+  G.forward = true; G.lives = [lifeOf(i)]; if (G.dig) G.dig.reset();
   G.fwd = { kills: 0, deaths: 0, face: new Map(), aware: new Map(), cands: [], scanT: 0 };
   G.overrides.clear(); G.enemyHp.fill(100); G.pb.hitShots.clear(); G.pb.whizzed.clear(); clearLiveKills();
   G.tau = t0 != null ? t0 : a.spawn + 0.05; beginPlayFromBody(i, G.tau); saveCheckpoint();
@@ -1251,6 +1254,7 @@ function tick(dt, draw = true) {
       for (let k = 1; k < Math.round(fast); k++) { p.update(dt, inp, S.obstacles, G.tau); if (p.jumped) { jumped2 = true; G.input.consumeJump(); } }
       const out = p.update(dt, fast > 1 && jumped2 ? Object.assign({}, inp, { jump: false }) : inp, S.obstacles, G.tau - (fast > 1 ? dt : 0));
       if (p.jumped || jumped2) G.input.consumeJump();
+      if (G.dig && G.sceneId === 'beach') G.dig.update(dt, inp);
       // weapons: 1 / 2 / wheel to switch, F or E to swap with a gun on the ground
       if (inp.slot === 1) p.switchTo('primary'); else if (inp.slot === 2) p.switchTo('sidearm'); else if (inp.slot === 3) p.switchTo(p.cur === 'primary' ? 'sidearm' : 'primary');
       { camera.getWorldDirection(tmpV); const n = G.pick.update(G.tau, p.pos, tmpV, G.body);
@@ -1260,7 +1264,7 @@ function tick(dt, draw = true) {
         if (n && inp.use && p.swapT < 0) { const old = p.slots.primary.id, id = G.pick.take(p, old); if (id) { p.pickUp(id); G.audio.play(G.audio.B.tug, 0.6); G.audio.play(G.audio.B.rack, 0.4); feed(`picked up ${n.name}`); } }
       }
       const mz = p.tryFire(inp);
-      if (mz) { playerFire(mz, inp); ejectBrass(); }
+      if (mz) { playerFire(mz, inp); ejectBrass(); if (G.dig && G.sceneId === 'beach') G.dig.fire(camera); }
       handlePlayerEvents();
       if (G.real - p.lastHit > 3.2) p.health = Math.min(100, p.health + dt * 45);
       // minefield
