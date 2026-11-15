@@ -261,12 +261,18 @@ export class Diggings {
     const sg = [];
     const sb = new THREE.MeshStandardMaterial({ color: 0x8a7a58, roughness: 0.95 }), tw = new THREE.MeshStandardMaterial({ color: 0x5a4430, roughness: 0.85 });
     this.surf = new THREE.Group(); this.scene.add(this.surf);
+    // one merged mesh for all the sandbags and one for all the timber (cheap to draw)
+    const bags = [], timber = [];
+    const put = (list, w, h2, d2, x, y, z, ry = 0) => { const g = new THREE.BoxGeometry(w, h2, d2); g.rotateY(ry); g.translate(x, y, z); list.push(g); };
     for (const h of P.hatches) {
       const y = heightAt(h.x, h.z);
-      const fr = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.16, 1.7), tw); fr.position.set(h.x, y + 0.08, h.z); this.surf.add(fr);
-      const td = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 1.4), new THREE.MeshStandardMaterial({ color: 0x3e2e20, roughness: 0.8 })); td.position.set(h.x, y + 0.19, h.z); this.surf.add(td);
-      for (let a = 0; a < 10; a++) { const t = a / 10 * Math.PI * 2; const m = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.28, 0.34), sb); m.position.set(h.x + Math.cos(t) * 1.55, heightAt(h.x + Math.cos(t) * 1.55, h.z + Math.sin(t) * 1.55) + 0.14, h.z + Math.sin(t) * 1.55); m.rotation.y = -t + Math.PI / 2; m.castShadow = m.receiveShadow = true; this.surf.add(m); }
+      put(timber, 1.7, 0.16, 1.7, h.x, y + 0.08, h.z); put(timber, 1.4, 0.06, 1.4, h.x, y + 0.19, h.z);
+      for (let a = 0; a < 10; a++) { const t = a / 10 * Math.PI * 2, bx = h.x + Math.cos(t) * 1.55, bz = h.z + Math.sin(t) * 1.55; put(bags, 0.62, 0.28, 0.34, bx, heightAt(bx, bz) + 0.14, bz, -t + Math.PI / 2); }
     }
+    const mergeG = (list) => { let n = 0; const pos = [], nrm = [], idx = []; for (const g of list) { const pa = g.attributes.position.array, na = g.attributes.normal.array; for (const i of g.index.array) idx.push(i + n); pos.push(...pa); nrm.push(...na); n += pa.length / 3; }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setIndex(idx); return g; };
+    const mb = new THREE.Mesh(mergeG(bags), sb); mb.receiveShadow = true; this.surf.add(mb);
+    const mt = new THREE.Mesh(mergeG(timber), tw); mt.receiveShadow = true; this.surf.add(mt);
     // figures standing in the gloom
     this.figs = P.figures.map((f) => {
       const fp = [], fc = [], fb = [], fz = [], zone = P.zone(f.cell);
