@@ -21,10 +21,11 @@ Reversed bullets still hurt, and every one is tracer you can see. The edges of t
 The defenders have dug in. Under the parking lot and the back of the dunes runs a warren of timber-shored tunnels and bunkers (`src/diggings.js`), reached by hatches: five on the lot, four on the dune crest by the fighting positions and two on its back. **E** (or USE on touch) at a hatch climbs down or up the ladder.
 
 - **Several ways through.** The tunnels are a braided maze on a 6 m grid: most junctions have more than one route to anywhere, and each sector is painted its own colour (red and blue under the lot, yellow and green behind the dunes).
-- **Ammunition for the line.** Magazine rooms at the dead ends under the lot hold crates. Take one (**E**) and carry it back up through a crest hatch: AMMUNITION UP TO THE LINE.
-- **Cave-ins.** Shelling overhead brings a corridor down now and then, usually in the direction you're heading. It never cuts off part of the warren, but the way you remember is gone.
-- **The lights go out.** A hit on the generator darkens a sector for half a minute. Your lantern lights a few metres; find your way.
-- **Figures in the gloom.** Some are your own wounded, some are Texan sappers who got in. Decide before you shoot.
+- **Short cuts.** The quickest way between two hatches is often underground, out of the fire.
+- **Ammunition for the line.** Magazine rooms in dead ends a short way in hold crates. Take one (**E**) and carry it back up through a crest hatch: AMMUNITION UP TO THE LINE.
+- **Cave-ins.** Shelling overhead brings a corridor down now and then, often one you've used or the one just ahead. It never cuts off part of the warren, and it stays down: the way you remember is gone.
+- **The lights go out.** A hit on the generator darkens the whole warren for half a minute, most often just after you've taken a box. Your lantern lights a few metres; find your way back to the ladder.
+- **Figures in the gloom.** Every so often someone is standing in the corridor ahead: one of your own wounded, or a Texan sapper who got in. Decide before you shoot.
 
 The beach battle itself is unchanged: soldiers stay on the surface, and above ground the tunnels are just hatches in sandbag rings.
 

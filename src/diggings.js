@@ -67,19 +67,16 @@ export function buildPlan(seed = 1944) {
     for (const k of cells) { const d = Math.hypot(cx(k % DG.nx) - x, cz((k / DG.nx) | 0) - z); if (d < bd) { bd = d; bk = k; } }
     if (bk >= 0 && !hatches.some((h) => h.cell === bk)) hatches.push({ id: hatches.length, cell: bk, kind, x: cx(bk % DG.nx) - 0.75, z: cz((bk / DG.nx) | 0) - 0.75 });
   }
-  // magazine rooms: the dead ends under the lot farthest from any hatch
+  // magazine rooms: dead ends under the lot a short way from the hatches (4 links), spread apart
   const dist = bfs(adj, hatches.map((h) => h.cell));
-  const ends = cells.filter((k) => adj.get(k).length === 1 && zone(k) <= 1 && !hatches.some((h) => h.cell === k)).sort((a, b) => dist.get(b) - dist.get(a));
-  const crates = ends.slice(0, 4).map((k, n) => ({ id: n, cell: k, x: cx(k % DG.nx) + 0.75, z: cz((k / DG.nx) | 0) + 0.75 }));
+  const ends = cells.filter((k) => adj.get(k).length === 1 && zone(k) <= 1 && !hatches.some((h) => h.cell === k)).sort((a, b) => Math.abs(dist.get(a) - 4) - Math.abs(dist.get(b) - 4));
+  const picked = [];
+  for (const k of ends) { if (picked.length < 4 && picked.every((q) => Math.abs((q % DG.nx) - (k % DG.nx)) + Math.abs(((q / DG.nx) | 0) - ((k / DG.nx) | 0)) >= 4)) picked.push(k); }
+  const crates = picked.map((k, n) => ({ id: n, cell: k, x: cx(k % DG.nx) + 0.75, z: cz((k / DG.nx) | 0) + 0.75 }));
   // cave-in candidates: links that lie on a loop (cutting one never strands any part of the warren)
   const loopEdges = [...edges].filter((e) => { const [a, b] = e.split(':').map(Number); return !isBridge(adj, a, b); });
-  // figures in the gloom
-  const free = cells.filter((k) => !hatches.some((h) => h.cell === k) && !crates.some((c) => c.cell === k));
-  const figures = [];
-  for (let n = 0; n < 14 && free.length; n++) {
-    const k = free.splice(Math.floor(r() * free.length), 1)[0];
-    figures.push({ id: n, cell: k, foe: r() < 0.5, x: cx(k % DG.nx) + (r() - 0.5) * 1.2, z: cz((k / DG.nx) | 0) + (r() - 0.5) * 1.2, yaw: r() * Math.PI * 2 });
-  }
+  // figures in the gloom: a small pool, placed in the corridors ahead of you as you go (see update)
+  const figures = [0, 1, 2, 3].map((n) => ({ id: -1, k: n, cell: -1, foe: false, x: 0, z: 0, yaw: 0 }));
   return { cells, edges: [...edges], adj, hatches, crates, loopEdges, figures, zone, seed };
 }
 
@@ -275,8 +272,8 @@ export class Diggings {
     const mt = new THREE.Mesh(mergeG(timber), tw); mt.receiveShadow = true; this.surf.add(mt);
     // figures standing in the gloom
     this.figs = P.figures.map((f) => {
-      const fp = [], fc = [], fb = [], fz = [], zone = P.zone(f.cell);
-      const body = f.foe ? [0.5, 0.42, 0.28] : [0.27, 0.3, 0.2], helm = f.foe ? [0.2, 0.18, 0.15] : [0.3, 0.33, 0.24], skin = [0.55, 0.42, 0.33];
+      const fp = [], fc = [], fb = [], fz = [], zone = 0;
+      const body = [0.5, 0.42, 0.28], helm = [0.2, 0.18, 0.15], skin = [0.55, 0.42, 0.33];
       const q2 = (a, b, c, d, rgb) => { for (const v of [a, b, c, a, c, d]) { fp.push(...v); fc.push(...rgb); fz.push(zone); fb.push(1); } };
       const bx = (x, y, z, hx, hy, hz, c) => { const v = (a, b, cc) => [x + a * hx, y + b * hy, z + cc * hz];
         q2(v(-1, -1, 1), v(1, -1, 1), v(1, 1, 1), v(-1, 1, 1), c); q2(v(1, -1, -1), v(-1, -1, -1), v(-1, 1, -1), v(1, 1, -1), c);
@@ -287,9 +284,9 @@ export class Diggings {
       bx(0, 1.6, 0, 0.1, 0.12, 0.1, skin); bx(0, 1.74, 0, 0.15, 0.06, 0.15, helm);
       const g2 = new THREE.BufferGeometry();
       g2.setAttribute('position', new THREE.Float32BufferAttribute(fp, 3)); g2.setAttribute('color', new THREE.Float32BufferAttribute(fc, 3));
-      g2.setAttribute('baked', new THREE.Float32BufferAttribute(fb.map(() => this.bake(f.x, DG.yf + 1.2, f.z)), 1)); g2.setAttribute('zone', new THREE.Float32BufferAttribute(fz, 1));
-      const m = new THREE.Mesh(g2, this.mat); m.position.set(f.x, DG.yf, f.z); m.rotation.y = f.yaw; m.visible = false; this.scene.add(m);
-      return { ...f, mesh: m, down: false, downT: -1e9, decided: false };
+      g2.setAttribute('baked', new THREE.Float32BufferAttribute(fb, 1)); g2.setAttribute('zone', new THREE.Float32BufferAttribute(fz, 1));
+      const m = new THREE.Mesh(g2, this.mat); m.frustumCulled = false; m.visible = false; this.scene.add(m);
+      return { ...f, mesh: m, down: true, active: false, downT: -1e9, spawnT: -1e9 };
     });
     this.rubbleMeshes = [];
   }
@@ -328,22 +325,54 @@ float tex = 0.55 * n3(vWP * 1.7) + 0.3 * n3(vWP * 5.3) + 0.15 * n3(vWP * 13.0);
 diffuseColor.rgb *= 0.55 + 0.9 * tex;
 int zi = int(vZone + 0.5); float zo = zi == 0 ? uZone[0] : zi == 1 ? uZone[1] : zi == 2 ? uZone[2] : uZone[3];
 float dl = distance(vWP, uCam);
-float light = 0.006 + 0.15 * vBaked * zo + uLantern * 0.5 / (1.0 + dl * dl * 0.6);
+float light = 0.012 + 0.34 * vBaked * zo + uLantern * 0.6 / (1.0 + dl * dl * 0.5);
 diffuseColor.rgb *= light;`);
     };
-    m.customProgramCacheKey = () => 'diggings1';
+    m.customProgramCacheKey = () => 'diggings2';
     return m;
   }
 
   // ---- play
   reset() {
-    for (let s = 0; s < this.rubble.length; s++) this.rubble[s] = 0;
-    for (const m of this.rubbleMeshes) { this.scene.remove(m); m.geometry.dispose(); }
-    this.rubbleMeshes = []; this.collapsed = new Set();
-    this.zoneOn = [1, 1, 1, 1]; this.darkUntil = [0, 0, 0, 0];
-    for (const f of this.figs) { f.down = false; f.mesh.rotation.x = 0; f.mesh.position.y = DG.yf; }
-    Object.assign(this.state, { climb: null, carrying: false, under: 0, useWas: false, collapsesThisLife: 0 });
+    if (!this.keepCaveIns || !this.collapsed) {
+      for (let s = 0; s < this.rubble.length; s++) this.rubble[s] = 0;
+      for (const m of this.rubbleMeshes) { this.scene.remove(m); m.geometry.dispose(); }
+      this.rubbleMeshes = []; this.collapsed = new Set(); this.use = new Map();
+    }
+    this.zoneOn = [1, 1, 1, 1]; this.darkUntil = [0, 0, 0, 0]; this.pendingDark = null;
+    this.figSerial = this.figSerial || 0; this.figClock = 0; this.nextFig = 6 + Math.random() * 6;
+    for (const f of this.figs) { f.down = true; f.active = false; f.mesh.visible = false; }
+    Object.assign(this.state, { climb: null, carrying: false, under: 0, useWas: false, lastCell: -1 });
     this.t = this.t || 0;
+  }
+
+  placeFigure(f, k, x, z, yaw, foe) {
+    const g = f.mesh.geometry, col = g.attributes.color, n = col.count;
+    const body = foe ? [0.5, 0.42, 0.28] : [0.27, 0.3, 0.2], helm = foe ? [0.2, 0.18, 0.15] : [0.3, 0.33, 0.24], skin = [0.55, 0.42, 0.33];
+    // vertices come in boxes of 30: legs (2), torso, arms (2), head, helmet (boxes 5 and 6)
+    for (let v = 0; v < n; v++) { const b = Math.floor(v / 30), c = b === 5 ? skin : b === 6 ? helm : body; col.setXYZ(v, c[0], c[1], c[2]); }
+    col.needsUpdate = true;
+    const L = this.bake(x, DG.yf + 1.2, z), zn = this.zoneAt(x, z);
+    for (let v = 0; v < n; v++) { g.attributes.baked.setX(v, L); g.attributes.zone.setX(v, zn); }
+    g.attributes.baked.needsUpdate = true; g.attributes.zone.needsUpdate = true;
+    Object.assign(f, { id: ++this.figSerial, cell: k, x, z, yaw, foe, down: false, active: true, spawnT: this.t });
+    f.mesh.position.set(x, DG.yf, z); f.mesh.rotation.set(0, yaw, 0);
+    this.log.figures.push([this.t, f.id, foe ? 1 : 0, k]);
+  }
+  spawnFigure() {   // someone in a corridor ahead, 6-13 m off, in line of sight
+    const p = this.G.player, fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw), cands = [];
+    for (const k of this.P.cells) {
+      if (this.P.hatches.some((h) => h.cell === k) || this.P.crates.some((c) => c.cell === k)) continue;
+      const [x, z] = this.cellXZ(k), d = Math.hypot(x - p.pos.x, z - p.pos.z);
+      if (d < 6 || d > 13 || !this.clear(p.pos.x, p.pos.z, x, z)) continue;
+      cands.push([k, x, z, ((x - p.pos.x) * fx + (z - p.pos.z) * fz) / d]);
+    }
+    if (!cands.length) return false;
+    const pool = cands.filter((c) => c[3] > 0.8); if (!pool.length) return false;
+    const [k, x, z] = pool[Math.floor(Math.random() * pool.length)];
+    const f = this.figs.find((q) => !q.active) || this.figs.reduce((a, b) => (a.spawnT < b.spawnT ? a : b));
+    this.placeFigure(f, k, x + (Math.random() - 0.5) * 0.8, z + (Math.random() - 0.5) * 0.8, Math.atan2(p.pos.x - x, p.pos.z - z) + (Math.random() - 0.5) * 1.2, Math.random() < 0.5);
+    return true;
   }
 
   near(list, x, z, r) { let b = null, bd = r; for (const o of list) { const d = Math.hypot(o.x - x, o.z - z); if (d < bd) { bd = d; b = o; } } return b; }
@@ -378,22 +407,32 @@ diffuseColor.rgb *= light;`);
         else st.climb = { dir: 'up', hatch: h, x: h.x + 1.3, z: h.z, y0: DG.yf, y1: top, k: 0, dur: 1.3 };
       } else if (under && !st.carrying) {
         const c = this.near(this.P.crates, p.pos.x, p.pos.z, 2.2);
-        if (c) { st.carrying = true; this.log.pickups.push([this.t, c.id]); this.say('AMMUNITION: TAKE IT UP TO THE LINE'); }
+        if (c) { st.carrying = true; this.log.pickups.push([this.t, c.id]); this.say('AMMUNITION: TAKE IT UP TO THE LINE');
+          if (Math.random() < 0.9) this.pendingDark = this.t + 3 + Math.random() * 5; }
       }
     }
     if (under && !st.climb) {
       st.under += dt;
-      // shelling: now and then a corridor behind a loop caves in (never one that strands any part of the warren)
-      if (st.under > 8 && st.collapsesThisLife < 4 && Math.random() < dt / 28) this.caveIn(p.pos.x, p.pos.z);
-      // a hit on the generator: this sector goes dark for a while
-      const zn = this.zoneAt(p.pos.x, p.pos.z);
-      if (st.under > 10 && this.zoneOn[zn] > 0.5 && this.t > this.darkUntil[zn] + 30 && Math.random() < dt / 35) {
+      // which links you use: the shelling finds the corridors people use
+      const cc = this.cellAt(p.pos.x, p.pos.z);
+      if (cc >= 0 && cc !== st.lastCell) { if (st.lastCell >= 0 && this.P.adj.get(cc).includes(st.lastCell)) { const e = cc < st.lastCell ? cc + ':' + st.lastCell : st.lastCell + ':' + cc; this.use.set(e, (this.use.get(e) || 0) + 1); } st.lastCell = cc; }
+      // shelling: now and then a corridor on a loop caves in, and stays down (never one that strands any part of the warren)
+      if (st.under > 5 && this.collapsed.size < 12 && Math.random() < dt / 22) this.caveIn(p.pos.x, p.pos.z);
+      // a hit on the generator: this sector goes dark for a while (most often just after you've taken a box)
+      const zn = this.zoneAt(p.pos.x, p.pos.z), due = (this.pendingDark != null && this.t > this.pendingDark) || (st.under > 8 && this.t > this.darkUntil[zn] + 40 && Math.random() < dt / 60);
+      if (due && this.zoneOn.every((o) => o > 0.5)) {   // the generator: every sector at once
+        this.pendingDark = null; const until = this.t + 18 + Math.random() * 14;
+        for (let z = 0; z < 4; z++) { this.darkUntil[z] = until; this.zoneOn[z] = 0; } this.log.lightsOut.push([this.t, -1, until]); this.say('THE LIGHTS GO OUT');
+      } else if (this.zoneOn[zn] > 0.5 && st.under > 10 && this.t > this.darkUntil[zn] + 30 && Math.random() < dt / 120) {   // a cable cut: one sector
         this.darkUntil[zn] = this.t + 18 + Math.random() * 14; this.zoneOn[zn] = 0; this.log.lightsOut.push([this.t, zn, this.darkUntil[zn]]); this.say('THE LIGHTS GO OUT');
       }
-    } else st.under = 0;
+      // someone in the corridor ahead every 8-14 s below ground
+      this.figClock += dt;
+      if (this.figClock > this.nextFig) { if (this.spawnFigure()) { this.figClock = 0; this.nextFig = 8 + Math.random() * 6; } else this.nextFig = this.figClock + 1; }
+    } else { st.under = 0; this.pendingDark = null; }
     for (let z = 0; z < 4; z++) if (this.zoneOn[z] < 0.5 && this.t > this.darkUntil[z]) this.zoneOn[z] = 1;
-    // figures get back up (new ones come in) a couple of minutes after they're dealt with
-    for (const f of this.figs) if (f.down && this.t - f.downT > 120 && Math.hypot(f.x - p.pos.x, f.z - p.pos.z) > 25) { f.down = false; f.mesh.rotation.x = 0; f.mesh.position.y = DG.yf; }
+    // figures you've passed or left behind are gone
+    for (const f of this.figs) if (f.active && (this.t - f.spawnT > 30 || Math.hypot(f.x - p.pos.x, f.z - p.pos.z) > 22 || !under)) { f.active = false; f.down = true; }
     this.preRender();
   }
 
@@ -401,15 +440,20 @@ diffuseColor.rgb *= light;`);
     const adj = this.P.adj, cand = this.P.loopEdges.filter((e) => {
       if (this.collapsed.has(e)) return false;
       const [a, b] = e.split(':').map(Number), [ax, az] = this.cellXZ(a), [bx, bz] = this.cellXZ(b), mx = (ax + bx) / 2, mz = (az + bz) / 2;
-      const d = Math.hypot(mx - px, mz - pz); if (d < 6 || d > 24) return false;
-      // the shelling is overhead: mostly in the direction you're heading
-      const fx = -Math.sin(this.G.player.yaw), fz = -Math.cos(this.G.player.yaw);
-      if (((mx - px) * fx + (mz - pz) * fz) / d < 0.2 && Math.random() < 0.8) return false;
+      const d = Math.hypot(mx - px, mz - pz); if (d < 5 || d > 30) return false;
       // still connected without it (and without the earlier cave-ins)
       return !this.cutsGraph(a, b);
     });
     if (!cand.length) return;
-    const e = cand[Math.floor(Math.random() * cand.length)];
+    // the corridor just ahead of you, or one you've been through (so you'll meet it again)
+    const fx = -Math.sin(this.G.player.yaw), fz = -Math.cos(this.G.player.yaw);
+    const w = cand.map((e2) => {
+      const [a, b] = e2.split(':').map(Number), [ax, az] = this.cellXZ(a), [bx, bz] = this.cellXZ(b), mx = (ax + bx) / 2, mz = (az + bz) / 2, d = Math.hypot(mx - px, mz - pz);
+      const ahead = d < 15 && ((mx - px) * fx + (mz - pz) * fz) / d > 0.85;
+      return (this.use.get(e2) ? 1 + this.use.get(e2) : 0.1) + (ahead ? 6 : 0);
+    }), sw = w.reduce((x, y) => x + y, 0);
+    let u = Math.random() * sw, ci = 0; for (; ci < w.length - 1; ci++) { u -= w[ci]; if (u <= 0) break; }
+    const e = cand[ci];
     this.collapsed.add(e);
     for (const s of this.edgeSubs(e)) this.rubble[s] = 1;
     const [a, b] = e.split(':').map(Number), [ax, az] = this.cellXZ(a), [bx, bz] = this.cellXZ(b), mx = (ax + bx) / 2, mz = (az + bz) / 2, zn = this.zoneAt(mx, mz);
@@ -427,7 +471,6 @@ diffuseColor.rgb *= light;`);
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g.setAttribute('baked', new THREE.Float32BufferAttribute(bak, 1)); g.setAttribute('zone', new THREE.Float32BufferAttribute(zon, 1));
     const m = new THREE.Mesh(g, this.mat); m.frustumCulled = false; this.scene.add(m); this.rubbleMeshes.push(m);
-    this.state.collapsesThisLife++;
     this.log.collapses.push([this.t, e]);
     this.G.player.shake = Math.max(this.G.player.shake, 1.2);
     this.say('CAVE-IN');
@@ -446,7 +489,7 @@ diffuseColor.rgb *= light;`);
     const o = cam.position, d = new THREE.Vector3(); cam.getWorldDirection(d);
     let best = null, bt = 1e9;
     for (const f of this.figs) {
-      if (f.down) continue;
+      if (f.down || !f.active) continue;
       const fx = f.x - o.x, fz = f.z - o.z, t = fx * d.x + fz * d.z; const hz = Math.hypot(d.x, d.z);
       if (t <= 0) continue;
       const tt = t / (hz * hz); const px = o.x + d.x * tt, pz = o.z + d.z * tt, py = o.y + d.y * tt;
@@ -467,7 +510,7 @@ diffuseColor.rgb *= light;`);
     for (let z = 0; z < 4; z++) { this.U.uZone.value[z] = this.zoneOn[z]; this.bulbs[z].visible = this.mesh.visible && this.zoneOn[z] > 0.5; }
     this.U.uCam.value.copy(p.cam.position);
     this.U.uLantern.value = under ? (this.zoneOn[this.zoneAt(p.pos.x, p.pos.z)] > 0.5 ? 0.25 : 0.45) : 0;
-    for (const f of this.figs) f.mesh.visible = this.mesh.visible;
+    for (const f of this.figs) f.mesh.visible = this.mesh.visible && f.active;
     for (const m of this.rubbleMeshes) m.visible = this.mesh.visible;
     // everything above ground is out of sight behind the rock: skip drawing it (and its shadows)
     const deep = this.underground(p.pos.y) && !this.state.climb;
@@ -477,7 +520,7 @@ diffuseColor.rgb *= light;`);
   // a description of the warren for logs and analysis
   describe() {
     return { DG, SX, SZ, AX0, AZ0, carved: Array.from(this.carved), cells: this.P.cells, edges: this.P.edges, hatches: this.P.hatches,
-      crates: this.P.crates, figures: this.P.figures.map((f) => ({ id: f.id, cell: f.cell, foe: f.foe, x: f.x, z: f.z })), loopEdges: this.P.loopEdges,
+      crates: this.P.crates, figures: [], loopEdges: this.P.loopEdges,
       zones: this.P.cells.map((k) => this.P.zone(k)) };
   }
 }
